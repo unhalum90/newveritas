@@ -1,0 +1,69 @@
+@import "tailwindcss";
+
+:root {
+  /* Light theme defaults (used across the app). */
+  --background: #ffffff;
+  --surface: #ffffff;
+  --border: #e4e4e7; /* zinc-200 */
+  --text: #0f172a; /* slate-900 */
+  --muted: #52525b; /* zinc-600 */
+  --primary: #0f766e; /* teal-700 */
+  --danger: #dc2626; /* red-600 */
+
+  /* Typography scale */
+  --text-3xl: 1.875rem;
+  --text-2xl: 1.5rem;
+  --text-xl: 1.25rem;
+  --text-lg: 1.125rem;
+  --text-base: 1rem;
+  --text-sm: 0.875rem;
+  --text-xs: 0.75rem;
+
+  /* Spacing tokens */
+  --space-xs: 0.25rem;
+  --space-sm: 0.5rem;
+  --space-md: 0.75rem;
+  --space-lg: 1rem;
+  --space-xl: 1.5rem;
+  --space-2xl: 2rem;
+
+  /* Legacy tokens used by @theme */
+  --foreground: #171717;
+}
+
+.veritas-wizard {
+  /* Dark wizard theme overrides. */
+  --background: #0b0f14;
+  --surface: #0f1720;
+  --border: #223042;
+  --text: #e5e7eb;
+  --muted: #9ca3af;
+  --primary: #14b8a6; /* teal */
+  --danger: #fb7185; /* rose-400 */
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+    --surface: #0f0f10;
+    --border: #27272a; /* zinc-800 */
+    --text: #e5e7eb; /* gray-200 */
+    --muted: #a1a1aa; /* zinc-400 */
+    --primary: #14b8a6; /* teal-500 */
+    --danger: #fb7185; /* rose-400 */
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
