@@ -8,28 +8,16 @@ import { getSupabaseErrorMessage } from "@/lib/supabase/errors";
 export const runtime = "nodejs";
 
 async function extractPdfText(bytes: Uint8Array) {
-  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
-  const loadingTask = pdfjs.getDocument({
-    data: bytes,
-    disableWorker: true,
-    useSystemFonts: true,
-  } as any);
+  type PdfParseResult = { text?: string };
+  type PdfParseFn = (data: Buffer) => Promise<PdfParseResult>;
 
-  const doc = await loadingTask.promise;
-  try {
-    const parts: string[] = [];
-    for (let i = 1; i <= doc.numPages; i++) {
-      const page = await doc.getPage(i);
-      const content = await page.getTextContent();
-      const strings = (content.items as Array<{ str?: unknown }>)
-        .map((it) => (typeof it.str === "string" ? it.str : ""))
-        .filter(Boolean);
-      if (strings.length) parts.push(strings.join(" "));
-    }
-    return parts.join("\n\n").trim();
-  } finally {
-    await doc.destroy();
-  }
+  const mod = (await import("pdf-parse")) as unknown;
+  const parse =
+    typeof mod === "function" ? mod : typeof (mod as { default?: unknown }).default === "function" ? (mod as { default: unknown }).default : null;
+
+  if (!parse) throw new Error("pdf-parse export not found.");
+  const result = await (parse as PdfParseFn)(Buffer.from(bytes));
+  return (result.text ?? "").trim();
 }
 
 function asInt(value: unknown) {

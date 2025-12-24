@@ -13,6 +13,7 @@ create table if not exists public.teachers (
   school_type text,
   teaching_level text,
   onboarding_stage text not null default '0',
+  disabled boolean not null default false,
   school_id uuid,
   workspace_id uuid,
   created_at timestamptz not null default now(),
@@ -24,6 +25,7 @@ create index if not exists teachers_user_id_idx on public.teachers(user_id);
 -- Backfill columns if teachers already exists
 alter table public.teachers add column if not exists school_id uuid;
 alter table public.teachers add column if not exists workspace_id uuid;
+alter table public.teachers add column if not exists disabled boolean not null default false;
 
 create or replace function public.set_updated_at()
 returns trigger
@@ -70,6 +72,51 @@ create table if not exists public.schools (
   school_type text,
   created_at timestamptz default now()
 );
+
+-- =========================
+-- Admin: School + Platform
+-- =========================
+
+-- School admins manage teachers/students for a single school.
+-- App enforces access via server routes using the service role, but we keep RLS sane for safety.
+create table if not exists public.school_admins (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null unique references auth.users(id) on delete cascade,
+  school_id uuid not null references public.schools(id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists school_admins_user_id_idx on public.school_admins(user_id);
+create index if not exists school_admins_school_id_idx on public.school_admins(school_id);
+
+alter table public.school_admins enable row level security;
+
+drop policy if exists "School admins can view own row" on public.school_admins;
+create policy "School admins can view own row"
+on public.school_admins
+for select
+using (auth.uid() = user_id);
+
+drop policy if exists "School admins can insert own row" on public.school_admins;
+create policy "School admins can insert own row"
+on public.school_admins
+for insert
+to authenticated
+with check (auth.uid() = user_id);
+
+-- Platform admins are a small allowlist of user ids (super admins).
+create table if not exists public.platform_admins (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+
+alter table public.platform_admins enable row level security;
+
+drop policy if exists "Platform admins can view own row" on public.platform_admins;
+create policy "Platform admins can view own row"
+on public.platform_admins
+for select
+using (auth.uid() = user_id);
 
 alter table public.schools enable row level security;
 

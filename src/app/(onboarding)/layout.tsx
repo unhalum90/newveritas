@@ -6,8 +6,15 @@ export default async function OnboardingLayout({ children }: { children: React.R
   const supabase = await createSupabaseServerClient();
   const { data } = await supabase.auth.getUser();
   if (!data.user) redirect("/login");
-  if ((data.user.user_metadata as { role?: string } | undefined)?.role === "student") {
+  const role = (data.user.user_metadata as { role?: string } | undefined)?.role;
+  if (role === "student") {
     redirect("/student");
+  }
+  if (role === "school_admin") {
+    redirect("/schools/admin");
+  }
+  if (role === "platform_admin") {
+    redirect("/admin");
   }
 
   const { data: teacher } = await supabase
