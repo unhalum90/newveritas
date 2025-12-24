@@ -43,6 +43,16 @@ type QuestionWithResponse = {
   question_text: string;
   question_type: string | null;
   response: { signed_url: string; duration_seconds: number | null; created_at: string; transcript: string | null } | null;
+  evidence:
+    | {
+        signed_url: string;
+        mime_type: string | null;
+        file_size_bytes: number | null;
+        width_px: number | null;
+        height_px: number | null;
+        uploaded_at: string;
+      }
+    | null;
   scores:
     | {
         reasoning: { score: number | null; justification: string | null };
@@ -420,6 +430,41 @@ export function AssessmentResultsClient({ assessmentId }: { assessmentId: string
                       <div className="text-xs text-[var(--muted)]">{q.question_type ?? "open_response"}</div>
                     </div>
                     <div className="mt-2 text-sm italic text-[var(--text)]">“{q.question_text}”</div>
+                    <div className="mt-3">
+                      {q.evidence ? (
+                        <div className="space-y-2">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="text-xs font-semibold text-[var(--muted)]">Student Evidence</div>
+                            <div className="flex items-center gap-3 text-xs">
+                              <a
+                                href={q.evidence.signed_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-[var(--primary)] hover:underline"
+                              >
+                                View full size
+                              </a>
+                              <a
+                                href={q.evidence.signed_url}
+                                download={`evidence_question_${q.order_index}.jpg`}
+                                className="text-[var(--primary)] hover:underline"
+                              >
+                                Download
+                              </a>
+                            </div>
+                          </div>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={q.evidence.signed_url}
+                            alt={`Evidence for question ${q.order_index}`}
+                            className="max-h-72 w-full rounded-md border border-[var(--border)] object-contain"
+                          />
+                          <div className="text-xs text-[var(--muted)]">Uploaded {formatTime(q.evidence.uploaded_at)}</div>
+                        </div>
+                      ) : (
+                        <div className="text-xs text-[var(--muted)]">No evidence image submitted.</div>
+                      )}
+                    </div>
                     <div className="mt-3">
                       {q.response ? (
                         <div className="space-y-2">

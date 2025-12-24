@@ -11,7 +11,7 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
 
   const { data: questions, error: listError } = await supabase
     .from("assessment_questions")
-    .select("id, assessment_id, question_text, question_type, order_index, created_at")
+    .select("id, assessment_id, question_text, question_type, evidence_upload, order_index, created_at")
     .eq("assessment_id", assessmentId)
     .order("order_index", { ascending: true });
 
@@ -25,6 +25,7 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
 const createSchema = z.object({
   question_text: z.string().min(1).max(500),
   question_type: z.string().optional().nullable(),
+  evidence_upload: z.enum(["disabled", "optional", "required"]).optional(),
 });
 
 export async function POST(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
@@ -53,6 +54,7 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
       assessment_id: assessmentId,
       question_text: parsed.data.question_text,
       question_type: parsed.data.question_type ?? null,
+      evidence_upload: parsed.data.evidence_upload ?? "optional",
       order_index: orderIndex,
     })
     .select("id")
@@ -64,4 +66,3 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
   pendingCookies.forEach(({ name, value, options }) => res.cookies.set(name, value, options));
   return res;
 }
-

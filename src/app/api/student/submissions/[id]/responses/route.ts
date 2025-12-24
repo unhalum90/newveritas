@@ -114,7 +114,7 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
   // Validate question belongs to the assessment.
   const { data: q, error: qError } = await admin
     .from("assessment_questions")
-    .select("id")
+    .select("id, evidence_upload")
     .eq("id", questionId)
     .eq("assessment_id", submission.assessment_id)
     .maybeSingle();
@@ -145,6 +145,18 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
   if (!next) return NextResponse.json({ error: "All questions are already answered." }, { status: 409 });
   if (next.id !== questionId) {
     return NextResponse.json({ error: "You must answer questions in order." }, { status: 409 });
+  }
+
+  // Enforce evidence requirement (upload happens before recording).
+  if (q.evidence_upload === "required") {
+    const { data: evidence, error: eError } = await admin
+      .from("evidence_images")
+      .select("id")
+      .eq("submission_id", submissionId)
+      .eq("question_id", questionId)
+      .maybeSingle();
+    if (eError) return NextResponse.json({ error: eError.message }, { status: 500 });
+    if (!evidence) return NextResponse.json({ error: "Evidence image is required for this question." }, { status: 409 });
   }
 
   const bucket = getBucket();
@@ -181,6 +193,18 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
       return NextResponse.json({ error: "This question has already been answered. Re-recording is not allowed." }, { status: 409 });
     }
     return NextResponse.json({ error: insertError.message }, { status: 500 });
+  }
+
+  // If the student uploaded evidence before recording, link it to this response row.
+  try {
+    await admin
+      .from("evidence_images")
+      .update({ submission_response_id: row.id })
+      .eq("submission_id", submissionId)
+      .eq("question_id", questionId)
+      .is("submission_response_id", null);
+  } catch {
+    // best-effort; the evidence row is optional
   }
 
   const { data: signedUrl, error: signedError } = await admin.storage.from(bucket).createSignedUrl(path, 60 * 60);

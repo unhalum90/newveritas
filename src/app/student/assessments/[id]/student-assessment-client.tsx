@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+
+type EvidenceUploadSetting = "disabled" | "optional" | "required";
 
 type Integrity = {
   pause_threshold_seconds: number | null;
@@ -19,6 +21,7 @@ type Question = {
   question_text: string;
   question_type: string | null;
   order_index: number;
+  evidence_upload?: EvidenceUploadSetting | null;
 };
 
 type Assessment = {
@@ -39,6 +42,18 @@ type Submission = {
   submitted_at: string | null;
 };
 
+type EvidenceRow = {
+  id: string;
+  storage_bucket: string;
+  storage_path: string;
+  mime_type: string | null;
+  file_size_bytes: number | null;
+  width_px: number | null;
+  height_px: number | null;
+  uploaded_at: string;
+  signed_url: string;
+};
+
 type ResponseRow = {
   id: string;
   question_id: string;
@@ -47,6 +62,11 @@ type ResponseRow = {
   signed_url: string;
 };
 
+function normalizeEvidenceSetting(v: unknown): EvidenceUploadSetting {
+  if (v === "disabled" || v === "optional" || v === "required") return v;
+  return "optional";
+}
+
 export function StudentAssessmentClient({ assessmentId }: { assessmentId: string }) {
   const [assessment, setAssessment] = useState<Assessment | null>(null);
   const [latest, setLatest] = useState<Submission | null>(null);
@@ -54,13 +74,22 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [responses, setResponses] = useState<ResponseRow[]>([]);
+  const [evidenceByQuestion, setEvidenceByQuestion] = useState<Record<string, EvidenceRow | null>>({});
+  const [evidenceLoading, setEvidenceLoading] = useState(false);
+  const [evidenceUploading, setEvidenceUploading] = useState(false);
+  const [evidenceError, setEvidenceError] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [recordingError, setRecordingError] = useState<string | null>(null);
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
   // Recording chunks are kept in a local buffer during capture.
+  const evidenceInputRef = useRef<HTMLInputElement | null>(null);
 
   const activeQuestion = assessment?.current_question ?? null;
+  const activeEvidence = useMemo(() => {
+    if (!activeQuestion) return null;
+    return evidenceByQuestion[activeQuestion.id] ?? null;
+  }, [activeQuestion, evidenceByQuestion]);
 
   const activeResponse = useMemo(() => {
     if (!activeQuestion) return null;
@@ -84,6 +113,23 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
     setResponses(data?.responses ?? []);
   }
 
+  async function refreshEvidence(submissionId: string, questionId: string) {
+    setEvidenceLoading(true);
+    setEvidenceError(null);
+    try {
+      const res = await fetch(`/api/student/submissions/${submissionId}/evidence?question_id=${encodeURIComponent(questionId)}`, {
+        cache: "no-store",
+      });
+      const data = (await res.json().catch(() => null)) as { evidence?: EvidenceRow | null; error?: string } | null;
+      if (!res.ok) throw new Error(data?.error ?? "Unable to load evidence.");
+      setEvidenceByQuestion((prev) => ({ ...prev, [questionId]: data?.evidence ?? null }));
+    } catch (e) {
+      setEvidenceError(e instanceof Error ? e.message : "Unable to load evidence.");
+    } finally {
+      setEvidenceLoading(false);
+    }
+  }
+
   const refreshAssessment = useCallback(async () => {
     const res = await fetch(`/api/student/assessments/${assessmentId}`, { cache: "no-store" });
     const data = (await res.json().catch(() => null)) as
@@ -101,6 +147,7 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
       await refreshResponses(data.latest_submission.id);
     } else {
       setResponses([]);
+      setEvidenceByQuestion({});
     }
   }, [assessmentId]);
 
@@ -117,6 +164,13 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
       }
     })();
   }, [refreshAssessment]);
+
+  useEffect(() => {
+    if (!latest || latest.status !== "started") return;
+    if (!activeQuestion) return;
+    void refreshEvidence(latest.id, activeQuestion.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [latest?.id, latest?.status, activeQuestion?.id]);
 
   async function startOrResume() {
     setWorking(true);
@@ -188,6 +242,12 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
       return;
     }
 
+    const evidenceSetting = normalizeEvidenceSetting(activeQuestion.evidence_upload);
+    if (evidenceSetting === "required" && !activeEvidence) {
+      setRecordingError("Upload the required evidence image before recording.");
+      return;
+    }
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const recorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
@@ -235,9 +295,55 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
     }
   }
 
+  async function handleEvidenceSelected(file: File) {
+    if (!latest || latest.status !== "started") {
+      setEvidenceError("Start the assessment before uploading evidence.");
+      return;
+    }
+    if (!activeQuestion) return;
+    setEvidenceUploading(true);
+    setEvidenceError(null);
+    try {
+      const form = new FormData();
+      form.set("question_id", activeQuestion.id);
+      form.set("file", file);
+
+      const res = await fetch(`/api/student/submissions/${latest.id}/evidence`, { method: "POST", body: form });
+      const data = (await res.json().catch(() => null)) as { evidence?: EvidenceRow | null; error?: string } | null;
+      if (!res.ok) throw new Error(data?.error ?? "Evidence upload failed.");
+      setEvidenceByQuestion((prev) => ({ ...prev, [activeQuestion.id]: data?.evidence ?? null }));
+    } catch (e) {
+      setEvidenceError(e instanceof Error ? e.message : "Evidence upload failed.");
+    } finally {
+      setEvidenceUploading(false);
+    }
+  }
+
+  async function removeEvidence() {
+    if (!latest || latest.status !== "started") return;
+    if (!activeQuestion) return;
+    setEvidenceUploading(true);
+    setEvidenceError(null);
+    try {
+      const res = await fetch(
+        `/api/student/submissions/${latest.id}/evidence?question_id=${encodeURIComponent(activeQuestion.id)}`,
+        { method: "DELETE" },
+      );
+      const data = (await res.json().catch(() => null)) as { error?: string } | null;
+      if (!res.ok) throw new Error(data?.error ?? "Unable to remove evidence.");
+      setEvidenceByQuestion((prev) => ({ ...prev, [activeQuestion.id]: null }));
+      if (evidenceInputRef.current) evidenceInputRef.current.value = "";
+    } catch (e) {
+      setEvidenceError(e instanceof Error ? e.message : "Unable to remove evidence.");
+    } finally {
+      setEvidenceUploading(false);
+    }
+  }
+
   const total = assessment?.question_count ?? 0;
   const attempted = completedCount;
   const started = latest?.status === "started";
+  const evidenceSetting = normalizeEvidenceSetting(activeQuestion?.evidence_upload);
 
   return (
     <div className="min-h-screen bg-zinc-50 px-6 py-10">
@@ -319,6 +425,66 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
                       <div className="text-sm text-zinc-900">{activeQuestion.question_text}</div>
                     </div>
 
+                    {evidenceSetting !== "disabled" ? (
+                      <div className="rounded-md border border-zinc-200 bg-white p-4">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <div className="text-sm font-medium text-zinc-900">Evidence</div>
+                            <div className="mt-0.5 text-xs text-zinc-600">
+                              {evidenceSetting === "required" ? "Required before recording." : "Optional. Upload a photo of your work."}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <input
+                              ref={evidenceInputRef}
+                              type="file"
+                              accept="image/*,.jpg,.jpeg,.png,.heic,.heif"
+                              className="hidden"
+                              onChange={(e) => {
+                                const f = e.target.files?.[0];
+                                if (f) void handleEvidenceSelected(f);
+                              }}
+                            />
+                            {!activeEvidence ? (
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                disabled={working || recording || evidenceUploading}
+                                onClick={() => evidenceInputRef.current?.click()}
+                              >
+                                {evidenceUploading ? "Uploading…" : "Upload Evidence"}
+                              </Button>
+                            ) : (
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                disabled={working || recording || evidenceUploading}
+                                onClick={removeEvidence}
+                              >
+                                {evidenceUploading ? "Removing…" : "Remove"}
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+
+                        {evidenceLoading ? <div className="mt-3 text-xs text-zinc-600">Loading evidence…</div> : null}
+                        {evidenceError ? <div className="mt-3 text-sm text-red-600">{evidenceError}</div> : null}
+                        {activeEvidence ? (
+                          <div className="mt-3">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={activeEvidence.signed_url}
+                              alt="Evidence upload preview"
+                              className="max-h-72 w-full rounded-md border border-zinc-200 object-contain"
+                            />
+                            <div className="mt-2 text-xs text-zinc-600">
+                              Uploaded {new Date(activeEvidence.uploaded_at).toLocaleString()}
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+
                     <div className="rounded-md border border-zinc-200 bg-zinc-50 p-4">
                       <div className="flex items-center justify-between gap-3">
                         <div className="text-sm font-medium text-zinc-900">Record your response</div>
@@ -328,7 +494,16 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
                       </div>
                       <div className="mt-3 flex flex-wrap items-center gap-2">
                         {!recording ? (
-                          <Button type="button" disabled={working || latest?.status !== "started"} onClick={beginRecording}>
+                          <Button
+                            type="button"
+                            disabled={
+                              working ||
+                              latest?.status !== "started" ||
+                              (evidenceSetting === "required" && !activeEvidence) ||
+                              evidenceUploading
+                            }
+                            onClick={beginRecording}
+                          >
                             Start Recording
                           </Button>
                         ) : (

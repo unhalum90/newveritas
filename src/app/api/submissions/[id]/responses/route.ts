@@ -7,6 +7,10 @@ function getBucket() {
   return process.env.SUPABASE_RECORDINGS_BUCKET || "student-recordings";
 }
 
+function getEvidenceBucket() {
+  return process.env.SUPABASE_EVIDENCE_BUCKET || "student-evidence";
+}
+
 export async function GET(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id: submissionId } = await ctx.params;
   const { supabase, pendingCookies } = createRouteSupabaseClient(request);
@@ -50,6 +54,12 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
 
   if (rError) return NextResponse.json({ error: rError.message }, { status: 500 });
 
+  const { data: evidenceRows, error: eError } = await supabase
+    .from("evidence_images")
+    .select("question_id, storage_bucket, storage_path, mime_type, file_size_bytes, width_px, height_px, uploaded_at")
+    .eq("submission_id", submissionId);
+  if (eError) return NextResponse.json({ error: eError.message }, { status: 500 });
+
   const { data: scores, error: scError } = await supabase
     .from("question_scores")
     .select("question_id, scorer_type, score, justification")
@@ -79,6 +89,33 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
       duration_seconds: r.duration_seconds ?? null,
       created_at: r.created_at,
       transcript: typeof r.transcript === "string" && r.transcript.trim() ? r.transcript : null,
+    });
+  }
+
+  const evidenceByQuestion = new Map<
+    string,
+    {
+      signed_url: string;
+      mime_type: string | null;
+      file_size_bytes: number | null;
+      width_px: number | null;
+      height_px: number | null;
+      uploaded_at: string;
+    }
+  >();
+  for (const e of evidenceRows ?? []) {
+    const bucket = (e.storage_bucket as string | null) || getEvidenceBucket();
+    const path = e.storage_path as string;
+    if (!path) continue;
+    const { data: signedUrl, error: signedError } = await admin.storage.from(bucket).createSignedUrl(path, 60 * 60);
+    if (signedError) return NextResponse.json({ error: signedError.message }, { status: 500 });
+    evidenceByQuestion.set(e.question_id, {
+      signed_url: signedUrl.signedUrl,
+      mime_type: typeof e.mime_type === "string" && e.mime_type ? e.mime_type : null,
+      file_size_bytes: typeof e.file_size_bytes === "number" ? e.file_size_bytes : null,
+      width_px: typeof e.width_px === "number" ? e.width_px : null,
+      height_px: typeof e.height_px === "number" ? e.height_px : null,
+      uploaded_at: e.uploaded_at,
     });
   }
 
@@ -112,6 +149,7 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
     questions: (questions ?? []).map((q) => ({
       ...q,
       response: responseByQuestion.get(q.id) ?? null,
+      evidence: evidenceByQuestion.get(q.id) ?? null,
       scores: scoresByQuestion.get(q.id) ?? null,
     })),
   });

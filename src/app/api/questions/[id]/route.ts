@@ -7,6 +7,7 @@ const patchSchema = z.object({
   question_text: z.string().min(1).max(500).optional(),
   question_type: z.string().optional().nullable(),
   order_index: z.number().int().positive().optional(),
+  evidence_upload: z.enum(["disabled", "optional", "required"]).optional(),
 });
 
 export async function PATCH(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
@@ -40,4 +41,3 @@ export async function DELETE(request: NextRequest, ctx: { params: Promise<{ id: 
   pendingCookies.forEach(({ name, value, options }) => res.cookies.set(name, value, options));
   return res;
 }
-

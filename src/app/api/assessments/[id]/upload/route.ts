@@ -8,16 +8,38 @@ import { getSupabaseErrorMessage } from "@/lib/supabase/errors";
 export const runtime = "nodejs";
 
 async function extractPdfText(bytes: Uint8Array) {
-  type PdfParseResult = { text?: string };
-  type PdfParseFn = (data: Buffer) => Promise<PdfParseResult>;
+  // NOTE: We intentionally avoid `pdf-parse` here because under Next.js/Turbopack it can
+  // trigger `pdfjs-dist` worker resolution errors ("Setting up fake worker failed...").
+  // Using `pdfjs-dist` directly and forcing a resolvable worker module avoids Turbopack's
+  // runtime "fake worker" failures.
+  const pdfjs = (await import("pdfjs-dist/legacy/build/pdf.mjs")) as unknown as {
+    getDocument: (src: { data: Uint8Array; disableWorker?: boolean }) => { promise: Promise<unknown> };
+    GlobalWorkerOptions?: { workerSrc?: string };
+  };
 
-  const mod = (await import("pdf-parse")) as unknown;
-  const parse =
-    typeof mod === "function" ? mod : typeof (mod as { default?: unknown }).default === "function" ? (mod as { default: unknown }).default : null;
+  // `disableWorker: true` uses the "fake worker" which imports `workerSrc` as a module. The
+  // default is a relative specifier ("./pdf.worker.mjs") that Turbopack rewrites into a missing
+  // `.next/.../chunks/pdf.worker.mjs`. Use a package specifier instead so Node can resolve it.
+  if (pdfjs.GlobalWorkerOptions) pdfjs.GlobalWorkerOptions.workerSrc = "pdfjs-dist/legacy/build/pdf.worker.mjs";
 
-  if (!parse) throw new Error("pdf-parse export not found.");
-  const result = await (parse as PdfParseFn)(Buffer.from(bytes));
-  return (result.text ?? "").trim();
+  const loadingTask = pdfjs.getDocument({ data: bytes, disableWorker: true });
+  const doc = (await loadingTask.promise) as {
+    numPages: number;
+    getPage: (n: number) => Promise<{ getTextContent: () => Promise<{ items: Array<{ str?: unknown }> }> }>;
+  };
+
+  const parts: string[] = [];
+  for (let pageNum = 1; pageNum <= doc.numPages; pageNum += 1) {
+    const page = await doc.getPage(pageNum);
+    const content = await page.getTextContent();
+    const pageText = content.items
+      .map((it) => (typeof it.str === "string" ? it.str : ""))
+      .filter(Boolean)
+      .join(" ");
+    if (pageText.trim()) parts.push(pageText.trim());
+  }
+
+  return parts.join("\n\n").trim();
 }
 
 function asInt(value: unknown) {

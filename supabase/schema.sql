@@ -480,6 +480,7 @@ with check (
 create table if not exists public.assessment_questions (
   id uuid primary key default gen_random_uuid(),
   assessment_id uuid references public.assessments(id) on delete cascade,
+  evidence_upload text not null default 'optional', -- disabled | optional | required
   question_text text not null,
   question_type text,
   order_index int not null,
@@ -488,10 +489,26 @@ create table if not exists public.assessment_questions (
 
 -- Backfill columns if assessment_questions already exists
 alter table public.assessment_questions add column if not exists assessment_id uuid references public.assessments(id) on delete cascade;
+alter table public.assessment_questions add column if not exists evidence_upload text not null default 'optional';
 alter table public.assessment_questions add column if not exists question_text text;
 alter table public.assessment_questions add column if not exists question_type text;
 alter table public.assessment_questions add column if not exists order_index int;
 alter table public.assessment_questions add column if not exists created_at timestamptz not null default now();
+
+-- Ensure evidence_upload stays in allowed set
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'assessment_questions_evidence_upload_chk'
+  ) then
+    alter table public.assessment_questions
+      add constraint assessment_questions_evidence_upload_chk
+      check (evidence_upload in ('disabled', 'optional', 'required'));
+  end if;
+end;
+$$;
 
 create unique index if not exists assessment_questions_order_uq
 on public.assessment_questions(assessment_id, order_index);
@@ -691,6 +708,92 @@ using (
     join public.classes c on c.id = a.class_id
     join public.teachers t on t.workspace_id = c.workspace_id
     where sub.id = submission_id and t.user_id = auth.uid()
+  )
+);
+
+-- Evidence images (optional uploads before recording)
+create table if not exists public.evidence_images (
+  id uuid primary key default gen_random_uuid(),
+  submission_id uuid not null references public.submissions(id) on delete cascade,
+  question_id uuid not null references public.assessment_questions(id) on delete cascade,
+  submission_response_id uuid references public.submission_responses(id) on delete set null,
+  original_filename text,
+  storage_bucket text not null default 'student-evidence',
+  storage_path text not null,
+  file_size_bytes int,
+  mime_type text,
+  width_px int,
+  height_px int,
+  uploaded_at timestamptz not null default now(),
+  analyzed_at timestamptz,
+  ai_description text,
+  deleted_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create unique index if not exists evidence_images_submission_question_uq
+on public.evidence_images(submission_id, question_id);
+
+create index if not exists evidence_images_submission_id_idx on public.evidence_images(submission_id);
+create index if not exists evidence_images_question_id_idx on public.evidence_images(question_id);
+create index if not exists evidence_images_submission_response_id_idx on public.evidence_images(submission_response_id);
+create index if not exists evidence_images_deleted_at_idx on public.evidence_images(deleted_at);
+
+drop trigger if exists evidence_images_set_updated_at on public.evidence_images;
+create trigger evidence_images_set_updated_at
+before update on public.evidence_images
+for each row
+execute function public.set_updated_at();
+
+alter table public.evidence_images enable row level security;
+
+drop policy if exists "Evidence images scoped to teacher" on public.evidence_images;
+create policy "Evidence images scoped to teacher"
+on public.evidence_images
+for select
+using (
+  exists (
+    select 1
+    from public.submissions sub
+    join public.assessments a on a.id = sub.assessment_id
+    join public.classes c on c.id = a.class_id
+    join public.teachers t on t.workspace_id = c.workspace_id
+    where sub.id = submission_id and t.user_id = auth.uid()
+  )
+);
+
+drop policy if exists "Evidence images scoped to student" on public.evidence_images;
+create policy "Evidence images scoped to student"
+on public.evidence_images
+for select
+using (
+  exists (
+    select 1
+    from public.submissions sub
+    join public.students s on s.id = sub.student_id
+    where sub.id = submission_id and s.auth_user_id = auth.uid()
+  )
+);
+
+drop policy if exists "Students can manage own evidence images" on public.evidence_images;
+create policy "Students can manage own evidence images"
+on public.evidence_images
+for all
+using (
+  exists (
+    select 1
+    from public.submissions sub
+    join public.students s on s.id = sub.student_id
+    where sub.id = submission_id and s.auth_user_id = auth.uid()
+  )
+)
+with check (
+  exists (
+    select 1
+    from public.submissions sub
+    join public.students s on s.id = sub.student_id
+    where sub.id = submission_id and s.auth_user_id = auth.uid()
   )
 );
 

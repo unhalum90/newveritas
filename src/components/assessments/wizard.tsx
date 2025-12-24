@@ -35,6 +35,7 @@ type Question = {
   id: string;
   question_text: string;
   question_type?: string | null;
+  evidence_upload?: "disabled" | "optional" | "required";
   order_index: number;
 };
 
@@ -382,6 +383,24 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
         }),
       });
       setEditingQuestionId(null);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Save failed.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function updateEvidenceUpload(questionId: string, evidence_upload: "disabled" | "optional" | "required") {
+    if (readonly) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await jsonFetch(`/api/questions/${questionId}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ evidence_upload }),
+      });
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Save failed.");
@@ -984,6 +1003,7 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
                     <div className="space-y-3">
                       {questions.map((q) => {
                         const editing = editingQuestionId === q.id;
+                        const evidenceUpload = q.evidence_upload ?? "optional";
                         return (
                           <div key={q.id} className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-4">
                             <div className="flex items-center justify-between gap-3">
@@ -1043,10 +1063,43 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
                                         disabled={saving}
                                       />
                                     </div>
+                                    <div className="space-y-2">
+                                      <Label htmlFor={`eu-${q.id}`}>Evidence upload</Label>
+                                      <select
+                                        id={`eu-${q.id}`}
+                                        className="h-10 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 text-sm text-[var(--text)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] disabled:opacity-60"
+                                        value={evidenceUpload}
+                                        disabled={saving || readonly}
+                                        onChange={(e) => void updateEvidenceUpload(q.id, e.target.value as "disabled" | "optional" | "required")}
+                                      >
+                                        <option value="disabled">Disabled</option>
+                                        <option value="optional">Optional</option>
+                                        <option value="required">Required</option>
+                                      </select>
+                                      <p className="text-xs text-[var(--muted)]">Students can upload a photo of their work before recording.</p>
+                                    </div>
                                   </div>
                                 </>
                               ) : (
-                                <div className="text-sm italic text-[var(--text)]">“{q.question_text}”</div>
+                                <div className="space-y-2">
+                                  <div className="text-sm italic text-[var(--text)]">“{q.question_text}”</div>
+                                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                    <div className="space-y-1">
+                                      <div className="text-xs text-[var(--muted)]">Evidence upload</div>
+                                      <div className="text-sm text-[var(--text)] capitalize">{evidenceUpload}</div>
+                                    </div>
+                                    <div className="flex items-end justify-end sm:justify-start">
+                                      <Button
+                                        type="button"
+                                        variant="secondary"
+                                        disabled={saving || readonly}
+                                        onClick={() => void updateEvidenceUpload(q.id, evidenceUpload === "required" ? "optional" : "required")}
+                                      >
+                                        {evidenceUpload === "required" ? "Make Optional" : "Require Evidence"}
+                                      </Button>
+                                    </div>
+                                  </div>
+                                </div>
                               )}
                             </div>
                           </div>

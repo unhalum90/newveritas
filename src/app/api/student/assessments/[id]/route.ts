@@ -66,7 +66,7 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
   // Only return the current question (not the full question bank) to reduce pre-viewing answers.
   let answeredCount = 0;
   let currentQuestion:
-    | { id: string; order_index: number; question_text: string; question_type: string | null }
+    | { id: string; order_index: number; question_text: string; question_type: string | null; evidence_upload: string | null }
     | null = null;
 
   if (latestSubmission?.status === "started" && totalCount > 0) {
@@ -83,7 +83,7 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
     if (next) {
       const { data: qRow, error: qError } = await admin
         .from("assessment_questions")
-        .select("id, question_text, question_type, order_index")
+        .select("id, question_text, question_type, order_index, evidence_upload")
         .eq("id", next.id)
         .maybeSingle();
       if (qError) return NextResponse.json({ error: qError.message }, { status: 500 });
