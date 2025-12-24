@@ -219,6 +219,8 @@ create table if not exists public.assessments (
   instructions text,
   status text not null default 'draft', -- draft | live | closed
   authoring_mode text not null default 'manual', -- manual | upload | ai
+  socratic_enabled boolean not null default false,
+  socratic_follow_ups int not null default 1, -- 1 or 2
   selected_asset_id uuid, -- points to assessment_assets.id (optional, v1)
   published_at timestamptz,
   created_at timestamptz not null default now(),
@@ -231,10 +233,27 @@ alter table public.assessments add column if not exists target_language text;
 alter table public.assessments add column if not exists instructions text;
 alter table public.assessments add column if not exists status text not null default 'draft';
 alter table public.assessments add column if not exists authoring_mode text not null default 'manual';
+alter table public.assessments add column if not exists socratic_enabled boolean not null default false;
+alter table public.assessments add column if not exists socratic_follow_ups int not null default 1;
 alter table public.assessments add column if not exists selected_asset_id uuid;
 alter table public.assessments add column if not exists published_at timestamptz;
 alter table public.assessments add column if not exists created_at timestamptz not null default now();
 alter table public.assessments add column if not exists updated_at timestamptz not null default now();
+
+-- Ensure sane follow-up count (soft check via clamp in app; hard check for clean data)
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'assessments_socratic_follow_ups_chk'
+  ) then
+    alter table public.assessments
+      add constraint assessments_socratic_follow_ups_chk
+      check (socratic_follow_ups between 1 and 2);
+  end if;
+end;
+$$;
 
 create index if not exists assessments_class_id_idx on public.assessments(class_id);
 create index if not exists assessments_status_idx on public.assessments(status);
@@ -352,6 +371,9 @@ create table if not exists public.assessment_integrity (
   pause_threshold_seconds numeric not null default 2.5,
   tab_switch_monitor boolean not null default true,
   shuffle_questions boolean not null default true,
+  pledge_enabled boolean not null default false,
+  pledge_version int not null default 1,
+  pledge_text text,
   recording_limit_seconds int not null default 60,
   viewing_timer_seconds int not null default 20
 );
@@ -360,6 +382,9 @@ create table if not exists public.assessment_integrity (
 alter table public.assessment_integrity add column if not exists pause_threshold_seconds numeric not null default 2.5;
 alter table public.assessment_integrity add column if not exists tab_switch_monitor boolean not null default true;
 alter table public.assessment_integrity add column if not exists shuffle_questions boolean not null default true;
+alter table public.assessment_integrity add column if not exists pledge_enabled boolean not null default false;
+alter table public.assessment_integrity add column if not exists pledge_version int not null default 1;
+alter table public.assessment_integrity add column if not exists pledge_text text;
 alter table public.assessment_integrity add column if not exists recording_limit_seconds int not null default 60;
 alter table public.assessment_integrity add column if not exists viewing_timer_seconds int not null default 20;
 
@@ -433,6 +458,9 @@ with check (
 create table if not exists public.assessment_questions (
   id uuid primary key default gen_random_uuid(),
   assessment_id uuid references public.assessments(id) on delete cascade,
+  submission_id uuid, -- null = base question, non-null = student-specific follow-up
+  kind text not null default 'initial', -- initial | followup
+  parent_question_id uuid, -- for followups
   question_text text not null,
   question_type text,
   order_index int not null,
@@ -441,15 +469,30 @@ create table if not exists public.assessment_questions (
 
 -- Backfill columns if assessment_questions already exists
 alter table public.assessment_questions add column if not exists assessment_id uuid references public.assessments(id) on delete cascade;
+alter table public.assessment_questions add column if not exists submission_id uuid;
+alter table public.assessment_questions add column if not exists kind text not null default 'initial';
+alter table public.assessment_questions add column if not exists parent_question_id uuid;
 alter table public.assessment_questions add column if not exists question_text text;
 alter table public.assessment_questions add column if not exists question_type text;
 alter table public.assessment_questions add column if not exists order_index int;
 alter table public.assessment_questions add column if not exists created_at timestamptz not null default now();
 
-create unique index if not exists assessment_questions_order_uq
-on public.assessment_questions(assessment_id, order_index);
+-- If an older global unique index exists, replace it with scoped uniqueness:
+--   base questions unique within assessment
+--   followups unique within a submission
+drop index if exists public.assessment_questions_order_uq;
+
+create unique index if not exists assessment_questions_base_order_uq
+on public.assessment_questions(assessment_id, order_index)
+where submission_id is null;
+
+create unique index if not exists assessment_questions_followup_order_uq
+on public.assessment_questions(submission_id, order_index)
+where submission_id is not null;
 
 create index if not exists assessment_questions_assessment_id_idx on public.assessment_questions(assessment_id);
+create index if not exists assessment_questions_submission_id_idx on public.assessment_questions(submission_id);
+create index if not exists assessment_questions_parent_question_id_idx on public.assessment_questions(parent_question_id);
 
 alter table public.assessment_questions enable row level security;
 
@@ -578,6 +621,9 @@ create table if not exists public.submissions (
   scoring_started_at timestamptz,
   scored_at timestamptz,
   scoring_error text,
+  integrity_pledge_accepted_at timestamptz,
+  integrity_pledge_ip_address text,
+  integrity_pledge_version int,
   created_at timestamptz not null default now()
 );
 
@@ -589,6 +635,9 @@ alter table public.submissions add column if not exists scoring_status text not 
 alter table public.submissions add column if not exists scoring_started_at timestamptz;
 alter table public.submissions add column if not exists scored_at timestamptz;
 alter table public.submissions add column if not exists scoring_error text;
+alter table public.submissions add column if not exists integrity_pledge_accepted_at timestamptz;
+alter table public.submissions add column if not exists integrity_pledge_ip_address text;
+alter table public.submissions add column if not exists integrity_pledge_version int;
 
 create index if not exists submissions_scoring_status_idx on public.submissions(scoring_status);
 
@@ -623,6 +672,36 @@ create table if not exists public.submission_responses (
 
 -- Backfill columns if submission_responses already exists
 alter table public.submission_responses add column if not exists transcript text;
+
+-- Now that submissions exists, add FK for assessment_questions.submission_id (safe idempotent).
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'assessment_questions_submission_id_fkey'
+  ) then
+    alter table public.assessment_questions
+      add constraint assessment_questions_submission_id_fkey
+      foreign key (submission_id) references public.submissions(id) on delete cascade;
+  end if;
+end;
+$$;
+
+-- Self-FK for followups (safe idempotent).
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'assessment_questions_parent_question_id_fkey'
+  ) then
+    alter table public.assessment_questions
+      add constraint assessment_questions_parent_question_id_fkey
+      foreign key (parent_question_id) references public.assessment_questions(id) on delete set null;
+  end if;
+end;
+$$;
 
 create unique index if not exists submission_responses_uq
 on public.submission_responses(submission_id, question_id);

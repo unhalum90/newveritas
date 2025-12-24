@@ -24,7 +24,9 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
 
   const { data: assessment, error: aError } = await admin
     .from("assessments")
-    .select("id, class_id, title, instructions, status, published_at, selected_asset_id, assessment_integrity(*)")
+    .select(
+      "id, class_id, title, instructions, status, published_at, selected_asset_id, socratic_enabled, socratic_follow_ups, assessment_integrity(*)",
+    )
     .eq("id", assessmentId)
     .maybeSingle();
 
@@ -43,18 +45,22 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
 
   if (assetError) return NextResponse.json({ error: assetError.message }, { status: 500 });
 
-  const { data: questionIds, error: qIdError } = await admin
+  const { data: baseQuestions, error: qIdError } = await admin
     .from("assessment_questions")
     .select("id, order_index")
     .eq("assessment_id", assessmentId)
+    .is("submission_id", null)
     .order("order_index", { ascending: true });
 
   if (qIdError) return NextResponse.json({ error: qIdError.message }, { status: 500 });
-  const totalCount = (questionIds ?? []).length;
+  const baseCount = (baseQuestions ?? []).length;
+  const followUpsTarget =
+    typeof assessment.socratic_follow_ups === "number" ? Math.max(0, Math.min(2, assessment.socratic_follow_ups)) : 0;
+  const totalCount = assessment.socratic_enabled ? (baseCount ? 1 : 0) + followUpsTarget : baseCount;
 
   const { data: latestSubmission, error: subError } = await admin
     .from("submissions")
-    .select("id, status, started_at, submitted_at")
+    .select("id, status, started_at, submitted_at, integrity_pledge_accepted_at, integrity_pledge_version")
     .eq("assessment_id", assessmentId)
     .eq("student_id", student.id)
     .order("started_at", { ascending: false })
@@ -70,24 +76,43 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
     | null = null;
 
   if (latestSubmission?.status === "started" && totalCount > 0) {
-    const { data: answered, error: answeredError } = await admin
-      .from("submission_responses")
-      .select("question_id")
-      .eq("submission_id", latestSubmission.id);
+    const pledgeRequired = Boolean(assessment.assessment_integrity?.pledge_enabled);
+    const pledgeAccepted = Boolean(latestSubmission.integrity_pledge_accepted_at);
+    if (pledgeRequired && !pledgeAccepted) {
+      // Do not reveal questions until the pledge is accepted.
+      currentQuestion = null;
+    } else {
+      const { data: answered, error: answeredError } = await admin
+        .from("submission_responses")
+        .select("question_id")
+        .eq("submission_id", latestSubmission.id);
 
-    if (answeredError) return NextResponse.json({ error: answeredError.message }, { status: 500 });
-    const answeredSet = new Set((answered ?? []).map((r) => r.question_id));
-    answeredCount = answeredSet.size;
+      if (answeredError) return NextResponse.json({ error: answeredError.message }, { status: 500 });
+      const answeredSet = new Set((answered ?? []).map((r) => r.question_id));
+      answeredCount = answeredSet.size;
 
-    const next = (questionIds ?? []).find((q) => !answeredSet.has(q.id)) ?? null;
-    if (next) {
-      const { data: qRow, error: qError } = await admin
+      const { data: followUpQuestions, error: followUpError } = await admin
         .from("assessment_questions")
-        .select("id, question_text, question_type, order_index")
-        .eq("id", next.id)
-        .maybeSingle();
-      if (qError) return NextResponse.json({ error: qError.message }, { status: 500 });
-      if (qRow) currentQuestion = qRow;
+        .select("id, order_index")
+        .eq("assessment_id", assessmentId)
+        .eq("submission_id", latestSubmission.id)
+        .order("order_index", { ascending: true });
+      if (followUpError) return NextResponse.json({ error: followUpError.message }, { status: 500 });
+
+      const chain = [...(baseQuestions ?? []), ...(followUpQuestions ?? [])].sort(
+        (a, b) => (a.order_index ?? 0) - (b.order_index ?? 0),
+      );
+
+      const next = chain.find((q) => !answeredSet.has(q.id)) ?? null;
+      if (next) {
+        const { data: qRow, error: qError } = await admin
+          .from("assessment_questions")
+          .select("id, question_text, question_type, order_index")
+          .eq("id", next.id)
+          .maybeSingle();
+        if (qError) return NextResponse.json({ error: qError.message }, { status: 500 });
+        if (qRow) currentQuestion = qRow;
+      }
     }
   }
 

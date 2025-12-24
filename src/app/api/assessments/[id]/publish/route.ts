@@ -10,7 +10,7 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
 
   const { data: assessment, error: getError } = await supabase
     .from("assessments")
-    .select("id, status, title, selected_asset_id")
+    .select("id, status, title, selected_asset_id, socratic_enabled")
     .eq("id", id)
     .maybeSingle();
 
@@ -26,10 +26,17 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
   const { count: qCount, error: qError } = await supabase
     .from("assessment_questions")
     .select("id", { count: "exact", head: true })
-    .eq("assessment_id", id);
+    .eq("assessment_id", id)
+    .is("submission_id", null);
 
   if (qError) return NextResponse.json({ error: "Question lookup failed." }, { status: 500 });
   if (!qCount || qCount < 1) return NextResponse.json({ error: "Add at least one question." }, { status: 400 });
+  if (assessment.socratic_enabled && qCount !== 1) {
+    return NextResponse.json(
+      { error: "Socratic mode currently requires exactly 1 base question." },
+      { status: 400 },
+    );
+  }
 
   const { data: rubrics, error: rError } = await supabase
     .from("rubrics")

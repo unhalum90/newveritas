@@ -367,6 +367,7 @@ export async function scoreSubmission(submissionId: string) {
       .from("assessment_questions")
       .select("id, order_index, question_text")
       .eq("assessment_id", submission.assessment_id)
+      .or(`submission_id.is.null,submission_id.eq.${submissionId}`)
       .order("order_index", { ascending: true });
     if (qError) throw qError;
 

@@ -39,6 +39,7 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
     .from("assessment_questions")
     .select("id, order_index, question_text, question_type")
     .eq("assessment_id", submission.assessment_id)
+    .or(`submission_id.is.null,submission_id.eq.${submissionId}`)
     .order("order_index", { ascending: true });
 
   if (qError) return NextResponse.json({ error: qError.message }, { status: 500 });

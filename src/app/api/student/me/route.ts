@@ -11,6 +11,10 @@ export async function GET(request: NextRequest) {
   const role = (data.user.user_metadata as { role?: string } | undefined)?.role;
   if (role !== "student") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
+  const meta = (data.user.user_metadata as Record<string, unknown> | undefined) ?? {};
+  const onboardingCompleted = meta.student_onboarded === true;
+  const onboardingCompletedAt = typeof meta.student_onboarded_at === "string" ? meta.student_onboarded_at : null;
+
   const admin = createSupabaseAdminClient();
   const { data: student, error: sError } = await admin
     .from("students")
@@ -21,8 +25,13 @@ export async function GET(request: NextRequest) {
   if (sError) return NextResponse.json({ error: sError.message }, { status: 500 });
   if (!student) return NextResponse.json({ error: "Student record not found." }, { status: 404 });
 
-  const res = NextResponse.json({ student });
+  const res = NextResponse.json({
+    student,
+    onboarding: {
+      completed: onboardingCompleted,
+      completed_at: onboardingCompletedAt,
+    },
+  });
   pendingCookies.forEach(({ name, value, options }) => res.cookies.set(name, value, options));
   return res;
 }
-

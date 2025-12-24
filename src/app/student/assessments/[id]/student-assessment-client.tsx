@@ -10,6 +10,7 @@ type Integrity = {
   pause_threshold_seconds: number | null;
   tab_switch_monitor: boolean;
   shuffle_questions: boolean;
+  pledge_enabled?: boolean;
   recording_limit_seconds: number;
   viewing_timer_seconds: number;
 };
@@ -37,6 +38,7 @@ type Submission = {
   status: "started" | "submitted";
   started_at: string;
   submitted_at: string | null;
+  integrity_pledge_accepted_at?: string | null;
 };
 
 type ResponseRow = {
@@ -238,6 +240,25 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
   const total = assessment?.question_count ?? 0;
   const attempted = completedCount;
   const started = latest?.status === "started";
+  const pledgeRequired = Boolean(assessment?.integrity?.pledge_enabled);
+  const pledgeAccepted = Boolean(latest?.integrity_pledge_accepted_at);
+  const mustAcceptPledge = Boolean(started && pledgeRequired && !pledgeAccepted);
+
+  async function acceptPledge() {
+    if (!latest) return;
+    setWorking(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/student/submissions/${latest.id}/pledge`, { method: "POST" });
+      const data = (await res.json().catch(() => null)) as { error?: string } | null;
+      if (!res.ok) throw new Error(data?.error ?? "Unable to accept pledge.");
+      await refreshAssessment();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Unable to accept pledge.");
+    } finally {
+      setWorking(false);
+    }
+  }
 
   return (
     <div className="min-h-screen bg-zinc-50 px-6 py-10">
@@ -267,6 +288,30 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
         {assessment ? (
           <div className="grid grid-cols-1 gap-6 md:grid-cols-[1fr_320px]">
             <div className="space-y-4">
+              {mustAcceptPledge ? (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-6">
+                  <Card className="w-full max-w-lg">
+                    <CardHeader>
+                      <CardTitle>Integrity Pledge</CardTitle>
+                      <CardDescription>Required before you can begin answering questions.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="text-sm text-zinc-700">
+                        I will complete this assessment honestly and without outside assistance. I understand responses are final and cannot be re-recorded.
+                      </div>
+                      <div className="flex items-center justify-end gap-2">
+                        <Button type="button" variant="secondary" disabled={working} onClick={() => setError("You must accept the pledge to continue.")}>
+                          Decline
+                        </Button>
+                        <Button type="button" disabled={working} onClick={acceptPledge}>
+                          {working ? "Saving…" : "I Agree"}
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              ) : null}
+
               {assessment.asset_url ? (
                 <Card className="overflow-hidden">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -368,6 +413,7 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
                   <div>Pausing guardrail: {assessment.integrity?.pause_threshold_seconds ? "On" : "Off"}</div>
                   <div>Focus monitor: {assessment.integrity?.tab_switch_monitor ? "On" : "Off"}</div>
                   <div>Dynamic shuffle: {assessment.integrity?.shuffle_questions ? "On" : "Off"}</div>
+                  <div>Integrity pledge: {assessment.integrity?.pledge_enabled ? "Required" : "Off"}</div>
                 </CardContent>
               </Card>
 

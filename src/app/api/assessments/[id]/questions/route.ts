@@ -13,6 +13,7 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
     .from("assessment_questions")
     .select("id, assessment_id, question_text, question_type, order_index, created_at")
     .eq("assessment_id", assessmentId)
+    .is("submission_id", null)
     .order("order_index", { ascending: true });
 
   if (listError) return NextResponse.json({ error: "Questions lookup failed." }, { status: 500 });
@@ -41,6 +42,7 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
     .from("assessment_questions")
     .select("order_index")
     .eq("assessment_id", assessmentId)
+    .is("submission_id", null)
     .order("order_index", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -51,6 +53,9 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
     .from("assessment_questions")
     .insert({
       assessment_id: assessmentId,
+      submission_id: null,
+      kind: "initial",
+      parent_question_id: null,
       question_text: parsed.data.question_text,
       question_type: parsed.data.question_type ?? null,
       order_index: orderIndex,
@@ -64,4 +69,3 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
   pendingCookies.forEach(({ name, value, options }) => res.cookies.set(name, value, options));
   return res;
 }
-

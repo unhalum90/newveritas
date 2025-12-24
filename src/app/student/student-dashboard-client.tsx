@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,12 @@ type AssessmentListItem = {
   latest_submission: { id: string; status: "started" | "submitted"; started_at: string; submitted_at: string | null } | null;
 };
 
+type MeResponse = {
+  student?: Student;
+  onboarding?: { completed: boolean; completed_at: string | null };
+  error?: string;
+};
+
 function formatDate(d: string | null) {
   if (!d) return null;
   const date = new Date(d);
@@ -29,6 +36,7 @@ function formatDate(d: string | null) {
 }
 
 export function StudentDashboardClient() {
+  const router = useRouter();
   const [student, setStudent] = useState<Student | null>(null);
   const [assessments, setAssessments] = useState<AssessmentListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -45,8 +53,12 @@ export function StudentDashboardClient() {
       setError(null);
       try {
         const meRes = await fetch("/api/student/me", { cache: "no-store" });
-        const me = (await meRes.json().catch(() => null)) as { student?: Student; error?: string } | null;
+        const me = (await meRes.json().catch(() => null)) as MeResponse | null;
         if (!meRes.ok || !me?.student) throw new Error(me?.error ?? "Unable to load student profile.");
+        if (!me.onboarding?.completed) {
+          router.replace("/student/onboarding");
+          return;
+        }
         setStudent(me.student);
 
         const aRes = await fetch("/api/student/assessments", { cache: "no-store" });
@@ -59,7 +71,7 @@ export function StudentDashboardClient() {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [router]);
 
   return (
     <div className="min-h-screen bg-zinc-50 px-6 py-10">
@@ -121,4 +133,3 @@ export function StudentDashboardClient() {
     </div>
   );
 }
-

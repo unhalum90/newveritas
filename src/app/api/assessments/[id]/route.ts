@@ -14,10 +14,9 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
     .from("assessments")
     .select(
       `
-      id, class_id, title, subject, target_language, instructions, status, authoring_mode, selected_asset_id, published_at, created_at, updated_at,
+      id, class_id, title, subject, target_language, instructions, status, authoring_mode, socratic_enabled, socratic_follow_ups, selected_asset_id, published_at, created_at, updated_at,
       classes(name),
       assessment_integrity(*),
-      assessment_questions(id, assessment_id, question_text, question_type, order_index, created_at),
       rubrics(id, assessment_id, rubric_type, instructions, scale_min, scale_max, created_at, rubric_standards(id, rubric_id, framework, standard_code, description))
     `,
     )
@@ -34,13 +33,8 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
   }
   if (!assessment) return NextResponse.json({ error: "Not found." }, { status: 404 });
 
-  // Ensure ordering
-  type AssessmentQuestion = { order_index: number };
   type Rubric = { rubric_type: string };
 
-  if (Array.isArray(assessment.assessment_questions)) {
-    (assessment.assessment_questions as AssessmentQuestion[]).sort((a, b) => a.order_index - b.order_index);
-  }
   if (Array.isArray(assessment.rubrics)) {
     (assessment.rubrics as Rubric[]).sort((a, b) => a.rubric_type.localeCompare(b.rubric_type));
   }
@@ -57,6 +51,8 @@ const patchSchema = z.object({
   target_language: z.string().optional().nullable(),
   instructions: z.string().optional().nullable(),
   authoring_mode: z.enum(["manual", "upload", "ai"]).optional(),
+  socratic_enabled: z.boolean().optional(),
+  socratic_follow_ups: z.number().int().min(1).max(2).optional(),
 });
 
 export async function PATCH(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {

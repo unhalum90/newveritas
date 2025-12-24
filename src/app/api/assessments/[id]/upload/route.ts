@@ -13,7 +13,7 @@ async function extractPdfText(bytes: Uint8Array) {
     data: bytes,
     disableWorker: true,
     useSystemFonts: true,
-  } as any);
+  } as Parameters<(typeof pdfjs)["getDocument"]>[0]);
 
   const doc = await loadingTask.promise;
   try {
@@ -126,6 +126,9 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
     const { error: insertQuestionsError } = await supabase.from("assessment_questions").insert(
       ai.questions.map((q, idx) => ({
         assessment_id: assessmentId,
+        submission_id: null,
+        kind: "initial",
+        parent_question_id: null,
         question_text: q.question_text,
         question_type: q.question_type ?? "open_response",
         order_index: idx + 1,

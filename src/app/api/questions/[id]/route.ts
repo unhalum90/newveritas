@@ -19,6 +19,18 @@ export async function PATCH(request: NextRequest, ctx: { params: Promise<{ id: s
   const parsed = patchSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: "Invalid payload." }, { status: 400 });
 
+  const { data: existing, error: findError } = await supabase
+    .from("assessment_questions")
+    .select("id, submission_id, kind")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (findError) return NextResponse.json({ error: findError.message }, { status: 500 });
+  if (!existing) return NextResponse.json({ error: "Not found." }, { status: 404 });
+  if (existing.submission_id || existing.kind === "followup") {
+    return NextResponse.json({ error: "Follow-up questions cannot be edited." }, { status: 403 });
+  }
+
   const { error: updateError } = await supabase.from("assessment_questions").update(parsed.data).eq("id", id);
   if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
 
@@ -33,6 +45,18 @@ export async function DELETE(request: NextRequest, ctx: { params: Promise<{ id: 
   const { data, error } = await supabase.auth.getUser();
   if (error || !data.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  const { data: existing, error: findError } = await supabase
+    .from("assessment_questions")
+    .select("id, submission_id, kind")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (findError) return NextResponse.json({ error: findError.message }, { status: 500 });
+  if (!existing) return NextResponse.json({ error: "Not found." }, { status: 404 });
+  if (existing.submission_id || existing.kind === "followup") {
+    return NextResponse.json({ error: "Follow-up questions cannot be deleted." }, { status: 403 });
+  }
+
   const { error: deleteError } = await supabase.from("assessment_questions").delete().eq("id", id);
   if (deleteError) return NextResponse.json({ error: deleteError.message }, { status: 500 });
 
@@ -40,4 +64,3 @@ export async function DELETE(request: NextRequest, ctx: { params: Promise<{ id: 
   pendingCookies.forEach(({ name, value, options }) => res.cookies.set(name, value, options));
   return res;
 }
-

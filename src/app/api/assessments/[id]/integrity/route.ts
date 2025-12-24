@@ -7,6 +7,7 @@ const patchSchema = z.object({
   pause_threshold_seconds: z.number().positive().optional().nullable(),
   tab_switch_monitor: z.boolean().optional(),
   shuffle_questions: z.boolean().optional(),
+  pledge_enabled: z.boolean().optional(),
   recording_limit_seconds: z.number().int().positive().optional(),
   viewing_timer_seconds: z.number().int().positive().optional(),
 });

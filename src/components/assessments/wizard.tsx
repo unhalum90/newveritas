@@ -21,11 +21,14 @@ type Assessment = {
   instructions: string | null;
   status: "draft" | "live" | "closed";
   authoring_mode: AuthoringMode;
+  socratic_enabled?: boolean;
+  socratic_follow_ups?: number;
   classes?: { name?: string | null } | null;
   assessment_integrity: {
     pause_threshold_seconds: number | null;
     tab_switch_monitor: boolean;
     shuffle_questions: boolean;
+    pledge_enabled?: boolean;
     recording_limit_seconds: number;
     viewing_timer_seconds: number;
   } | null;
@@ -192,6 +195,8 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
             target_language: assessment.target_language,
             instructions: assessment.instructions,
             authoring_mode: assessment.authoring_mode,
+            socratic_enabled: Boolean(assessment.socratic_enabled),
+            socratic_follow_ups: Math.min(2, Math.max(1, Number(assessment.socratic_follow_ups ?? 1))),
           }),
         });
         setDirty(false);
@@ -272,6 +277,27 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
     }
   }
 
+  async function updateSocratic(next: { socratic_enabled?: boolean; socratic_follow_ups?: number }) {
+    if (readonly) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await jsonFetch(`/api/assessments/${assessmentId}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          socratic_enabled: typeof next.socratic_enabled === "boolean" ? next.socratic_enabled : assessment.socratic_enabled,
+          socratic_follow_ups: typeof next.socratic_follow_ups === "number" ? next.socratic_follow_ups : assessment.socratic_follow_ups,
+        }),
+      });
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Save failed.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   function goToStep(n: StepNumber) {
     router.push(`/assessments/${assessmentId}?step=${n}`);
   }
@@ -284,6 +310,7 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
     pause_threshold_seconds: 2.5,
     tab_switch_monitor: true,
     shuffle_questions: true,
+    pledge_enabled: false,
     recording_limit_seconds: 60,
     viewing_timer_seconds: 20,
   };
@@ -1368,6 +1395,27 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
                     aria-label="Dynamic Shuffle"
                   />
                 </div>
+
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <div className="flex items-center gap-2 text-sm font-medium text-[var(--text)]">
+                      <span>Integrity Pledge</span>
+                      <span
+                        className="cursor-help text-xs text-[var(--muted)]"
+                        title="Shows a pledge modal before the student can start. Recommended for higher-ed/high-stakes assessments."
+                      >
+                        (?)
+                      </span>
+                    </div>
+                    <div className="text-xs text-[var(--muted)]">Require pledge before starting</div>
+                  </div>
+                  <Switch
+                    checked={Boolean(integrity.pledge_enabled)}
+                    onCheckedChange={(checked) => updateIntegrity({ pledge_enabled: checked })}
+                    disabled={saving || readonly}
+                    aria-label="Integrity Pledge"
+                  />
+                </div>
               </CardContent>
             </Card>
 
@@ -1407,6 +1455,46 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
                       </option>
                     ))}
                   </select>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Socratic Mode</CardTitle>
+                <CardDescription>Generate follow-up questions from student responses.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <div className="text-sm font-medium text-[var(--text)]">Enable follow-ups</div>
+                    <div className="text-xs text-[var(--muted)]">Adds 1–2 AI follow-up questions per student.</div>
+                  </div>
+                  <Switch
+                    checked={Boolean(assessment.socratic_enabled)}
+                    onCheckedChange={(checked) => updateSocratic({ socratic_enabled: checked })}
+                    disabled={saving || readonly}
+                    aria-label="Enable Socratic Mode"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Follow-ups per student</Label>
+                  <select
+                    className="h-10 w-full rounded-md border bg-[var(--surface)] px-3 text-sm text-[var(--text)] border-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
+                    value={Math.min(2, Math.max(1, Number(assessment.socratic_follow_ups ?? 1)))}
+                    onChange={(e) => updateSocratic({ socratic_follow_ups: Number(e.target.value) })}
+                    disabled={saving || readonly || !assessment.socratic_enabled}
+                  >
+                    {[1, 2].map((v) => (
+                      <option key={v} value={v}>
+                        {v}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="text-xs text-[var(--muted)]">
+                    v1 assumes a single base question; follow-ups are generated during the live assessment.
+                  </div>
                 </div>
               </CardContent>
             </Card>
