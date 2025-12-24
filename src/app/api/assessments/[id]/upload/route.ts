@@ -1,14 +1,36 @@
 import { NextResponse, type NextRequest } from "next/server";
 import crypto from "node:crypto";
-import { PDFParse } from "pdf-parse";
-import path from "node:path";
-import { pathToFileURL } from "node:url";
 
 import { generateAssessmentDraftFromPrompt } from "@/lib/ai/assessment-draft";
 import { createRouteSupabaseClient } from "@/lib/supabase/route";
 import { getSupabaseErrorMessage } from "@/lib/supabase/errors";
 
 export const runtime = "nodejs";
+
+async function extractPdfText(bytes: Uint8Array) {
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const loadingTask = pdfjs.getDocument({
+    data: bytes,
+    disableWorker: true,
+    useSystemFonts: true,
+  } as any);
+
+  const doc = await loadingTask.promise;
+  try {
+    const parts: string[] = [];
+    for (let i = 1; i <= doc.numPages; i++) {
+      const page = await doc.getPage(i);
+      const content = await page.getTextContent();
+      const strings = (content.items as Array<{ str?: unknown }>)
+        .map((it) => (typeof it.str === "string" ? it.str : ""))
+        .filter(Boolean);
+      if (strings.length) parts.push(strings.join(" "));
+    }
+    return parts.join("\n\n").trim();
+  } finally {
+    await doc.destroy();
+  }
+}
 
 function asInt(value: unknown) {
   if (typeof value === "number" && Number.isFinite(value)) return Math.trunc(value);
@@ -72,17 +94,10 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
 
     if (!process.env.OPENAI_API_KEY) throw new Error("Missing OPENAI_API_KEY.");
 
-    const bytes = Buffer.from(await file.arrayBuffer());
-    const sha = crypto.createHash("sha256").update(bytes).digest("hex");
+    const buf = Buffer.from(await file.arrayBuffer());
+    const sha = crypto.createHash("sha256").update(buf).digest("hex");
 
-    // Turbopack dev can emit a broken default worker path (e.g. `.next/.../pdf.worker.mjs`).
-    // Force a stable, absolute file URL so pdfjs can import the worker module.
-    const workerFsPath = path.join(process.cwd(), "node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs");
-    PDFParse.setWorker(pathToFileURL(workerFsPath).href);
-
-    const parser = new PDFParse({ data: bytes } as any);
-    const parsed = await parser.getText();
-    const extractedText = (parsed.text || "").trim();
+    const extractedText = await extractPdfText(new Uint8Array(buf));
     if (!extractedText) return NextResponse.json({ error: "No text could be extracted from that PDF." }, { status: 400 });
 
     const prompt = buildPromptFromPdfText({ title: assessment.title, extractedText });
