@@ -16,6 +16,10 @@ type Integrity = {
   viewing_timer_seconds: number;
 };
 
+type Pledge =
+  | { enabled: false }
+  | { enabled: true; version: number; text: string; accepted_at: string | null };
+
 type Question = {
   id: string;
   question_text: string;
@@ -33,6 +37,7 @@ type Assessment = {
   asset_url: string | null;
   question_count: number;
   current_question: Question | null;
+  pledge?: Pledge;
 };
 
 type Submission = {
@@ -73,6 +78,9 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pledgeOpen, setPledgeOpen] = useState(false);
+  const [pledgeWorking, setPledgeWorking] = useState(false);
+  const [pledgeError, setPledgeError] = useState<string | null>(null);
   const [responses, setResponses] = useState<ResponseRow[]>([]);
   const [evidenceByQuestion, setEvidenceByQuestion] = useState<Record<string, EvidenceRow | null>>({});
   const [evidenceLoading, setEvidenceLoading] = useState(false);
@@ -86,6 +94,17 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
   const evidenceInputRef = useRef<HTMLInputElement | null>(null);
 
   const activeQuestion = assessment?.current_question ?? null;
+  const pledgeRequired = useMemo(() => {
+    if (!assessment?.pledge || assessment.pledge.enabled !== true) return false;
+    if (!latest || latest.status !== "started") return false;
+    return !assessment.pledge.accepted_at;
+  }, [assessment?.pledge, latest]);
+
+  useEffect(() => {
+    if (pledgeRequired) setPledgeOpen(true);
+    else setPledgeOpen(false);
+  }, [pledgeRequired]);
+
   const activeEvidence = useMemo(() => {
     if (!activeQuestion) return null;
     return evidenceByQuestion[activeQuestion.id] ?? null;
@@ -151,6 +170,27 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
     }
   }, [assessmentId]);
 
+  async function acceptPledge() {
+    if (!latest || latest.status !== "started") return;
+    setPledgeWorking(true);
+    setPledgeError(null);
+    try {
+      const res = await fetch(`/api/student/submissions/${latest.id}/pledge`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ accepted: true }),
+      });
+      const data = (await res.json().catch(() => null)) as { error?: string } | null;
+      if (!res.ok) throw new Error(data?.error ?? "Unable to accept pledge.");
+      await refreshAssessment();
+      setPledgeOpen(false);
+    } catch (e) {
+      setPledgeError(e instanceof Error ? e.message : "Unable to accept pledge.");
+    } finally {
+      setPledgeWorking(false);
+    }
+  }
+
   useEffect(() => {
     (async () => {
       setLoading(true);
@@ -197,6 +237,7 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
     setWorking(true);
     setError(null);
     try {
+      if (pledgeRequired) throw new Error("Accept the academic integrity pledge to continue.");
       if (!canSubmitAttempt) {
         throw new Error("Record a response for every question before submitting.");
       }
@@ -231,6 +272,10 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
 
     if (!latest || latest.status !== "started") {
       setRecordingError("Start the assessment before recording.");
+      return;
+    }
+    if (pledgeRequired) {
+      setRecordingError("Accept the academic integrity pledge to begin.");
       return;
     }
     if (!activeQuestion) {
@@ -300,6 +345,10 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
       setEvidenceError("Start the assessment before uploading evidence.");
       return;
     }
+    if (pledgeRequired) {
+      setEvidenceError("Accept the academic integrity pledge to continue.");
+      return;
+    }
     if (!activeQuestion) return;
     setEvidenceUploading(true);
     setEvidenceError(null);
@@ -321,6 +370,10 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
 
   async function removeEvidence() {
     if (!latest || latest.status !== "started") return;
+    if (pledgeRequired) {
+      setEvidenceError("Accept the academic integrity pledge to continue.");
+      return;
+    }
     if (!activeQuestion) return;
     setEvidenceUploading(true);
     setEvidenceError(null);
@@ -348,6 +401,28 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
   return (
     <div className="min-h-screen bg-zinc-50 px-6 py-10">
       <div className="mx-auto w-full max-w-4xl space-y-6">
+        {assessment?.pledge?.enabled === true && pledgeOpen ? (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6">
+            <div className="w-full max-w-xl rounded-xl border border-zinc-800 bg-zinc-950 p-6 text-zinc-100 shadow-2xl">
+              <div className="text-lg font-semibold">Academic Integrity Pledge</div>
+              <div className="mt-1 text-sm text-zinc-300">
+                Please read and accept before starting. You won’t see questions until you agree.
+              </div>
+              <ul className="mt-4 list-disc space-y-2 pl-5 text-sm text-zinc-200">
+                {assessment.pledge.text.split("\n").map((line, idx) => (
+                  <li key={idx}>{line}</li>
+                ))}
+              </ul>
+              {pledgeError ? <div className="mt-3 text-sm text-red-300">{pledgeError}</div> : null}
+              <div className="mt-5 flex items-center justify-end gap-2">
+                <Button type="button" disabled={pledgeWorking} onClick={acceptPledge}>
+                  {pledgeWorking ? "Saving…" : "I Agree"}
+                </Button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
         <div className="flex items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold text-zinc-900">{assessment?.title ?? "Assessment"}</h1>

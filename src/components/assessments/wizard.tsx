@@ -26,6 +26,9 @@ type Assessment = {
     pause_threshold_seconds: number | null;
     tab_switch_monitor: boolean;
     shuffle_questions: boolean;
+    pledge_enabled: boolean;
+    pledge_version: number;
+    pledge_text: string | null;
     recording_limit_seconds: number;
     viewing_timer_seconds: number;
   } | null;
@@ -98,6 +101,7 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
   const [assetUrl, setAssetUrl] = useState("");
   const [assetPrompt, setAssetPrompt] = useState("");
   const [assetOptions, setAssetOptions] = useState<string[]>([]);
+  const [pledgeDraft, setPledgeDraft] = useState("");
   const [questionsCount, setQuestionsCount] = useState<number>(0);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [addingQuestion, setAddingQuestion] = useState(false);
@@ -123,6 +127,12 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
   const [error, setError] = useState<string | null>(null);
 
   const readonly = assessment?.status !== "draft";
+
+  useEffect(() => {
+    const next =
+      typeof assessment?.assessment_integrity?.pledge_text === "string" ? assessment?.assessment_integrity?.pledge_text : "";
+    setPledgeDraft(next ?? "");
+  }, [assessment?.assessment_integrity?.pledge_text]);
 
   useEffect(() => {
     (async () => {
@@ -285,6 +295,9 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
     pause_threshold_seconds: 2.5,
     tab_switch_monitor: true,
     shuffle_questions: true,
+    pledge_enabled: false,
+    pledge_version: 1,
+    pledge_text: null,
     recording_limit_seconds: 60,
     viewing_timer_seconds: 20,
   };
@@ -1420,6 +1433,49 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
                     disabled={saving || readonly}
                     aria-label="Dynamic Shuffle"
                   />
+                </div>
+
+                <div className="border-t border-[var(--border)] pt-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <div className="flex items-center gap-2 text-sm font-medium text-[var(--text)]">
+                        <span>Academic Integrity Pledge</span>
+                        <span
+                          className="cursor-help text-xs text-[var(--muted)]"
+                          title="Shows a pledge modal before the student can start the assessment."
+                        >
+                          (?)
+                        </span>
+                      </div>
+                      <div className="text-xs text-[var(--muted)]">Require students to agree before seeing questions</div>
+                    </div>
+                    <Switch
+                      checked={integrity.pledge_enabled}
+                      onCheckedChange={(checked) => updateIntegrity({ pledge_enabled: checked })}
+                      disabled={saving || readonly}
+                      aria-label="Academic Integrity Pledge"
+                    />
+                  </div>
+
+                  {integrity.pledge_enabled ? (
+                    <div className="mt-3 space-y-2">
+                      <Label>Pledge text (optional)</Label>
+                      <textarea
+                        className="min-h-[120px] w-full resize-y rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--muted)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
+                        value={pledgeDraft}
+                        onChange={(e) => setPledgeDraft(e.target.value)}
+                        onBlur={() => updateIntegrity({ pledge_text: pledgeDraft.trim() ? pledgeDraft : null })}
+                        placeholder={[
+                          "I have studied the material and am ready to demonstrate my understanding.",
+                          "I will not use notes, websites, or other people during this assessment.",
+                          "I understand this assessment measures what I know, not what I can look up.",
+                          "My responses will be in my own words based on my learning.",
+                        ].join("\n")}
+                        disabled={saving || readonly}
+                      />
+                      <div className="text-xs text-[var(--muted)]">Leave blank to use the default pledge.</div>
+                    </div>
+                  ) : null}
                 </div>
               </CardContent>
             </Card>

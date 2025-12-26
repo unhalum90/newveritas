@@ -399,6 +399,9 @@ create table if not exists public.assessment_integrity (
   pause_threshold_seconds numeric not null default 2.5,
   tab_switch_monitor boolean not null default true,
   shuffle_questions boolean not null default true,
+  pledge_enabled boolean not null default false,
+  pledge_version int not null default 1,
+  pledge_text text,
   recording_limit_seconds int not null default 60,
   viewing_timer_seconds int not null default 20
 );
@@ -407,6 +410,9 @@ create table if not exists public.assessment_integrity (
 alter table public.assessment_integrity add column if not exists pause_threshold_seconds numeric not null default 2.5;
 alter table public.assessment_integrity add column if not exists tab_switch_monitor boolean not null default true;
 alter table public.assessment_integrity add column if not exists shuffle_questions boolean not null default true;
+alter table public.assessment_integrity add column if not exists pledge_enabled boolean not null default false;
+alter table public.assessment_integrity add column if not exists pledge_version int not null default 1;
+alter table public.assessment_integrity add column if not exists pledge_text text;
 alter table public.assessment_integrity add column if not exists recording_limit_seconds int not null default 60;
 alter table public.assessment_integrity add column if not exists viewing_timer_seconds int not null default 20;
 
@@ -642,6 +648,9 @@ create table if not exists public.submissions (
   scoring_started_at timestamptz,
   scored_at timestamptz,
   scoring_error text,
+  integrity_pledge_accepted_at timestamptz,
+  integrity_pledge_ip_address text,
+  integrity_pledge_version int,
   created_at timestamptz not null default now()
 );
 
@@ -653,6 +662,9 @@ alter table public.submissions add column if not exists scoring_status text not 
 alter table public.submissions add column if not exists scoring_started_at timestamptz;
 alter table public.submissions add column if not exists scored_at timestamptz;
 alter table public.submissions add column if not exists scoring_error text;
+alter table public.submissions add column if not exists integrity_pledge_accepted_at timestamptz;
+alter table public.submissions add column if not exists integrity_pledge_ip_address text;
+alter table public.submissions add column if not exists integrity_pledge_version int;
 
 create index if not exists submissions_scoring_status_idx on public.submissions(scoring_status);
 
@@ -669,6 +681,53 @@ using (
     join public.classes c on c.id = a.class_id
     join public.teachers t on t.workspace_id = c.workspace_id
     where a.id = assessment_id and t.user_id = auth.uid()
+  )
+);
+
+-- Integrity events: tab switches, screenshot attempts, etc.
+create table if not exists public.integrity_events (
+  id uuid primary key default gen_random_uuid(),
+  submission_id uuid not null references public.submissions(id) on delete cascade,
+  question_id uuid references public.assessment_questions(id) on delete set null,
+  event_type text not null, -- tab_switch | screenshot_attempt
+  duration_ms int,
+  metadata jsonb,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists integrity_events_submission_id_idx on public.integrity_events(submission_id);
+create index if not exists integrity_events_created_at_idx on public.integrity_events(created_at);
+
+alter table public.integrity_events enable row level security;
+
+-- Teachers can view events for submissions in their workspace.
+drop policy if exists "Integrity events scoped to teacher" on public.integrity_events;
+create policy "Integrity events scoped to teacher"
+on public.integrity_events
+for select
+using (
+  exists (
+    select 1
+    from public.submissions sub
+    join public.assessments a on a.id = sub.assessment_id
+    join public.classes c on c.id = a.class_id
+    join public.teachers t on t.workspace_id = c.workspace_id
+    where sub.id = submission_id and t.user_id = auth.uid()
+  )
+);
+
+-- Students can insert events only for their own submissions.
+drop policy if exists "Students can insert integrity events" on public.integrity_events;
+create policy "Students can insert integrity events"
+on public.integrity_events
+for insert
+to authenticated
+with check (
+  exists (
+    select 1
+    from public.submissions sub
+    join public.students s on s.id = sub.student_id
+    where sub.id = submission_id and s.auth_user_id = auth.uid()
   )
 );
 

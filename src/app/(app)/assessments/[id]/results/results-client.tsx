@@ -70,6 +70,9 @@ type SubmissionDetail = {
     scoring_started_at?: string | null;
     scored_at?: string | null;
     scoring_error?: string | null;
+    integrity_pledge_accepted_at?: string | null;
+    integrity_pledge_ip_address?: string | null;
+    integrity_pledge_version?: number | null;
   };
   questions: QuestionWithResponse[];
 };
@@ -412,6 +415,13 @@ export function AssessmentResultsClient({ assessmentId }: { assessmentId: string
             {detailLoading ? <div className="text-sm text-[var(--muted)]">Loading submission…</div> : null}
             {!detailLoading && detail ? (
               <div className="space-y-4">
+                {detail.submission.integrity_pledge_accepted_at ? (
+                  <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-3 text-xs text-[var(--muted)]">
+                    Integrity pledge accepted {formatTime(detail.submission.integrity_pledge_accepted_at)}
+                    {detail.submission.integrity_pledge_version ? ` • v${detail.submission.integrity_pledge_version}` : ""}
+                    {detail.submission.integrity_pledge_ip_address ? ` • IP ${detail.submission.integrity_pledge_ip_address}` : ""}
+                  </div>
+                ) : null}
                 {detail.submission.scoring_status === "error" ? (
                   <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-3 text-sm text-[var(--danger)]">
                     Scoring failed{detail.submission.scoring_error ? `: ${detail.submission.scoring_error}` : "."} You can try{" "}

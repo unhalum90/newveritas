@@ -24,7 +24,9 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
   // Ensure teacher can see this submission via RLS (scoped to their assessment/workspace).
   const { data: submission, error: subError } = await supabase
     .from("submissions")
-    .select("id, assessment_id, student_id, status, started_at, submitted_at, scoring_status, scoring_started_at, scored_at, scoring_error")
+    .select(
+      "id, assessment_id, student_id, status, started_at, submitted_at, scoring_status, scoring_started_at, scored_at, scoring_error, integrity_pledge_accepted_at, integrity_pledge_ip_address, integrity_pledge_version",
+    )
     .eq("id", submissionId)
     .maybeSingle();
 

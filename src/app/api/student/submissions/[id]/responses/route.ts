@@ -37,7 +37,7 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
 
   const { data: submission, error: subError } = await admin
     .from("submissions")
-    .select("id, student_id, assessment_id, status")
+    .select("id, student_id, assessment_id, status, integrity_pledge_accepted_at")
     .eq("id", submissionId)
     .maybeSingle();
 
@@ -102,7 +102,7 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
 
   const { data: submission, error: subError } = await admin
     .from("submissions")
-    .select("id, student_id, assessment_id, status")
+    .select("id, student_id, assessment_id, status, integrity_pledge_accepted_at")
     .eq("id", submissionId)
     .maybeSingle();
 
@@ -110,6 +110,16 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
   if (!submission) return NextResponse.json({ error: "Not found." }, { status: 404 });
   if (submission.student_id !== student.id) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   if (submission.status !== "started") return NextResponse.json({ error: "Cannot upload after submit." }, { status: 409 });
+
+  const { data: integrity, error: iError } = await admin
+    .from("assessment_integrity")
+    .select("pledge_enabled")
+    .eq("assessment_id", submission.assessment_id)
+    .maybeSingle();
+  if (iError) return NextResponse.json({ error: iError.message }, { status: 500 });
+  if (integrity?.pledge_enabled && !submission.integrity_pledge_accepted_at) {
+    return NextResponse.json({ error: "Accept the academic integrity pledge before answering." }, { status: 409 });
+  }
 
   // Validate question belongs to the assessment.
   const { data: q, error: qError } = await admin

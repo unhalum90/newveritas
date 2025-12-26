@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
+import { DEFAULT_PLEDGE_TEXT } from "@/lib/integrity/pledge";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createRouteSupabaseClient } from "@/lib/supabase/route";
 
@@ -54,7 +55,7 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
 
   const { data: latestSubmission, error: subError } = await admin
     .from("submissions")
-    .select("id, status, started_at, submitted_at")
+    .select("id, status, started_at, submitted_at, integrity_pledge_accepted_at, integrity_pledge_version")
     .eq("assessment_id", assessmentId)
     .eq("student_id", student.id)
     .order("started_at", { ascending: false })
@@ -69,7 +70,10 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
     | { id: string; order_index: number; question_text: string; question_type: string | null; evidence_upload: string | null }
     | null = null;
 
-  if (latestSubmission?.status === "started" && totalCount > 0) {
+  const pledgeEnabled = Boolean((assessment.assessment_integrity as { pledge_enabled?: boolean } | null)?.pledge_enabled);
+  const pledgeAccepted = Boolean(latestSubmission?.integrity_pledge_accepted_at);
+
+  if (latestSubmission?.status === "started" && totalCount > 0 && (!pledgeEnabled || pledgeAccepted)) {
     const { data: answered, error: answeredError } = await admin
       .from("submission_responses")
       .select("question_id")
@@ -101,6 +105,21 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
       asset_url: asset?.asset_url ?? null,
       question_count: totalCount,
       current_question: currentQuestion,
+      pledge: pledgeEnabled
+        ? {
+            enabled: true,
+            version:
+              typeof (assessment.assessment_integrity as { pledge_version?: unknown } | null)?.pledge_version === "number"
+                ? ((assessment.assessment_integrity as { pledge_version?: number }).pledge_version as number)
+                : 1,
+            text:
+              typeof (assessment.assessment_integrity as { pledge_text?: unknown } | null)?.pledge_text === "string" &&
+              ((assessment.assessment_integrity as { pledge_text?: string }).pledge_text ?? "").trim()
+                ? ((assessment.assessment_integrity as { pledge_text?: string }).pledge_text as string)
+                : DEFAULT_PLEDGE_TEXT,
+            accepted_at: latestSubmission?.integrity_pledge_accepted_at ?? null,
+          }
+        : { enabled: false },
     },
     progress: { answered_count: answeredCount, total_count: totalCount },
     latest_submission: latestSubmission ?? null,
