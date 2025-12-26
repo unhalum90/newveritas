@@ -36,7 +36,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-50 flex items-center justify-center px-6">
+    <div className="veritas-wizard min-h-screen bg-[var(--background)] flex items-center justify-center px-6">
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle>Sign In</CardTitle>
@@ -70,11 +70,18 @@ export default function LoginPage() {
               {loading ? "Signing in..." : "Sign In"}
             </Button>
           </form>
-          <div className="mt-4 text-center text-sm text-zinc-600">
+          <div className="mt-4 text-center text-sm text-[var(--muted)]">
             Don&apos;t have an account?{" "}
-            <Link href="/signup" className="text-zinc-900 hover:underline">
+            <Link href="/signup" className="text-[var(--text)] hover:underline">
               Sign up
             </Link>
+          </div>
+          <div className="mt-2 text-center text-sm text-[var(--muted)]">
+            Student?{" "}
+            <Link href="/student/login" className="text-[var(--text)] hover:underline">
+              Use student login
+            </Link>
+            .
           </div>
         </CardContent>
       </Card>

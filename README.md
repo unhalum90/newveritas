@@ -2,6 +2,10 @@ Veritas v1: teacher-focused oral assessments with AI-assisted scoring.
 
 Spine: Auth → Onboarding → Dashboard → Assessment workflow.
 
+## Help Docs
+
+See `HELP.md` for teacher/student/admin guidance and troubleshooting.
+
 ## Getting Started
 
 1) Configure env

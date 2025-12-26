@@ -42,6 +42,17 @@
   --danger: #fb7185; /* rose-400 */
 }
 
+.veritas-light {
+  /* Force light palette even if the OS is in dark mode or the parent is a dark theme wrapper. */
+  --background: #ffffff;
+  --surface: #ffffff;
+  --border: #e4e4e7; /* zinc-200 */
+  --text: #0f172a; /* slate-900 */
+  --muted: #52525b; /* zinc-600 */
+  --primary: #0f766e; /* teal-700 */
+  --danger: #dc2626; /* red-600 */
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

@@ -10,6 +10,12 @@ function isPublicPath(pathname: string) {
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // Always allow the public landing page to render, even if the user is signed in.
+  // This keeps marketing/demo flows reachable at `/`.
+  if (pathname === "/") {
+    return NextResponse.next();
+  }
+
   const response = NextResponse.next({ request });
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
