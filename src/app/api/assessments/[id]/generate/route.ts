@@ -50,7 +50,9 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
     // Builder generation should be a single-pass draft creation.
     // Dual AI review belongs in the student submission scoring pipeline, not the authoring flow.
     if (!process.env.OPENAI_API_KEY) throw new Error("Missing OPENAI_API_KEY.");
-    const ai = await generateAssessmentDraftFromPrompt(parsedReq.data.prompt, parsedReq.data.question_count);
+    const ai = await generateAssessmentDraftFromPrompt(parsedReq.data.prompt, parsedReq.data.question_count, {
+      assessmentId,
+    });
 
     // Persist prompt metadata (optional but useful).
     const { error: srcError } = await supabase.from("assessment_sources").insert({
@@ -117,7 +119,7 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
         const admin = createSupabaseAdminClient();
         const bucket = process.env.SUPABASE_ASSET_BUCKET || "assessment-assets";
         await ensurePublicBucket(admin, bucket);
-        const buffers = await generateImageBytes(ai.image_prompt, 1);
+        const buffers = await generateImageBytes(ai.image_prompt, 1, { assessmentId });
         const bytes = buffers[0];
 
         const filename = `${assessmentId}/${Date.now()}-ai.png`;

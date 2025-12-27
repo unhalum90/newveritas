@@ -45,7 +45,7 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
     const admin = createSupabaseAdminClient();
     const bucket = process.env.SUPABASE_ASSET_BUCKET || "assessment-assets";
     await ensurePublicBucket(admin, bucket);
-    const buffers = await generateImageBytes(parsed.data.prompt, parsed.data.count);
+    const buffers = await generateImageBytes(parsed.data.prompt, parsed.data.count, { assessmentId });
 
     const urls: string[] = [];
     for (const bytes of buffers) {

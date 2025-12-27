@@ -1,6 +1,12 @@
 import { z } from "zod";
 
-import { logOpenAiError } from "@/lib/ops/api-logging";
+import { logOpenAiCall, logOpenAiError } from "@/lib/ops/api-logging";
+
+type OpenAiLogContext = {
+  assessmentId?: string | null;
+  teacherId?: string | null;
+  schoolId?: string | null;
+};
 
 const aiOutputSchema = z.object({
   title: z.string().min(1).max(100),
@@ -208,7 +214,12 @@ function parseAndValidateAiJson(text: string, expectedQuestionCount?: number) {
   return parsed.data;
 }
 
-async function openAiJsonWithModel(prompt: string, questionCount: number, model: string) {
+async function openAiJsonWithModel(
+  prompt: string,
+  questionCount: number,
+  model: string,
+  context?: OpenAiLogContext,
+) {
   const apiKey = requireEnv("OPENAI_API_KEY");
 
   const schema = `{
@@ -239,7 +250,10 @@ Target language is optional; if not specified return null.
 Subject is optional; if not specified return null.
 Instructions should be student-facing and <= 500 characters.`;
 
-  async function callOpenAi(messages: Array<{ role: "system" | "user"; content: string }>) {
+  async function callOpenAi(
+    messages: Array<{ role: "system" | "user"; content: string }>,
+    phase: "generation" | "repair",
+  ) {
     const startedAt = Date.now();
     let res: Response;
     try {
@@ -255,7 +269,11 @@ Instructions should be student-facing and <= 500 characters.`;
         route: "/v1/chat/completions",
         statusCode: null,
         latencyMs: Date.now() - startedAt,
-        metadata: { error: message },
+        operation: "question_generation",
+        assessmentId: context?.assessmentId,
+        teacherId: context?.teacherId,
+        schoolId: context?.schoolId,
+        metadata: { phase, error: message },
       });
       throw error;
     }
@@ -282,53 +300,83 @@ Instructions should be student-facing and <= 500 characters.`;
         promptTokens: usage?.prompt_tokens ?? null,
         completionTokens: usage?.completion_tokens ?? null,
         totalTokens: usage?.total_tokens ?? null,
-        metadata: { error: msg, code },
+        operation: "question_generation",
+        assessmentId: context?.assessmentId,
+        teacherId: context?.teacherId,
+        schoolId: context?.schoolId,
+        metadata: { phase, error: msg, code },
       });
       throw err;
     }
+
+    await logOpenAiCall({
+      model,
+      route: "/v1/chat/completions",
+      statusCode: res.status,
+      latencyMs: Date.now() - startedAt,
+      promptTokens: usage?.prompt_tokens ?? null,
+      completionTokens: usage?.completion_tokens ?? null,
+      totalTokens: usage?.total_tokens ?? null,
+      operation: "question_generation",
+      assessmentId: context?.assessmentId,
+      teacherId: context?.teacherId,
+      schoolId: context?.schoolId,
+      status: "success",
+      metadata: { phase },
+    });
 
     const text = data?.choices?.[0]?.message?.content;
     if (typeof text !== "string" || !text.trim()) throw new Error("OpenAI returned empty response.");
     return text;
   }
 
-  const initialText = await callOpenAi([
-    { role: "system", content: system },
-    { role: "user", content: user },
-  ]);
+  const initialText = await callOpenAi(
+    [
+      { role: "system", content: system },
+      { role: "user", content: user },
+    ],
+    "generation",
+  );
 
   try {
     return parseAndValidateAiJson(initialText, questionCount);
   } catch {
-    const repairText = await callOpenAi([
-      {
-        role: "system",
-        content: `Fix the following JSON so it matches this schema EXACTLY:
+    const repairText = await callOpenAi(
+      [
+        {
+          role: "system",
+          content: `Fix the following JSON so it matches this schema EXACTLY:
 ${schema}
 Return ONLY JSON.`,
-      },
-      {
-        role: "user",
-        content: `Original JSON:
+        },
+        {
+          role: "user",
+          content: `Original JSON:
 ${initialText}
 
 Constraints:
 - Keep the original intent/content.
 - Ensure exactly ${questionCount} questions.
 - Ensure rubrics.reasoning and rubrics.evidence are strings.`,
-      },
-    ]);
+        },
+      ],
+      "repair",
+    );
     return parseAndValidateAiJson(repairText, questionCount);
   }
 }
 
-export async function generateAssessmentDraftFromPrompt(prompt: string, questionCount: number) {
+export async function generateAssessmentDraftFromPrompt(
+  prompt: string,
+  questionCount: number,
+  context?: OpenAiLogContext,
+) {
   const models = uniqueStrings([process.env.OPENAI_TEXT_MODEL, process.env.OPENAI_SCORE_MODEL, "gpt-5-mini-2025-08-07", "gpt-4o", "gpt-4o-mini"]);
   let lastError: unknown = null;
 
   for (const model of models) {
     try {
-      return await openAiJsonWithModel(prompt, questionCount, model);
+      return await openAiJsonWithModel(prompt, questionCount, model, context);
     } catch (e) {
       lastError = e;
       const message = e instanceof Error ? e.message : String(e);

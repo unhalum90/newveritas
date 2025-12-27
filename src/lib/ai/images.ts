@@ -1,4 +1,10 @@
-import { logOpenAiError } from "@/lib/ops/api-logging";
+import { logOpenAiCall, logOpenAiError } from "@/lib/ops/api-logging";
+
+type OpenAiLogContext = {
+  assessmentId?: string | null;
+  teacherId?: string | null;
+  schoolId?: string | null;
+};
 
 function requireEnv(name: string) {
   const v = process.env[name];
@@ -19,7 +25,7 @@ function getOpenAiImageModel() {
   return configured;
 }
 
-async function openaiGenerateImageBytes(prompt: string, count: number) {
+async function openaiGenerateImageBytes(prompt: string, count: number, context?: OpenAiLogContext) {
   const apiKey = requireEnv("OPENAI_API_KEY");
   const configuredModel = getOpenAiImageModel();
 
@@ -42,7 +48,11 @@ async function openaiGenerateImageBytes(prompt: string, count: number) {
         route: "/v1/images/generations",
         statusCode: null,
         latencyMs: Date.now() - startedAt,
-        metadata: { error: message },
+        operation: "image_generation",
+        assessmentId: context?.assessmentId,
+        teacherId: context?.teacherId,
+        schoolId: context?.schoolId,
+        metadata: { error: message, image_count: count },
       });
       throw error;
     }
@@ -61,10 +71,27 @@ async function openaiGenerateImageBytes(prompt: string, count: number) {
         route: "/v1/images/generations",
         statusCode: res.status,
         latencyMs: Date.now() - startedAt,
-        metadata: { error: msg },
+        operation: "image_generation",
+        assessmentId: context?.assessmentId,
+        teacherId: context?.teacherId,
+        schoolId: context?.schoolId,
+        metadata: { error: msg, image_count: count },
       });
       throw new Error(msg);
     }
+
+    await logOpenAiCall({
+      model: configuredModel,
+      route: "/v1/images/generations",
+      statusCode: res.status,
+      latencyMs: Date.now() - startedAt,
+      operation: "image_generation",
+      assessmentId: context?.assessmentId,
+      teacherId: context?.teacherId,
+      schoolId: context?.schoolId,
+      status: "success",
+      metadata: { image_count: count },
+    });
 
     return data;
   };
@@ -135,8 +162,8 @@ async function geminiGenerateImageBytes(prompt: string, count: number) {
   return buffers;
 }
 
-export async function generateImageBytes(prompt: string, count: number) {
+export async function generateImageBytes(prompt: string, count: number, context?: OpenAiLogContext) {
   // Prefer OpenAI if configured (fast path to "works now").
-  if (process.env.OPENAI_API_KEY) return openaiGenerateImageBytes(prompt, count);
+  if (process.env.OPENAI_API_KEY) return openaiGenerateImageBytes(prompt, count, context);
   return geminiGenerateImageBytes(prompt, count);
 }

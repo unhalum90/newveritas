@@ -1,5 +1,14 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { logOpenAiError } from "@/lib/ops/api-logging";
+import { logOpenAiCall, logOpenAiError } from "@/lib/ops/api-logging";
+
+type OpenAiLogContext = {
+  operation: string;
+  assessmentId?: string | null;
+  studentId?: string | null;
+  submissionId?: string | null;
+  questionId?: string | null;
+  audioDurationSeconds?: number | null;
+};
 
 function requireEnv(name: string) {
   const v = process.env[name];
@@ -108,7 +117,7 @@ async function geminiGenerateJson(model: string, system: string, parts: Array<Re
   return JSON.parse(getGeminiTextFromResponse(data)) as unknown;
 }
 
-async function openaiGenerateJson(model: string, system: string, user: string) {
+async function openaiGenerateJson(model: string, system: string, user: string, context?: OpenAiLogContext) {
   const apiKey = requireEnv("OPENAI_API_KEY");
 
   const startedAt = Date.now();
@@ -136,6 +145,11 @@ async function openaiGenerateJson(model: string, system: string, user: string) {
       route: "/v1/chat/completions",
       statusCode: null,
       latencyMs: Date.now() - startedAt,
+      operation: context?.operation,
+      assessmentId: context?.assessmentId,
+      studentId: context?.studentId,
+      submissionId: context?.submissionId,
+      questionId: context?.questionId,
       metadata: { error: message },
     });
     throw error;
@@ -160,10 +174,31 @@ async function openaiGenerateJson(model: string, system: string, user: string) {
       promptTokens: usage?.prompt_tokens ?? null,
       completionTokens: usage?.completion_tokens ?? null,
       totalTokens: usage?.total_tokens ?? null,
+      operation: context?.operation,
+      assessmentId: context?.assessmentId,
+      studentId: context?.studentId,
+      submissionId: context?.submissionId,
+      questionId: context?.questionId,
       metadata: { error: msg },
     });
     throw new Error(msg);
   }
+
+  await logOpenAiCall({
+    model,
+    route: "/v1/chat/completions",
+    statusCode: res.status,
+    latencyMs: Date.now() - startedAt,
+    promptTokens: usage?.prompt_tokens ?? null,
+    completionTokens: usage?.completion_tokens ?? null,
+    totalTokens: usage?.total_tokens ?? null,
+    operation: context?.operation,
+    assessmentId: context?.assessmentId,
+    studentId: context?.studentId,
+    submissionId: context?.submissionId,
+    questionId: context?.questionId,
+    status: "success",
+  });
 
   const text = data?.choices?.[0]?.message?.content;
   if (typeof text !== "string" || !text.trim()) throw new Error("OpenAI returned empty response.");
@@ -205,7 +240,7 @@ function buildTranscriptWithPauses(data: unknown) {
   return parts.join(" ").replace(/\s+/g, " ").trim();
 }
 
-async function transcribeWithOpenAi(audioBytes: Buffer, mimeType: string) {
+async function transcribeWithOpenAi(audioBytes: Buffer, mimeType: string, context?: OpenAiLogContext) {
   const apiKey = requireEnv("OPENAI_API_KEY");
   const model = getEnv("OPENAI_TRANSCRIBE_MODEL") ?? "whisper-1";
 
@@ -240,6 +275,12 @@ async function transcribeWithOpenAi(audioBytes: Buffer, mimeType: string) {
       route: "/v1/audio/transcriptions",
       statusCode: null,
       latencyMs: Date.now() - startedAt,
+      operation: context?.operation,
+      assessmentId: context?.assessmentId,
+      studentId: context?.studentId,
+      submissionId: context?.submissionId,
+      questionId: context?.questionId,
+      audioDurationSeconds: context?.audioDurationSeconds ?? null,
       metadata: { error: message },
     });
     throw error;
@@ -256,10 +297,30 @@ async function transcribeWithOpenAi(audioBytes: Buffer, mimeType: string) {
       route: "/v1/audio/transcriptions",
       statusCode: res.status,
       latencyMs: Date.now() - startedAt,
+      operation: context?.operation,
+      assessmentId: context?.assessmentId,
+      studentId: context?.studentId,
+      submissionId: context?.submissionId,
+      questionId: context?.questionId,
+      audioDurationSeconds: context?.audioDurationSeconds ?? null,
       metadata: { error: msg },
     });
     throw new Error(msg);
   }
+
+  await logOpenAiCall({
+    model,
+    route: "/v1/audio/transcriptions",
+    statusCode: res.status,
+    latencyMs: Date.now() - startedAt,
+    operation: context?.operation,
+    assessmentId: context?.assessmentId,
+    studentId: context?.studentId,
+    submissionId: context?.submissionId,
+    questionId: context?.questionId,
+    audioDurationSeconds: context?.audioDurationSeconds ?? null,
+    status: "success",
+  });
 
   const transcriptWithPauses = buildTranscriptWithPauses(data);
   if (transcriptWithPauses) return transcriptWithPauses;
@@ -285,9 +346,9 @@ async function transcribeWithGemini(audioBytes: Buffer, mimeType: string) {
   return transcript.trim();
 }
 
-async function transcribeAudio(audioBytes: Buffer, mimeType: string) {
+async function transcribeAudio(audioBytes: Buffer, mimeType: string, context?: OpenAiLogContext) {
   // Prefer OpenAI for transcription (most reliable with API keys).
-  if (process.env.OPENAI_API_KEY) return transcribeWithOpenAi(audioBytes, mimeType);
+  if (process.env.OPENAI_API_KEY) return transcribeWithOpenAi(audioBytes, mimeType, context);
 
   if (!isGeminiEnabled()) {
     throw new Error(
@@ -334,6 +395,7 @@ async function scoreWithOpenAi(input: {
   transcript: string;
   rubricReasoning: string;
   rubricEvidence: string;
+  context?: OpenAiLogContext;
 }) {
   const model = process.env.OPENAI_SCORE_MODEL || process.env.OPENAI_TEXT_MODEL || "gpt-5-mini-2025-08-07";
   const system =
@@ -355,7 +417,12 @@ Rules:
 - Justification must quote or reference transcript specifics.
 - If transcript is empty or irrelevant, score low with clear explanation.`;
 
-  const data = await openaiGenerateJson(model, system, user);
+  const data = await openaiGenerateJson(
+    model,
+    system,
+    user,
+    input.context ?? { operation: "student_evaluation" },
+  );
   return parseScoreOutput(data);
 }
 
@@ -469,7 +536,7 @@ export async function scoreSubmission(submissionId: string) {
 
     const { data: responses, error: respError } = await admin
       .from("submission_responses")
-      .select("id, question_id, storage_bucket, storage_path, mime_type, transcript")
+      .select("id, question_id, storage_bucket, storage_path, mime_type, transcript, duration_seconds")
       .eq("submission_id", submissionId);
     if (respError) throw respError;
 
@@ -496,7 +563,14 @@ export async function scoreSubmission(submissionId: string) {
         const buf = Buffer.from(await file.arrayBuffer());
         const mime = resp.mime_type || "audio/webm";
         try {
-          transcript = await transcribeAudio(buf, mime);
+          transcript = await transcribeAudio(buf, mime, {
+            operation: "transcription",
+            assessmentId: submission.assessment_id,
+            studentId: submission.student_id,
+            submissionId,
+            questionId: q.id,
+            audioDurationSeconds: resp.duration_seconds ?? null,
+          });
           await admin.from("submission_responses").update({ transcript }).eq("id", resp.id);
           scoringTranscript = stripPauseMarkers(transcript);
         } catch (e) {
@@ -522,6 +596,13 @@ export async function scoreSubmission(submissionId: string) {
             transcript: scoringTranscript,
             rubricReasoning,
             rubricEvidence,
+            context: {
+              operation: "student_evaluation",
+              assessmentId: submission.assessment_id,
+              studentId: submission.student_id,
+              submissionId,
+              questionId: q.id,
+            },
           });
         } else {
           if (!isGeminiEnabled()) {

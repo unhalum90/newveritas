@@ -111,7 +111,9 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
     if (!extractedText) return NextResponse.json({ error: "No text could be extracted from that PDF." }, { status: 400 });
 
     const prompt = buildPromptFromPdfText({ title: assessment.title, extractedText });
-    const ai = await generateAssessmentDraftFromPrompt(prompt, questionCount);
+    const ai = await generateAssessmentDraftFromPrompt(prompt, questionCount, {
+      assessmentId,
+    });
 
     const { error: srcError } = await supabase.from("assessment_sources").insert({
       assessment_id: assessmentId,
