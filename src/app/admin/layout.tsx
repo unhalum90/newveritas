@@ -1,28 +1,25 @@
-import { redirect } from "next/navigation";
-
-import { AdminHeader } from "@/components/app/admin-header";
-import { getUserRole } from "@/lib/auth/roles";
-import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { AdminSidebar } from "@/components/app/admin-sidebar";
+import { requirePlatformAdmin } from "@/lib/auth/platform-admin";
 
 export default async function PlatformAdminLayout({ children }: { children: React.ReactNode }) {
-  const supabase = await createSupabaseServerClient();
-  const { data } = await supabase.auth.getUser();
-  if (!data.user) redirect("/login");
+  await requirePlatformAdmin();
 
-  const role = getUserRole(data.user);
-  if (role === "student") redirect("/student");
-  if (role === "teacher") redirect("/dashboard");
-  if (role !== "platform_admin") redirect("/login");
-
-  const admin = createSupabaseAdminClient();
-  const { data: allowlisted } = await admin.from("platform_admins").select("user_id").eq("user_id", data.user.id).maybeSingle();
-  if (!allowlisted?.user_id) redirect("/login");
+  const navItems = [
+    { href: "/admin", label: "Overview" },
+    { href: "/admin/users", label: "User Management" },
+    { href: "/admin/api", label: "API Usage" },
+    { href: "/admin/logs", label: "System Logs" },
+    { href: "/admin/support", label: "Support Queue" },
+  ];
 
   return (
-    <div className="veritas-wizard min-h-screen bg-[var(--background)] text-[var(--text)]">
-      <AdminHeader homeHref="/admin" links={[{ href: "/admin", label: "Platform" }]} />
-      <main className="mx-auto max-w-6xl px-6 py-10">{children}</main>
+    <div className="veritas-wizard min-h-screen bg-[radial-gradient(1200px_circle_at_20%_-10%,#1b2635_0%,#0b0f14_45%,#07090d_100%)] text-[var(--text)]">
+      <div className="flex min-h-screen flex-col lg:flex-row">
+        <AdminSidebar items={navItems} />
+        <main className="flex-1 px-6 py-8 lg:px-10">
+          <div className="mx-auto w-full max-w-6xl">{children}</div>
+        </main>
+      </div>
     </div>
   );
 }

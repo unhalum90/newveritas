@@ -45,6 +45,8 @@ type Submission = {
   status: "started" | "submitted";
   started_at: string;
   submitted_at: string | null;
+  review_status?: string | null;
+  published_at?: string | null;
 };
 
 type EvidenceRow = {
@@ -66,6 +68,10 @@ type ResponseRow = {
   created_at: string;
   signed_url: string;
 };
+
+const FAST_START_THRESHOLD_MS = 3000;
+const SLOW_START_THRESHOLD_MS = 6000;
+const AUDIO_ACTIVITY_THRESHOLD = 0.03;
 
 function normalizeEvidenceSetting(v: unknown): EvidenceUploadSetting {
   if (v === "disabled" || v === "optional" || v === "required") return v;
@@ -90,6 +96,10 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [recordingError, setRecordingError] = useState<string | null>(null);
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
+  const autoRecordQuestionId = useRef<string | null>(null);
+  const recordingStartedAtRef = useRef<number | null>(null);
+  const hiddenAtRef = useRef<number | null>(null);
+  const hiddenQuestionIdRef = useRef<string | null>(null);
   // Recording chunks are kept in a local buffer during capture.
   const evidenceInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -131,6 +141,29 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
     if (!res.ok) throw new Error(data?.error ?? "Unable to load responses.");
     setResponses(data?.responses ?? []);
   }
+
+  const logIntegrityEvent = useCallback(
+    async (
+      submissionId: string,
+      payload: {
+        event_type: "tab_switch" | "fast_start" | "slow_start" | "screenshot_attempt";
+        duration_ms?: number | null;
+        question_id?: string | null;
+        metadata?: Record<string, unknown> | null;
+      },
+    ) => {
+      try {
+        await fetch(`/api/student/submissions/${submissionId}/integrity`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      } catch {
+        // Ignore integrity logging failures to avoid blocking students.
+      }
+    },
+    [],
+  );
 
   async function refreshEvidence(submissionId: string, questionId: string) {
     setEvidenceLoading(true);
@@ -259,6 +292,46 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
   }, [recording]);
 
   useEffect(() => {
+    if (!latest || latest.status !== "started") return;
+    if (!assessment?.integrity?.tab_switch_monitor) return;
+
+    const handleVisibility = () => {
+      if (document.hidden) {
+        hiddenAtRef.current = Date.now();
+        hiddenQuestionIdRef.current = activeQuestion?.id ?? null;
+        return;
+      }
+      if (hiddenAtRef.current == null) return;
+      const durationMs = Date.now() - hiddenAtRef.current;
+      const questionId = hiddenQuestionIdRef.current;
+      hiddenAtRef.current = null;
+      hiddenQuestionIdRef.current = null;
+      if (durationMs <= 0) return;
+      void logIntegrityEvent(latest.id, {
+        event_type: "tab_switch",
+        duration_ms: durationMs,
+        question_id: questionId ?? null,
+      });
+    };
+
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, [activeQuestion?.id, assessment?.integrity?.tab_switch_monitor, latest, logIntegrityEvent]);
+
+  useEffect(() => {
+    if (!latest || latest.status !== "started") return;
+    const handleKeyUp = (event: KeyboardEvent) => {
+      if (event.key !== "PrintScreen") return;
+      void logIntegrityEvent(latest.id, {
+        event_type: "screenshot_attempt",
+        question_id: activeQuestion?.id ?? null,
+      });
+    };
+    window.addEventListener("keyup", handleKeyUp);
+    return () => window.removeEventListener("keyup", handleKeyUp);
+  }, [activeQuestion?.id, latest, logIntegrityEvent]);
+
+  useEffect(() => {
     if (!recording) return;
     if (recordingSeconds >= recordingLimitSeconds && mediaRecorder?.state === "recording") {
       mediaRecorder.stop();
@@ -296,13 +369,59 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const recorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
+      const audioContext = new AudioContext();
+      const source = audioContext.createMediaStreamSource(stream);
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 1024;
+      source.connect(analyser);
+      const audioSamples = new Uint8Array(analyser.fftSize);
+      const audioMonitorStartedAt = Date.now();
+      let slowStartLogged = false;
+      let firstSoundAt: number | null = null;
+      let audioMonitorId: number | null = null;
+
+      const stopAudioMonitor = () => {
+        if (audioMonitorId != null) cancelAnimationFrame(audioMonitorId);
+        source.disconnect();
+        analyser.disconnect();
+        void audioContext.close();
+      };
+
+      const monitorAudio = () => {
+        if (recorder.state !== "recording") return;
+        analyser.getByteTimeDomainData(audioSamples);
+        let sumSquares = 0;
+        for (let i = 0; i < audioSamples.length; i += 1) {
+          const v = (audioSamples[i] - 128) / 128;
+          sumSquares += v * v;
+        }
+        const rms = Math.sqrt(sumSquares / audioSamples.length);
+        if (firstSoundAt == null && rms > AUDIO_ACTIVITY_THRESHOLD) {
+          firstSoundAt = Date.now();
+        }
+        if (!slowStartLogged && firstSoundAt == null && Date.now() - audioMonitorStartedAt >= SLOW_START_THRESHOLD_MS) {
+          slowStartLogged = true;
+          void logIntegrityEvent(latest.id, {
+            event_type: "slow_start",
+            duration_ms: Date.now() - audioMonitorStartedAt,
+            question_id: activeQuestion.id,
+            metadata: { threshold_ms: SLOW_START_THRESHOLD_MS },
+          });
+        }
+        audioMonitorId = requestAnimationFrame(monitorAudio);
+      };
+      audioMonitorId = requestAnimationFrame(monitorAudio);
+
       recorder.ondataavailable = (ev) => {
         if (ev.data.size > 0) {
           chunks.push(ev.data);
         }
       };
       recorder.onstop = async () => {
+        const durationMs =
+          recordingStartedAtRef.current != null ? Date.now() - recordingStartedAtRef.current : recordingSeconds * 1000;
         try {
+          stopAudioMonitor();
           stream.getTracks().forEach((t) => t.stop());
           const blob = new Blob(chunks, { type: "audio/webm" });
           if (!blob.size) return;
@@ -317,9 +436,18 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
           const data = (await res.json().catch(() => null)) as { error?: string } | null;
           if (!res.ok) throw new Error(data?.error ?? "Upload failed.");
           await refreshAssessment();
+          if (durationMs > 0 && durationMs < FAST_START_THRESHOLD_MS) {
+            void logIntegrityEvent(latest.id, {
+              event_type: "fast_start",
+              duration_ms: durationMs,
+              question_id: activeQuestion.id,
+              metadata: { threshold_ms: FAST_START_THRESHOLD_MS },
+            });
+          }
         } catch (e) {
           setRecordingError(e instanceof Error ? e.message : "Upload failed.");
         } finally {
+          recordingStartedAtRef.current = null;
           setWorking(false);
           setRecording(false);
           setMediaRecorder(null);
@@ -327,6 +455,7 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
       };
 
       setMediaRecorder(recorder);
+      recordingStartedAtRef.current = Date.now();
       setRecording(true);
       recorder.start();
     } catch (e) {
@@ -339,6 +468,30 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
       mediaRecorder.stop();
     }
   }
+
+  useEffect(() => {
+    if (!activeQuestion) {
+      autoRecordQuestionId.current = null;
+      return;
+    }
+    if (autoRecordQuestionId.current === activeQuestion.id) return;
+    if (recording || working) return;
+    if (!latest || latest.status !== "started") return;
+    if (pledgeRequired || activeResponse) return;
+    const nextEvidenceSetting = normalizeEvidenceSetting(activeQuestion.evidence_upload);
+    if (nextEvidenceSetting === "required" && !activeEvidence) return;
+
+    autoRecordQuestionId.current = activeQuestion.id;
+    void beginRecording();
+  }, [
+    activeEvidence?.id,
+    activeQuestion?.id,
+    activeResponse?.id,
+    latest?.status,
+    pledgeRequired,
+    recording,
+    working,
+  ]);
 
   async function handleEvidenceSelected(file: File) {
     if (!latest || latest.status !== "started") {
@@ -446,8 +599,7 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
         {loading ? <div className="text-sm text-zinc-600">Loading…</div> : null}
 
         {assessment ? (
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-[1fr_320px]">
-            <div className="space-y-4">
+          <div className="space-y-4">
               {assessment.asset_url ? (
                 <Card className="overflow-hidden">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -460,7 +612,7 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
                   <CardTitle>Instructions</CardTitle>
                   <CardDescription>This is an assessment. Questions are revealed one at a time after you start.</CardDescription>
                 </CardHeader>
-                <CardContent className="text-sm text-zinc-700">
+                <CardContent className="text-sm text-[var(--muted)]">
                   {assessment.instructions?.trim() ? assessment.instructions : "No instructions provided."}
                 </CardContent>
               </Card>
@@ -474,7 +626,7 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="flex items-center justify-between gap-3">
-                    <div className="text-sm text-zinc-700">When you click Start, you should be ready to answer immediately.</div>
+                    <div className="text-sm text-[var(--muted)]">When you click Start, you should be ready to answer immediately.</div>
                     <Button type="button" disabled={working || latest?.status === "submitted"} onClick={startOrResume}>
                       {working ? "Starting…" : "Start Assessment"}
                     </Button>
@@ -486,6 +638,18 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
                     <CardTitle>Submitted</CardTitle>
                     <CardDescription>Your responses have been submitted.</CardDescription>
                   </CardHeader>
+                  <CardContent className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="text-sm text-[var(--muted)]">
+                      {latest.review_status === "published"
+                        ? "Your teacher has released verified feedback."
+                        : "Your teacher will review and release feedback soon."}
+                    </div>
+                    {latest.review_status === "published" ? (
+                      <Link href={`/student/assessments/${assessmentId}/feedback`}>
+                        <Button type="button">View Feedback</Button>
+                      </Link>
+                    ) : null}
+                  </CardContent>
                 </Card>
               ) : activeQuestion ? (
                 <Card>
@@ -568,23 +732,14 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
                         </div>
                       </div>
                       <div className="mt-3 flex flex-wrap items-center gap-2">
-                        {!recording ? (
-                          <Button
-                            type="button"
-                            disabled={
-                              working ||
-                              latest?.status !== "started" ||
-                              (evidenceSetting === "required" && !activeEvidence) ||
-                              evidenceUploading
-                            }
-                            onClick={beginRecording}
-                          >
-                            Start Recording
-                          </Button>
-                        ) : (
+                        {recording ? (
                           <Button type="button" variant="secondary" disabled={working} onClick={stopRecording}>
                             Stop
                           </Button>
+                        ) : (
+                          <div className="text-sm text-[var(--muted)]">
+                            Recording starts automatically when the question appears.
+                          </div>
                         )}
                         {working ? <span className="text-sm text-zinc-600">Saving…</span> : null}
                       </div>
@@ -599,39 +754,13 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
                     <CardDescription>Submit your assessment to finish.</CardDescription>
                   </CardHeader>
                   <CardContent className="flex items-center justify-between gap-3">
-                    <div className="text-sm text-zinc-700">You cannot change responses after submitting.</div>
+                    <div className="text-sm text-[var(--muted)]">You cannot change responses after submitting.</div>
                     <Button type="button" disabled={working || !canSubmitAttempt} onClick={submit}>
                       Submit
                     </Button>
                   </CardContent>
                 </Card>
               )}
-            </div>
-
-            <div className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Integrity</CardTitle>
-                  <CardDescription>These settings are enforced by your teacher.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-2 text-sm text-zinc-700">
-                  <div>Pausing guardrail: {assessment.integrity?.pause_threshold_seconds ? "On" : "Off"}</div>
-                  <div>Focus monitor: {assessment.integrity?.tab_switch_monitor ? "On" : "Off"}</div>
-                  <div>Dynamic shuffle: {assessment.integrity?.shuffle_questions ? "On" : "Off"}</div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Limits</CardTitle>
-                  <CardDescription>Response timers.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-2 text-sm text-zinc-700">
-                  <div>Recording limit: {assessment.integrity?.recording_limit_seconds ?? 60}s</div>
-                  <div>Viewing timer (Retell): {assessment.integrity?.viewing_timer_seconds ?? 20}s</div>
-                </CardContent>
-              </Card>
-            </div>
           </div>
         ) : null}
       </div>

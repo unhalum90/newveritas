@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
 
   const { data: submissions, error: subError } = await admin
     .from("submissions")
-    .select("id, assessment_id, status, started_at, submitted_at")
+    .select("id, assessment_id, status, started_at, submitted_at, review_status, published_at")
     .eq("student_id", student.id)
     .order("started_at", { ascending: false });
 
@@ -69,4 +69,3 @@ export async function GET(request: NextRequest) {
   pendingCookies.forEach(({ name, value, options }) => res.cookies.set(name, value, options));
   return res;
 }
-

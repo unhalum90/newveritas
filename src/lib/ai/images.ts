@@ -1,3 +1,5 @@
+import { logOpenAiError } from "@/lib/ops/api-logging";
+
 function requireEnv(name: string) {
   const v = process.env[name];
   if (v) return v;
@@ -22,14 +24,28 @@ async function openaiGenerateImageBytes(prompt: string, count: number) {
   const configuredModel = getOpenAiImageModel();
 
   const doRequest = async (body: Record<string, unknown>) => {
-    const res = await fetch("https://api.openai.com/v1/images/generations", {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${apiKey}`,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify(body),
-    });
+    const startedAt = Date.now();
+    let res: Response;
+    try {
+      res = await fetch("https://api.openai.com/v1/images/generations", {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${apiKey}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      await logOpenAiError({
+        model: configuredModel,
+        route: "/v1/images/generations",
+        statusCode: null,
+        latencyMs: Date.now() - startedAt,
+        metadata: { error: message },
+      });
+      throw error;
+    }
 
     const data = (await res.json().catch(() => null)) as
       | {
@@ -40,6 +56,13 @@ async function openaiGenerateImageBytes(prompt: string, count: number) {
 
     if (!res.ok) {
       const msg = typeof data?.error?.message === "string" ? data.error.message : "OpenAI image request failed.";
+      await logOpenAiError({
+        model: configuredModel,
+        route: "/v1/images/generations",
+        statusCode: res.status,
+        latencyMs: Date.now() - startedAt,
+        metadata: { error: msg },
+      });
       throw new Error(msg);
     }
 

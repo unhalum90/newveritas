@@ -648,6 +648,10 @@ create table if not exists public.submissions (
   scoring_started_at timestamptz,
   scored_at timestamptz,
   scoring_error text,
+  review_status text not null default 'pending', -- pending | reviewed | published
+  teacher_comment text,
+  published_at timestamptz,
+  final_score_override float,
   integrity_pledge_accepted_at timestamptz,
   integrity_pledge_ip_address text,
   integrity_pledge_version int,
@@ -662,11 +666,17 @@ alter table public.submissions add column if not exists scoring_status text not 
 alter table public.submissions add column if not exists scoring_started_at timestamptz;
 alter table public.submissions add column if not exists scored_at timestamptz;
 alter table public.submissions add column if not exists scoring_error text;
+alter table public.submissions add column if not exists review_status text not null default 'pending';
+alter table public.submissions add column if not exists teacher_comment text;
+alter table public.submissions add column if not exists published_at timestamptz;
+alter table public.submissions add column if not exists final_score_override float;
 alter table public.submissions add column if not exists integrity_pledge_accepted_at timestamptz;
 alter table public.submissions add column if not exists integrity_pledge_ip_address text;
 alter table public.submissions add column if not exists integrity_pledge_version int;
 
 create index if not exists submissions_scoring_status_idx on public.submissions(scoring_status);
+create index if not exists submissions_review_status_idx on public.submissions(review_status);
+create index if not exists submissions_published_at_idx on public.submissions(published_at);
 
 alter table public.submissions enable row level security;
 
@@ -681,6 +691,19 @@ using (
     join public.classes c on c.id = a.class_id
     join public.teachers t on t.workspace_id = c.workspace_id
     where a.id = assessment_id and t.user_id = auth.uid()
+  )
+);
+
+drop policy if exists "Students can view published submissions" on public.submissions;
+create policy "Students can view published submissions"
+on public.submissions
+for select
+using (
+  review_status = 'published'
+  and exists (
+    select 1
+    from public.students s
+    where s.id = student_id and s.auth_user_id = auth.uid()
   )
 );
 
@@ -889,3 +912,123 @@ using (
     where sub.id = submission_id and t.user_id = auth.uid()
   )
 );
+
+-- =========================
+-- Admin Ops: Platform Console
+-- =========================
+
+create table if not exists public.api_logs (
+  id uuid primary key default gen_random_uuid(),
+  provider text not null,
+  model text,
+  route text,
+  status_code int,
+  latency_ms int,
+  prompt_tokens int,
+  completion_tokens int,
+  total_tokens int,
+  cost_cents numeric,
+  metadata jsonb,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists api_logs_provider_idx on public.api_logs(provider);
+create index if not exists api_logs_created_at_idx on public.api_logs(created_at);
+
+alter table public.api_logs enable row level security;
+
+drop policy if exists "Platform admins can view api logs" on public.api_logs;
+create policy "Platform admins can view api logs"
+on public.api_logs
+for select
+using (exists (select 1 from public.platform_admins pa where pa.user_id = auth.uid()));
+
+create table if not exists public.system_logs (
+  id uuid primary key default gen_random_uuid(),
+  event_type text not null,
+  provider text,
+  severity text,
+  message text not null,
+  metadata jsonb,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists system_logs_created_at_idx on public.system_logs(created_at);
+
+alter table public.system_logs enable row level security;
+
+drop policy if exists "Platform admins can view system logs" on public.system_logs;
+create policy "Platform admins can view system logs"
+on public.system_logs
+for select
+using (exists (select 1 from public.platform_admins pa where pa.user_id = auth.uid()));
+
+create table if not exists public.support_tickets (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  category text,
+  priority text,
+  status text not null default 'open',
+  requester_email text,
+  related_user_id uuid references auth.users(id) on delete set null,
+  related_school_id uuid references public.schools(id) on delete set null,
+  metadata jsonb,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists support_tickets_status_idx on public.support_tickets(status);
+create index if not exists support_tickets_created_at_idx on public.support_tickets(created_at);
+
+alter table public.support_tickets enable row level security;
+
+drop policy if exists "Platform admins can view support tickets" on public.support_tickets;
+create policy "Platform admins can view support tickets"
+on public.support_tickets
+for select
+using (exists (select 1 from public.platform_admins pa where pa.user_id = auth.uid()));
+
+create table if not exists public.admin_audit_trail (
+  id uuid primary key default gen_random_uuid(),
+  admin_user_id uuid not null references auth.users(id) on delete cascade,
+  action text not null,
+  entity_type text,
+  entity_id uuid,
+  metadata jsonb,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists admin_audit_trail_admin_user_id_idx on public.admin_audit_trail(admin_user_id);
+create index if not exists admin_audit_trail_created_at_idx on public.admin_audit_trail(created_at);
+
+alter table public.admin_audit_trail enable row level security;
+
+drop policy if exists "Platform admins can view audit trail" on public.admin_audit_trail;
+create policy "Platform admins can view audit trail"
+on public.admin_audit_trail
+for select
+using (exists (select 1 from public.platform_admins pa where pa.user_id = auth.uid()));
+
+create table if not exists public.credit_adjustments (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  delta int not null,
+  reason text,
+  created_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists credit_adjustments_user_id_idx on public.credit_adjustments(user_id);
+create index if not exists credit_adjustments_created_at_idx on public.credit_adjustments(created_at);
+
+alter table public.credit_adjustments enable row level security;
+
+drop policy if exists "Platform admins can view credit adjustments" on public.credit_adjustments;
+create policy "Platform admins can view credit adjustments"
+on public.credit_adjustments
+for select
+using (exists (select 1 from public.platform_admins pa where pa.user_id = auth.uid()));
+
+create or replace view public.credit_balances as
+select user_id, sum(delta) as balance
+from public.credit_adjustments
+group by user_id;

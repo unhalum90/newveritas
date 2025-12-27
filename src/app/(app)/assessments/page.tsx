@@ -36,6 +36,26 @@ export default async function AssessmentsPage() {
             .order("created_at", { ascending: false })
         ).data ?? [];
 
+  const submissionStatsById: Record<string, { completed: number; needsReview: number }> = {};
+  if (assessments.length) {
+    const assessmentIds = assessments.map((a) => a.id);
+    const { data: submissions } = await supabase
+      .from("submissions")
+      .select("assessment_id, status, review_status")
+      .in("assessment_id", assessmentIds);
+
+    for (const submission of submissions ?? []) {
+      if (submission.status !== "submitted") continue;
+      const stats = submissionStatsById[submission.assessment_id] ?? { completed: 0, needsReview: 0 };
+      if (submission.review_status === "published") {
+        stats.completed += 1;
+      } else {
+        stats.needsReview += 1;
+      }
+      submissionStatsById[submission.assessment_id] = stats;
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -76,6 +96,7 @@ export default async function AssessmentsPage() {
         <AssessmentsClient
           initialAssessments={assessments}
           classNameById={Object.fromEntries(classNameById.entries())}
+          submissionStatsById={submissionStatsById}
         />
       )}
     </div>

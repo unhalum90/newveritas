@@ -26,18 +26,20 @@
 **I want** clear expectations about academic honesty before starting  
 **So that** I understand the assessment is meant to measure my own learning
 
+**Status:** Implemented (v1)
+
 **Acceptance Criteria:**
-- [ ] Pledge displays before student sees any assessment questions
-- [ ] Cannot proceed until student clicks "I Agree"
-- [ ] Pledge text customizable by teacher (default provided)
-- [ ] Default text includes:
+- [x] Pledge displays before student sees any assessment questions
+- [x] Cannot proceed until student clicks "I Agree"
+- [x] Pledge text customizable by teacher (default provided)
+- [x] Default text includes:
   - "I have studied the material and am ready to demonstrate my understanding"
   - "I will not use notes, websites, or other people during this assessment"
   - "I understand this assessment measures what I know, not what I can look up"
   - "My responses will be in my own words based on my learning"
-- [ ] Timestamp recorded when student accepts
-- [ ] Acceptance logged to database: `student_id`, `assessment_id`, `pledge_accepted_at`
-- [ ] Teacher can view pledge acceptance in submission details
+- [x] Timestamp recorded when student accepts
+- [x] Acceptance logged to database: `student_id`, `assessment_id`, `pledge_accepted_at`
+- [x] Teacher can view pledge acceptance in submission details
 
 **Story Points:** 3
 
@@ -49,23 +51,23 @@
 **I want** the system to flag students who answer suspiciously fast  
 **So that** I can investigate potential pre-planned or pre-written answers
 
+**Status:** Partial (v1 fast/slow start flags)
+
 **Acceptance Criteria:**
-- [ ] Timer starts when question first displays to student
-- [ ] System calculates "time to first word spoken"
-- [ ] Flag triggered if student begins speaking in <2 seconds
-- [ ] Flag includes:
-  - Exact time to first word
-  - Question complexity estimate (word count as proxy)
-  - Expected minimum read time based on question length
-- [ ] Flag severity levels:
-  - **High:** <2 seconds (nearly impossible to read + think)
-  - **Medium:** 2-5 seconds (very fast, worth checking)
-  - **Low:** 5-10 seconds (quick but plausible)
-- [ ] No flags generated for responses >10 seconds to first word
-- [ ] Flag displayed in teacher review interface with timestamp
-- [ ] Student experience unchanged (no warning, interruption, or notification)
+- [x] Timer starts when question first displays to student (auto-recording begins on question reveal)
+- [ ] System calculates "time to first word spoken" (v1 logs silence >6s as slow-start)
+- [x] Flag triggered if response duration is <3 seconds and transcript is not filler/echo
+- [x] Slow-start flag when no audible response begins after 6 seconds
+- [x] Flag includes response duration and question reference
+- [ ] Question complexity estimate (word count proxy) + expected read time (pending)
+- [ ] Severity levels (high/medium/low) for response speed (pending)
+- [x] No fast-start flags for responses >=3 seconds
+- [x] Flag displayed in teacher review interface with timestamp
+- [x] Student experience unchanged (no warning, interruption, or notification)
 
 **Technical Implementation:**
+**v1 Notes:** Fast-start is based on total response duration <3s with transcript filtering; slow-start logs after 6s of silence. Time-to-first-word tracking and severity tiers are pending.
+
 ```javascript
 // Pseudocode
 const questionDisplayTime = timestamp;
@@ -92,6 +94,8 @@ if (timeToResponse < 2000) {
 **As a** teacher  
 **I want** the system to detect unusual pauses during student responses  
 **So that** I can identify potential mid-answer research or consultation
+
+**Status:** Partial (v1 inserts pause markers ≥5s into transcript when timestamps are available; full pause analysis pending)
 
 **Acceptance Criteria:**
 - [ ] System analyzes audio waveform for silence periods >3 seconds
@@ -138,26 +142,29 @@ elif len(long_pauses) > 5:
 **I want** to know if students switch tabs or take screenshots during assessment  
 **So that** I can identify potential external resource use or answer sharing
 
+**Status:** Partial (v1 logs switches + screenshot attempts; teacher view aggregates flags + timeline)
+
 **Acceptance Criteria:**
-- [ ] System monitors browser `visibilitychange` events
-- [ ] Records each time student switches away from assessment tab
-- [ ] Tracks total time tab was not visible
-- [ ] Records screenshot attempts (browser-level detection where available)
-- [ ] Flag triggered if:
+- [x] System monitors browser `visibilitychange` events
+- [x] Records each time student switches away from assessment tab
+- [x] Tracks total time tab was not visible (derived from logged events)
+- [~] Records screenshot attempts (PrintScreen only; limited browser support)
+- [x] Flag triggered if:
   - Tab switched >3 times during response, OR
   - Tab not visible for >20 seconds cumulative, OR
   - Screenshot detected
-- [ ] Flag includes:
+- [~] Flag includes:
   - Number of tab switches
-  - Duration of each switch
+  - Duration of each switch (timeline)
   - Total time away from assessment
   - Screenshot attempt timestamps (if detected)
-- [ ] Data logged to `integrity_events` table:
+- [x] Data logged to `integrity_events` table:
   - `event_type`: 'tab_switch' | 'screenshot_attempt'
   - `timestamp`
   - `duration` (for tab switches)
 - [ ] Teacher dashboard shows timeline of events
-- [ ] Student sees no warning or interruption
+- [~] Teacher dashboard shows timeline of events (per-submission timeline in review pane)
+- [x] Student sees no warning or interruption
 - [ ] Works across browsers (graceful degradation for unsupported features)
 
 **Technical Implementation:**
@@ -190,6 +197,8 @@ document.addEventListener('keyup', function(e) {
 **As a** teacher  
 **I want** to create multiple versions of the same question  
 **So that** students in different class periods can't share specific answers
+
+**Status:** Not started
 
 **Acceptance Criteria:**
 - [ ] Teacher provides:
@@ -242,24 +251,27 @@ Return JSON array of questions with metadata.
 **I want** a clear interface to review flagged submissions  
 **So that** I can make informed judgments about academic integrity
 
+**Status:** Partial (v1 shows integrity flags + timeline in submission review; flagged-only filter)
+
 **Acceptance Criteria:**
-- [ ] Dashboard shows all submissions with integrity flags
+- [~] Dashboard shows all submissions with integrity flags (flag count badge + flagged-only filter)
 - [ ] Submissions sorted by flag severity (high → medium → low)
-- [ ] Each flagged submission displays:
+- [~] Each flagged submission displays:
   - Student name
-  - Flag type(s): speed, pauses, tab switching, screenshot
+  - Flag type(s): speed, tab switching, screenshot (pause analysis pending)
   - Flag severity indicator (color-coded)
   - Audio player with pause visualization overlay
   - Timeline showing tab switches and their duration
   - Comparison to student's normal performance pattern
-- [ ] Teacher can:
+- [~] Teacher can:
   - Play audio with visual indicators of pauses
   - See exact timestamps of all integrity events
-  - Add notes to submission
+  - Add notes to submission (teacher comment)
   - Mark as "Reviewed - No Issue" or "Follow Up Required"
   - Request follow-up oral assessment with student
   - Override AI score if integrity concerns warrant
-- [ ] Filter options:
+- [~] Filter options:
+  - Flagged vs. unflagged (v1)
   - By flag type
   - By severity
   - By class
@@ -295,6 +307,8 @@ Return JSON array of questions with metadata.
 **As a** teacher  
 **I want** confirmation that all question variants are equally difficult  
 **So that** no student has an unfair advantage/disadvantage
+
+**Status:** Not started
 
 **Acceptance Criteria:**
 - [ ] System tracks performance on each question variant:

@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { logOpenAiError } from "@/lib/ops/api-logging";
+
 const aiOutputSchema = z.object({
   title: z.string().min(1).max(100),
   subject: z.string().min(1).max(50).nullable().optional(),
@@ -238,21 +240,50 @@ Subject is optional; if not specified return null.
 Instructions should be student-facing and <= 500 characters.`;
 
   async function callOpenAi(messages: Array<{ role: "system" | "user"; content: string }>) {
-    const res = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
-      body: JSON.stringify({ model, response_format: { type: "json_object" }, messages }),
-    });
+    const startedAt = Date.now();
+    let res: Response;
+    try {
+      res = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
+        body: JSON.stringify({ model, response_format: { type: "json_object" }, messages }),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      await logOpenAiError({
+        model,
+        route: "/v1/chat/completions",
+        statusCode: null,
+        latencyMs: Date.now() - startedAt,
+        metadata: { error: message },
+      });
+      throw error;
+    }
 
     const data = (await res.json().catch(() => null)) as
-      | { error?: { message?: unknown; code?: unknown }; choices?: Array<{ message?: { content?: unknown } }> }
+      | {
+          error?: { message?: unknown; code?: unknown };
+          choices?: Array<{ message?: { content?: unknown } }>;
+          usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
+        }
       | null;
+    const usage = data?.usage;
 
     if (!res.ok) {
       const msg = typeof data?.error?.message === "string" ? data.error.message : "OpenAI request failed.";
       const code = typeof data?.error?.code === "string" ? data.error.code : null;
       const err = new Error(msg) as Error & { code?: string | null };
       err.code = code;
+      await logOpenAiError({
+        model,
+        route: "/v1/chat/completions",
+        statusCode: res.status,
+        latencyMs: Date.now() - startedAt,
+        promptTokens: usage?.prompt_tokens ?? null,
+        completionTokens: usage?.completion_tokens ?? null,
+        totalTokens: usage?.total_tokens ?? null,
+        metadata: { error: msg, code },
+      });
       throw err;
     }
 
@@ -311,4 +342,3 @@ export async function generateAssessmentDraftFromPrompt(prompt: string, question
 
   throw lastError ?? new Error("OpenAI request failed.");
 }
-

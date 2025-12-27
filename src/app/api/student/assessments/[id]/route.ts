@@ -55,7 +55,9 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
 
   const { data: latestSubmission, error: subError } = await admin
     .from("submissions")
-    .select("id, status, started_at, submitted_at, integrity_pledge_accepted_at, integrity_pledge_version")
+    .select(
+      "id, status, started_at, submitted_at, review_status, published_at, teacher_comment, final_score_override, integrity_pledge_accepted_at, integrity_pledge_version",
+    )
     .eq("assessment_id", assessmentId)
     .eq("student_id", student.id)
     .order("started_at", { ascending: false })

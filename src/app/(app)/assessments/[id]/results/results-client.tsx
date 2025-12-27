@@ -15,10 +15,15 @@ type SubmissionRow = {
   submitted_at: string | null;
   scoring_status?: string | null;
   scoring_error?: string | null;
+  review_status?: string | null;
+  published_at?: string | null;
+  final_score_override?: number | null;
+  teacher_comment?: string | null;
   response_count: number;
   avg_score?: number | null;
   reasoning_avg?: number | null;
   evidence_avg?: number | null;
+  integrity_flag_count?: number | null;
 };
 
 type AssessmentMeta = {
@@ -61,6 +66,15 @@ type QuestionWithResponse = {
     | null;
 };
 
+type IntegrityEvent = {
+  id: string;
+  event_type: string;
+  duration_ms: number | null;
+  question_id: string | null;
+  created_at: string;
+  metadata: Record<string, unknown> | null;
+};
+
 type SubmissionDetail = {
   submission: {
     id: string;
@@ -70,18 +84,24 @@ type SubmissionDetail = {
     scoring_started_at?: string | null;
     scored_at?: string | null;
     scoring_error?: string | null;
+    review_status?: string | null;
+    published_at?: string | null;
+    final_score_override?: number | null;
+    teacher_comment?: string | null;
     integrity_pledge_accepted_at?: string | null;
     integrity_pledge_ip_address?: string | null;
     integrity_pledge_version?: number | null;
   };
+  integrity_events: IntegrityEvent[];
   questions: QuestionWithResponse[];
 };
 
 function isSubmissionDetail(x: unknown): x is SubmissionDetail {
   if (!x || typeof x !== "object") return false;
-  const obj = x as { submission?: unknown; questions?: unknown };
+  const obj = x as { submission?: unknown; questions?: unknown; integrity_events?: unknown };
   if (!obj.submission || typeof obj.submission !== "object") return false;
   if (!Array.isArray(obj.questions)) return false;
+  if (obj.integrity_events != null && !Array.isArray(obj.integrity_events)) return false;
   return true;
 }
 
@@ -90,6 +110,64 @@ function formatTime(d: string | null) {
   const date = new Date(d);
   if (Number.isNaN(date.getTime())) return null;
   return date.toLocaleString();
+}
+
+function formatDurationMs(ms: number | null | undefined) {
+  if (typeof ms !== "number" || Number.isNaN(ms)) return null;
+  const seconds = ms / 1000;
+  if (seconds < 10) return `${seconds.toFixed(1)}s`;
+  return `${Math.round(seconds)}s`;
+}
+
+function formatIntegrityLabel(eventType: string) {
+  if (eventType === "fast_start") return "Started fast";
+  if (eventType === "slow_start") return "Paused too long";
+  if (eventType === "tab_switch") return "Left tab";
+  if (eventType === "screenshot_attempt") return "Screenshot attempt";
+  return eventType;
+}
+
+const fillerTokens = new Set([
+  "um",
+  "uh",
+  "umm",
+  "uhh",
+  "er",
+  "ah",
+  "hmm",
+  "like",
+  "okay",
+  "ok",
+  "well",
+  "so",
+  "you",
+  "know",
+  "i",
+  "mean",
+]);
+
+const TAB_SWITCH_COUNT_THRESHOLD = 3;
+const TAB_SWITCH_DURATION_THRESHOLD_MS = 20000;
+
+function tokenize(text: string) {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+function shouldSuppressFastStart(transcript: string, questionText: string) {
+  const tokens = tokenize(transcript.replace(/\(pause\s+\d+(?:\.\d+)?s\)/gi, " "));
+  const meaningful = tokens.filter((t) => t.length > 2 && !fillerTokens.has(t));
+  if (!meaningful.length) return true;
+  const questionTokens = new Set(tokenize(questionText).filter((t) => t.length > 2));
+  const overlap = meaningful.filter((t) => questionTokens.has(t)).length;
+  const overlapRatio = overlap / meaningful.length;
+  const nonQuestion = meaningful.filter((t) => !questionTokens.has(t));
+  if (overlapRatio >= 0.6 && meaningful.length <= 6) return true;
+  if (nonQuestion.length < 2 && meaningful.length <= 4) return true;
+  return false;
 }
 
 function downloadCsv(filename: string, rows: Array<Record<string, string | number | null | undefined>>) {
@@ -130,12 +208,23 @@ export function AssessmentResultsClient({ assessmentId }: { assessmentId: string
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const [rescoring, setRescoring] = useState(false);
+  const [showFlaggedOnly, setShowFlaggedOnly] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [releaseComment, setReleaseComment] = useState("");
+  const [releaseOverride, setReleaseOverride] = useState("");
+  const [releaseWorking, setReleaseWorking] = useState(false);
+  const [releaseError, setReleaseError] = useState<string | null>(null);
+  const [releaseNotice, setReleaseNotice] = useState<string | null>(null);
 
   const selectedSubmission = useMemo(
     () => submissions.find((s) => s.id === selectedSubmissionId) ?? null,
     [selectedSubmissionId, submissions],
   );
+
+  const visibleSubmissions = useMemo(() => {
+    if (!showFlaggedOnly) return submissions;
+    return submissions.filter((s) => (s.integrity_flag_count ?? 0) > 0);
+  }, [showFlaggedOnly, submissions]);
 
   const exportRows = useMemo(() => {
     return submissions.map((s) => ({
@@ -198,6 +287,24 @@ export function AssessmentResultsClient({ assessmentId }: { assessmentId: string
     })();
   }, [selectedSubmissionId]);
 
+  useEffect(() => {
+    if (!detail) {
+      setReleaseComment("");
+      setReleaseOverride("");
+      setReleaseError(null);
+      setReleaseNotice(null);
+      return;
+    }
+    setReleaseComment(detail.submission.teacher_comment ?? "");
+    setReleaseOverride(
+      typeof detail.submission.final_score_override === "number"
+        ? String(detail.submission.final_score_override)
+        : "",
+    );
+    setReleaseError(null);
+    setReleaseNotice(null);
+  }, [detail?.submission.id]);
+
   const scoringPending = useMemo(() => {
     if (!detail) return false;
     if (detail.submission.status !== "submitted") return false;
@@ -211,6 +318,106 @@ export function AssessmentResultsClient({ assessmentId }: { assessmentId: string
       return transcriptPending || reasoningPending || evidencePending;
     });
   }, [detail]);
+
+  const questionIndexById = useMemo(() => {
+    if (!detail) return new Map<string, number>();
+    return new Map(detail.questions.map((q) => [q.id, q.order_index]));
+  }, [detail]);
+
+  const questionContextById = useMemo(() => {
+    if (!detail) return new Map<string, { question_text: string; transcript: string | null }>();
+    return new Map(
+      detail.questions.map((q) => [
+        q.id,
+        { question_text: q.question_text, transcript: q.response?.transcript ?? null },
+      ]),
+    );
+  }, [detail]);
+
+  const integrityFlags = useMemo(() => {
+    if (!detail?.integrity_events?.length) return [];
+    const tabSwitches = detail.integrity_events.filter((event) => event.event_type === "tab_switch");
+    const screenshotAttempts = detail.integrity_events.filter((event) => event.event_type === "screenshot_attempt");
+    const tabSwitchTotalMs = tabSwitches.reduce((sum, event) => sum + (event.duration_ms ?? 0), 0);
+    const flags: Array<{ id: string; label: string; details: string; created_at: string }> = [];
+
+    if (
+      tabSwitches.length > TAB_SWITCH_COUNT_THRESHOLD ||
+      tabSwitchTotalMs > TAB_SWITCH_DURATION_THRESHOLD_MS
+    ) {
+      flags.push({
+        id: "tab_switch_summary",
+        label: "Tab switches",
+        details: `${tabSwitches.length} switch${tabSwitches.length === 1 ? "" : "es"} • ${formatDurationMs(tabSwitchTotalMs) ?? "0s"} away`,
+        created_at: tabSwitches.at(-1)?.created_at ?? "",
+      });
+    }
+
+    if (screenshotAttempts.length) {
+      flags.push({
+        id: "screenshot_summary",
+        label: "Screenshot attempt",
+        details: `${screenshotAttempts.length} attempt${screenshotAttempts.length === 1 ? "" : "s"}`,
+        created_at: screenshotAttempts.at(-1)?.created_at ?? "",
+      });
+    }
+
+    const perEventFlags = detail.integrity_events
+      .filter((event) => event.event_type !== "tab_switch" && event.event_type !== "screenshot_attempt")
+      .map((event) => {
+        if (event.event_type === "fast_start" && event.question_id) {
+          const context = questionContextById.get(event.question_id);
+          if (context?.transcript && shouldSuppressFastStart(context.transcript, context.question_text)) {
+            return null;
+          }
+        }
+      const duration = formatDurationMs(event.duration_ms);
+      const questionIndex = event.question_id ? questionIndexById.get(event.question_id) : null;
+      const parts = [duration, questionIndex ? `Q${questionIndex}` : null].filter(Boolean) as string[];
+      if (event.event_type === "fast_start" && event.question_id) {
+        const context = questionContextById.get(event.question_id);
+        if (!context?.transcript) parts.push("transcript pending");
+      }
+      const label =
+        event.event_type === "fast_start"
+          ? "Started fast"
+          : event.event_type === "tab_switch"
+            ? "Left tab"
+            : event.event_type === "slow_start"
+              ? "Paused too long"
+              : event.event_type === "screenshot_attempt"
+                ? "Screenshot attempt"
+                : event.event_type;
+
+      return {
+        id: event.id,
+        label,
+        details: parts.join(" • "),
+        created_at: event.created_at,
+      };
+      });
+
+    return flags.concat(
+      perEventFlags.filter(Boolean) as Array<{ id: string; label: string; details: string; created_at: string }>,
+    );
+  }, [detail?.integrity_events, questionContextById, questionIndexById]);
+
+  const integrityTimeline = useMemo(() => {
+    if (!detail?.integrity_events?.length) return [];
+    return detail.integrity_events.map((event) => {
+      const questionIndex = event.question_id ? questionIndexById.get(event.question_id) : null;
+      const parts = [
+        formatIntegrityLabel(event.event_type),
+        questionIndex ? `Q${questionIndex}` : null,
+        formatDurationMs(event.duration_ms),
+      ].filter(Boolean) as string[];
+      return {
+        id: event.id,
+        summary: parts.join(" • "),
+        timestamp: formatTime(event.created_at) ?? "Unknown time",
+      };
+    });
+  }, [detail?.integrity_events, questionIndexById]);
 
   useEffect(() => {
     if (!selectedSubmissionId) return;
@@ -245,6 +452,47 @@ export function AssessmentResultsClient({ assessmentId }: { assessmentId: string
       setError(e instanceof Error ? e.message : "Re-score failed.");
     } finally {
       setRescoring(false);
+    }
+  }
+
+  async function handleRelease() {
+    if (!selectedSubmissionId || !detail) return;
+    setReleaseWorking(true);
+    setReleaseError(null);
+    setReleaseNotice(null);
+    try {
+      const overrideValue = releaseOverride.trim();
+      const override = overrideValue.length ? Number(overrideValue) : null;
+      if (overrideValue.length > 0 && Number.isNaN(override)) {
+        throw new Error("Final score override must be a number.");
+      }
+      if (typeof override === "number" && (override < 0 || override > 5)) {
+        throw new Error("Final score override must be between 0 and 5.");
+      }
+
+      const res = await fetch(`/api/submissions/${selectedSubmissionId}/release`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          teacher_comment: releaseComment.trim() || null,
+          final_score_override: typeof override === "number" ? override : null,
+        }),
+      });
+      const data = (await res.json().catch(() => null)) as { error?: unknown } | null;
+      if (!res.ok) throw new Error(typeof data?.error === "string" ? data.error : "Release failed.");
+      const refreshed = await fetch(`/api/submissions/${selectedSubmissionId}/responses`, { cache: "no-store" });
+      const refreshedData = (await refreshed.json().catch(() => null)) as unknown;
+      if (refreshed.ok && isSubmissionDetail(refreshedData)) setDetail(refreshedData);
+      const resList = await fetch(`/api/assessments/${assessmentId}/submissions`, { cache: "no-store" });
+      const listData = (await resList.json().catch(() => null)) as
+        | { submissions?: SubmissionRow[]; error?: string }
+        | null;
+      if (resList.ok && listData?.submissions) setSubmissions(listData.submissions);
+      setReleaseNotice("Feedback released to student.");
+    } catch (e) {
+      setReleaseError(e instanceof Error ? e.message : "Release failed.");
+    } finally {
+      setReleaseWorking(false);
     }
   }
 
@@ -342,11 +590,27 @@ export function AssessmentResultsClient({ assessmentId }: { assessmentId: string
             <CardDescription>Pick a student attempt to review.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
-            {!submissions.length ? (
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-xs text-[var(--muted)]">
+                {showFlaggedOnly ? "Showing flagged submissions only." : "Showing all submissions."}
+              </div>
+              <div className="flex items-center gap-2 text-xs text-[var(--muted)]">
+                <span>Flagged only</span>
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border border-[var(--border)]"
+                  checked={showFlaggedOnly}
+                  onChange={(e) => setShowFlaggedOnly(e.target.checked)}
+                  aria-label="Show flagged submissions only"
+                />
+              </div>
+            </div>
+            {!visibleSubmissions.length ? (
               <div className="text-sm text-[var(--muted)]">No submissions yet.</div>
             ) : (
-              submissions.map((s) => {
+              visibleSubmissions.map((s) => {
                 const active = s.id === selectedSubmissionId;
+                const flagCount = s.integrity_flag_count ?? 0;
                 return (
                   <button
                     key={s.id}
@@ -376,6 +640,16 @@ export function AssessmentResultsClient({ assessmentId }: { assessmentId: string
                               : s.scoring_status === "error"
                                 ? "SCORE ERROR"
                                 : "SCORING…"}
+                          </div>
+                        ) : null}
+                        {s.review_status === "published" ? (
+                          <div className="rounded-full border px-2 py-0.5 text-[11px] border-[var(--border)] text-[var(--primary)]">
+                            PUBLISHED
+                          </div>
+                        ) : null}
+                        {flagCount > 0 ? (
+                          <div className="rounded-full border px-2 py-0.5 text-[11px] border-[var(--border)] text-[var(--danger)]">
+                            {flagCount} FLAG{flagCount === 1 ? "" : "S"}
                           </div>
                         ) : null}
                       </div>
@@ -415,6 +689,40 @@ export function AssessmentResultsClient({ assessmentId }: { assessmentId: string
             {detailLoading ? <div className="text-sm text-[var(--muted)]">Loading submission…</div> : null}
             {!detailLoading && detail ? (
               <div className="space-y-4">
+                <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-3 text-xs">
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">
+                    Integrity Flags
+                  </div>
+                  {integrityFlags.length ? (
+                    <div className="mt-2 space-y-1 text-[var(--text)]">
+                      {integrityFlags.map((flag) => (
+                        <div key={flag.id} className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="text-xs font-medium">{flag.label}</div>
+                          <div className="text-[11px] text-[var(--muted)]">{flag.details}</div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="mt-2 text-[11px] text-[var(--muted)]">No integrity flags detected.</div>
+                  )}
+                </div>
+                <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-3 text-xs">
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">
+                    Integrity Timeline
+                  </div>
+                  {integrityTimeline.length ? (
+                    <div className="mt-2 space-y-1 text-[var(--text)]">
+                      {integrityTimeline.map((event) => (
+                        <div key={event.id} className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="text-xs">{event.summary}</div>
+                          <div className="text-[11px] text-[var(--muted)]">{event.timestamp}</div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="mt-2 text-[11px] text-[var(--muted)]">No integrity events logged.</div>
+                  )}
+                </div>
                 {detail.submission.integrity_pledge_accepted_at ? (
                   <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-3 text-xs text-[var(--muted)]">
                     Integrity pledge accepted {formatTime(detail.submission.integrity_pledge_accepted_at)}
@@ -433,6 +741,63 @@ export function AssessmentResultsClient({ assessmentId }: { assessmentId: string
                     Scoring in progress… this view auto-refreshes.
                   </div>
                 ) : null}
+                <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <div className="text-sm font-semibold text-[var(--text)]">Release grade</div>
+                      <div className="text-xs text-[var(--muted)]">Publish verified feedback to the student.</div>
+                    </div>
+                    {detail.submission.review_status === "published" ? (
+                      <span className="rounded-full border border-[var(--border)] px-2 py-1 text-xs text-[var(--primary)]">
+                        Published
+                      </span>
+                    ) : null}
+                  </div>
+                  {detail.submission.published_at ? (
+                    <div className="mt-2 text-xs text-[var(--muted)]">
+                      Published {formatTime(detail.submission.published_at) ?? ""}
+                    </div>
+                  ) : null}
+                  <div className="mt-3 space-y-2">
+                    <label className="text-xs font-semibold text-[var(--muted)]">Teacher growth note</label>
+                    <textarea
+                      rows={3}
+                      className="w-full rounded-md border border-[var(--border)] bg-[var(--surface)] p-3 text-sm text-[var(--text)]"
+                      placeholder="Add encouragement, specific feedback, or next steps."
+                      value={releaseComment}
+                      onChange={(e) => setReleaseComment(e.target.value)}
+                    />
+                  </div>
+                  <div className="mt-3 space-y-2">
+                    <label className="text-xs font-semibold text-[var(--muted)]">Final score override (optional)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={5}
+                      step={0.1}
+                      className="h-10 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 text-sm text-[var(--text)]"
+                      placeholder="Leave blank to use the computed average."
+                      value={releaseOverride}
+                      onChange={(e) => setReleaseOverride(e.target.value)}
+                    />
+                  </div>
+                  {detail.submission.scoring_status !== "complete" ? (
+                    <div className="mt-3 text-xs text-[var(--muted)]">
+                      Scoring must complete before you can release feedback.
+                    </div>
+                  ) : null}
+                  {releaseError ? <div className="mt-3 text-sm text-[var(--danger)]">{releaseError}</div> : null}
+                  {releaseNotice ? <div className="mt-3 text-sm text-[var(--primary)]">{releaseNotice}</div> : null}
+                  <div className="mt-4 flex items-center justify-end">
+                    <Button
+                      type="button"
+                      disabled={releaseWorking || detail.submission.scoring_status !== "complete"}
+                      onClick={handleRelease}
+                    >
+                      {releaseWorking ? "Releasing…" : "Release Grade"}
+                    </Button>
+                  </div>
+                </div>
                 {detail.questions.map((q) => (
                   <div key={q.id} className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-4">
                     <div className="flex flex-wrap items-center justify-between gap-3">

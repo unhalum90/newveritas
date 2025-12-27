@@ -1,4 +1,5 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { logOpenAiError } from "@/lib/ops/api-logging";
 
 function requireEnv(name: string) {
   const v = process.env[name];
@@ -110,37 +111,98 @@ async function geminiGenerateJson(model: string, system: string, parts: Array<Re
 async function openaiGenerateJson(model: string, system: string, user: string) {
   const apiKey = requireEnv("OPENAI_API_KEY");
 
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${apiKey}`,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
+  const startedAt = Date.now();
+  let res: Response;
+  try {
+    res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${apiKey}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: user },
+        ],
+      }),
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    await logOpenAiError({
       model,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user },
-      ],
-    }),
-  });
+      route: "/v1/chat/completions",
+      statusCode: null,
+      latencyMs: Date.now() - startedAt,
+      metadata: { error: message },
+    });
+    throw error;
+  }
 
   const data = (await res.json().catch(() => null)) as
     | {
         error?: { message?: unknown };
         choices?: Array<{ message?: { content?: unknown } }>;
+        usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
       }
     | null;
+  const usage = data?.usage;
 
   if (!res.ok) {
     const msg = typeof data?.error?.message === "string" ? data.error.message : "OpenAI request failed.";
+    await logOpenAiError({
+      model,
+      route: "/v1/chat/completions",
+      statusCode: res.status,
+      latencyMs: Date.now() - startedAt,
+      promptTokens: usage?.prompt_tokens ?? null,
+      completionTokens: usage?.completion_tokens ?? null,
+      totalTokens: usage?.total_tokens ?? null,
+      metadata: { error: msg },
+    });
     throw new Error(msg);
   }
 
   const text = data?.choices?.[0]?.message?.content;
   if (typeof text !== "string" || !text.trim()) throw new Error("OpenAI returned empty response.");
   return JSON.parse(text) as unknown;
+}
+
+const PAUSE_MARKER_SECONDS = 5;
+const PAUSE_MARKER_REGEX = /\(pause\s+\d+(?:\.\d+)?s\)/gi;
+
+function stripPauseMarkers(text: string) {
+  return text.replace(PAUSE_MARKER_REGEX, " ").replace(/\s+/g, " ").trim();
+}
+
+function buildTranscriptWithPauses(data: unknown) {
+  const obj = data as { segments?: Array<{ words?: Array<{ start?: number; end?: number; word?: string }> }> };
+  const words: Array<{ start: number; end: number; word: string }> = [];
+  for (const segment of obj.segments ?? []) {
+    for (const entry of segment.words ?? []) {
+      if (typeof entry.start !== "number" || typeof entry.end !== "number") continue;
+      if (typeof entry.word !== "string") continue;
+      const text = entry.word.trim();
+      if (!text) continue;
+      words.push({ start: entry.start, end: entry.end, word: text });
+    }
+  }
+  if (!words.length) return null;
+  const parts: string[] = [];
+  let prevEnd: number | null = null;
+  for (const word of words) {
+    if (prevEnd != null) {
+      const gap = word.start - prevEnd;
+      if (gap >= PAUSE_MARKER_SECONDS) {
+        parts.push(`(pause ${gap.toFixed(1)}s)`);
+      }
+    }
+    parts.push(word.word);
+    prevEnd = word.end;
+  }
+  return parts.join(" ").replace(/\s+/g, " ").trim();
 }
 
 async function transcribeWithOpenAi(audioBytes: Buffer, mimeType: string) {
@@ -159,22 +221,48 @@ async function transcribeWithOpenAi(audioBytes: Buffer, mimeType: string) {
   const filename = `audio.${ext}`;
 
   form.append("model", model);
+  form.append("response_format", "verbose_json");
+  form.append("timestamp_granularities[]", "word");
   form.append("file", new Blob([new Uint8Array(audioBytes)], { type: mimeType }), filename);
 
-  const res = await fetch("https://api.openai.com/v1/audio/transcriptions", {
-    method: "POST",
-    headers: { authorization: `Bearer ${apiKey}` },
-    body: form,
-  });
+  const startedAt = Date.now();
+  let res: Response;
+  try {
+    res = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+      method: "POST",
+      headers: { authorization: `Bearer ${apiKey}` },
+      body: form,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    await logOpenAiError({
+      model,
+      route: "/v1/audio/transcriptions",
+      statusCode: null,
+      latencyMs: Date.now() - startedAt,
+      metadata: { error: message },
+    });
+    throw error;
+  }
 
   const data = (await res.json().catch(() => null)) as
-    | { error?: { message?: unknown }; text?: unknown }
+    | { error?: { message?: unknown }; text?: unknown; segments?: unknown }
     | null;
 
   if (!res.ok) {
     const msg = typeof data?.error?.message === "string" ? data.error.message : "OpenAI transcription failed.";
+    await logOpenAiError({
+      model,
+      route: "/v1/audio/transcriptions",
+      statusCode: res.status,
+      latencyMs: Date.now() - startedAt,
+      metadata: { error: msg },
+    });
     throw new Error(msg);
   }
+
+  const transcriptWithPauses = buildTranscriptWithPauses(data);
+  if (transcriptWithPauses) return transcriptWithPauses;
 
   const transcript = data?.text;
   if (typeof transcript !== "string") throw new Error("OpenAI transcription returned empty response.");
@@ -400,6 +488,7 @@ export async function scoreSubmission(submissionId: string) {
       attempted += 1;
 
       let transcript = resp.transcript ?? "";
+      let scoringTranscript = stripPauseMarkers(transcript);
       if (!transcript) {
         const bucket = resp.storage_bucket || bucketFallback;
         const { data: file, error: dlError } = await admin.storage.from(bucket).download(resp.storage_path);
@@ -409,6 +498,7 @@ export async function scoreSubmission(submissionId: string) {
         try {
           transcript = await transcribeAudio(buf, mime);
           await admin.from("submission_responses").update({ transcript }).eq("id", resp.id);
+          scoringTranscript = stripPauseMarkers(transcript);
         } catch (e) {
           const msg = e instanceof Error ? e.message : "Transcription failed.";
           console.error("Transcription failed", { submissionId, questionId: q.id }, e);
@@ -418,7 +508,7 @@ export async function scoreSubmission(submissionId: string) {
         }
       }
 
-      if (!transcript.trim()) {
+      if (!scoringTranscript.trim()) {
         errorCount += 1;
         firstError ??= "Empty transcript.";
         continue;
@@ -429,7 +519,7 @@ export async function scoreSubmission(submissionId: string) {
         if (process.env.OPENAI_API_KEY) {
           primary = await scoreWithOpenAi({
             questionText: q.question_text,
-            transcript,
+            transcript: scoringTranscript,
             rubricReasoning,
             rubricEvidence,
           });
@@ -441,7 +531,7 @@ export async function scoreSubmission(submissionId: string) {
           }
           primary = await scoreWithGemini({
             questionText: q.question_text,
-            transcript,
+            transcript: scoringTranscript,
             rubricReasoning,
             rubricEvidence,
           });

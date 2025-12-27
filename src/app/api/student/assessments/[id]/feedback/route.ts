@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createRouteSupabaseClient } from "@/lib/supabase/route";
 
-function getBucket() {
+function getRecordingsBucket() {
   return process.env.SUPABASE_RECORDINGS_BUCKET || "student-recordings";
 }
 
@@ -11,75 +11,87 @@ function getEvidenceBucket() {
   return process.env.SUPABASE_EVIDENCE_BUCKET || "student-evidence";
 }
 
-export async function GET(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
-  const { id: submissionId } = await ctx.params;
-  const { supabase, pendingCookies } = createRouteSupabaseClient(request);
+function avg(nums: number[]) {
+  if (!nums.length) return null;
+  return nums.reduce((a, b) => a + b, 0) / nums.length;
+}
 
+export async function GET(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const { id: assessmentId } = await ctx.params;
+  const { supabase, pendingCookies } = createRouteSupabaseClient(request);
   const { data, error } = await supabase.auth.getUser();
   if (error || !data.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const role = (data.user.user_metadata as { role?: string } | undefined)?.role;
-  if (role === "student") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (role !== "student") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  // Ensure teacher can see this submission via RLS (scoped to their assessment/workspace).
-  const { data: submission, error: subError } = await supabase
+  const admin = createSupabaseAdminClient();
+  const { data: student, error: sError } = await admin
+    .from("students")
+    .select("id, class_id, first_name, last_name")
+    .eq("auth_user_id", data.user.id)
+    .maybeSingle();
+
+  if (sError) return NextResponse.json({ error: sError.message }, { status: 500 });
+  if (!student) return NextResponse.json({ error: "Student record not found." }, { status: 404 });
+
+  const { data: assessment, error: aError } = await admin
+    .from("assessments")
+    .select("id, class_id, title, instructions")
+    .eq("id", assessmentId)
+    .maybeSingle();
+
+  if (aError) return NextResponse.json({ error: aError.message }, { status: 500 });
+  if (!assessment) return NextResponse.json({ error: "Not found." }, { status: 404 });
+  if (assessment.class_id !== student.class_id) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  const { data: submission, error: subError } = await admin
     .from("submissions")
     .select(
-      "id, assessment_id, student_id, status, started_at, submitted_at, scoring_status, scoring_started_at, scored_at, scoring_error, review_status, published_at, final_score_override, teacher_comment, integrity_pledge_accepted_at, integrity_pledge_ip_address, integrity_pledge_version",
+      "id, status, submitted_at, review_status, published_at, teacher_comment, final_score_override",
     )
-    .eq("id", submissionId)
+    .eq("assessment_id", assessmentId)
+    .eq("student_id", student.id)
+    .eq("status", "submitted")
+    .order("submitted_at", { ascending: false })
+    .limit(1)
     .maybeSingle();
 
   if (subError) return NextResponse.json({ error: subError.message }, { status: 500 });
-  if (!submission) return NextResponse.json({ error: "Not found." }, { status: 404 });
+  if (!submission) return NextResponse.json({ error: "Submission not found." }, { status: 404 });
+  if (submission.review_status !== "published") {
+    return NextResponse.json({ error: "Feedback not released yet." }, { status: 403 });
+  }
 
-  const { data: student, error: stError } = await supabase
-    .from("students")
-    .select("id, first_name, last_name")
-    .eq("id", submission.student_id)
-    .maybeSingle();
-
-  if (stError) return NextResponse.json({ error: stError.message }, { status: 500 });
-
-  const { data: questions, error: qError } = await supabase
+  const { data: questions, error: qError } = await admin
     .from("assessment_questions")
     .select("id, order_index, question_text, question_type")
-    .eq("assessment_id", submission.assessment_id)
+    .eq("assessment_id", assessmentId)
     .order("order_index", { ascending: true });
 
   if (qError) return NextResponse.json({ error: qError.message }, { status: 500 });
 
-  const { data: responses, error: rError } = await supabase
+  const { data: responses, error: rError } = await admin
     .from("submission_responses")
     .select("id, submission_id, question_id, storage_path, mime_type, duration_seconds, created_at, transcript")
-    .eq("submission_id", submissionId);
+    .eq("submission_id", submission.id);
 
   if (rError) return NextResponse.json({ error: rError.message }, { status: 500 });
 
-  const { data: evidenceRows, error: eError } = await supabase
+  const { data: evidenceRows, error: eError } = await admin
     .from("evidence_images")
     .select("question_id, storage_bucket, storage_path, mime_type, file_size_bytes, width_px, height_px, uploaded_at")
-    .eq("submission_id", submissionId);
+    .eq("submission_id", submission.id);
   if (eError) return NextResponse.json({ error: eError.message }, { status: 500 });
 
-  const { data: scores, error: scError } = await supabase
+  const { data: scores, error: scError } = await admin
     .from("question_scores")
     .select("question_id, scorer_type, score, justification")
-    .eq("submission_id", submissionId);
+    .eq("submission_id", submission.id);
 
   if (scError) return NextResponse.json({ error: scError.message }, { status: 500 });
 
-  const { data: integrityEvents, error: integrityError } = await supabase
-    .from("integrity_events")
-    .select("id, event_type, duration_ms, question_id, created_at, metadata")
-    .eq("submission_id", submissionId)
-    .order("created_at", { ascending: true });
-
-  if (integrityError) return NextResponse.json({ error: integrityError.message }, { status: 500 });
-
-  const admin = createSupabaseAdminClient();
-  const bucket = getBucket();
-
+  const bucket = getRecordingsBucket();
   const responseByQuestion = new Map<
     string,
     {
@@ -142,7 +154,6 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
       reasoning: { score: null, justification: null },
       evidence: { score: null, justification: null },
     };
-
     if (row.scorer_type === "reasoning") {
       curr.reasoning = { score: row.score ?? null, justification: row.justification ?? null };
     } else if (row.scorer_type === "evidence") {
@@ -151,12 +162,28 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
     scoresByQuestion.set(key, curr);
   }
 
+  const scoreValues = (scores ?? []).map((s) => s.score).filter((n): n is number => typeof n === "number");
+  const computedScore = avg(scoreValues);
+  const finalScore =
+    typeof submission.final_score_override === "number" ? submission.final_score_override : computedScore;
+
   const res = NextResponse.json({
-    submission: {
-      ...submission,
-      student_name: `${student?.first_name ?? ""} ${student?.last_name ?? ""}`.trim() || "Student",
+    assessment: {
+      id: assessment.id,
+      title: assessment.title,
+      instructions: assessment.instructions,
     },
-    integrity_events: integrityEvents ?? [],
+    student: {
+      name: `${student.first_name ?? ""} ${student.last_name ?? ""}`.trim() || "Student",
+    },
+    submission: {
+      id: submission.id,
+      submitted_at: submission.submitted_at,
+      published_at: submission.published_at,
+      teacher_comment: submission.teacher_comment ?? null,
+      final_score: finalScore,
+      review_status: submission.review_status,
+    },
     questions: (questions ?? []).map((q) => ({
       ...q,
       response: responseByQuestion.get(q.id) ?? null,

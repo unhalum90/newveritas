@@ -32,7 +32,6 @@ export default async function DashboardPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-[var(--text)]">Dashboard</h1>
-          <p className="mt-1 text-sm text-[var(--muted)]">What should I do next?</p>
         </div>
         <Link href="/classes/new">
           <Button type="button">+ Create Class</Button>
@@ -42,7 +41,9 @@ export default async function DashboardPage() {
       <Card>
         <CardHeader>
           <CardTitle>Classes</CardTitle>
-          <CardDescription>Set up your first class to begin preparing assessments.</CardDescription>
+          {!hasClasses ? (
+            <CardDescription>Set up your first class to begin preparing assessments.</CardDescription>
+          ) : null}
         </CardHeader>
         <CardContent>
           {classesError ? (

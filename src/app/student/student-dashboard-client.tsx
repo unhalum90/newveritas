@@ -18,7 +18,16 @@ type AssessmentListItem = {
   title: string;
   published_at: string | null;
   asset_url: string | null;
-  latest_submission: { id: string; status: "started" | "submitted"; started_at: string; submitted_at: string | null } | null;
+  latest_submission:
+    | {
+        id: string;
+        status: "started" | "submitted";
+        started_at: string;
+        submitted_at: string | null;
+        review_status?: string | null;
+        published_at?: string | null;
+      }
+    | null;
 };
 
 function formatDate(d: string | null) {
@@ -38,6 +47,11 @@ export function StudentDashboardClient() {
     if (!student) return null;
     return `${student.first_name} ${student.last_name}`.trim();
   }, [student]);
+
+  const feedbackReady = useMemo(
+    () => assessments.some((a) => a.latest_submission?.review_status === "published"),
+    [assessments],
+  );
 
   useEffect(() => {
     (async () => {
@@ -80,6 +94,17 @@ export function StudentDashboardClient() {
 
         {error ? <div className="text-sm text-red-600">{error}</div> : null}
         {loading ? <div className="text-sm text-zinc-600">Loading…</div> : null}
+        {!loading && feedbackReady ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>New feedback available</CardTitle>
+              <CardDescription>Your teacher released verified feedback.</CardDescription>
+            </CardHeader>
+            <CardContent className="text-sm text-zinc-600">
+              Open any assessment marked “Feedback ready” to see your notes.
+            </CardContent>
+          </Card>
+        ) : null}
 
         {!loading && !assessments.length ? (
           <Card>
@@ -103,13 +128,25 @@ export function StudentDashboardClient() {
                   <CardTitle>{a.title}</CardTitle>
                   <CardDescription>
                     {formatDate(a.published_at) ? `Published ${formatDate(a.published_at)}` : "Published"}
-                    {a.latest_submission ? ` • Last: ${a.latest_submission.status}` : ""}
+                    {a.latest_submission
+                      ? ` • ${a.latest_submission.review_status === "published" ? "Feedback ready" : `Last: ${a.latest_submission.status}`}`
+                      : ""}
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <Link href={`/student/assessments/${a.id}`}>
+                  <Link
+                    href={
+                      a.latest_submission?.review_status === "published"
+                        ? `/student/assessments/${a.id}/feedback`
+                        : `/student/assessments/${a.id}`
+                    }
+                  >
                     <Button type="button" className="w-full">
-                      {a.latest_submission?.status === "started" ? "Continue" : "Open"}
+                      {a.latest_submission?.review_status === "published"
+                        ? "View Feedback"
+                        : a.latest_submission?.status === "started"
+                          ? "Continue"
+                          : "Open"}
                     </Button>
                   </Link>
                 </CardContent>
@@ -121,4 +158,3 @@ export function StudentDashboardClient() {
     </div>
   );
 }
-

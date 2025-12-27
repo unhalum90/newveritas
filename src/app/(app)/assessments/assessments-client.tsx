@@ -19,9 +19,11 @@ type AssessmentRow = {
 export function AssessmentsClient({
   initialAssessments,
   classNameById,
+  submissionStatsById,
 }: {
   initialAssessments: AssessmentRow[];
   classNameById: Record<string, string>;
+  submissionStatsById: Record<string, { completed: number; needsReview: number }>;
 }) {
   const router = useRouter();
   const [assessments, setAssessments] = useState<AssessmentRow[]>(initialAssessments);
@@ -54,6 +56,7 @@ export function AssessmentsClient({
       {error ? <div className="text-sm text-[var(--danger)]">{error}</div> : null}
       {assessments.map((a) => {
         const canDelete = a.status === "draft";
+        const stats = submissionStatsById[a.id] ?? { completed: 0, needsReview: 0 };
         return (
           <Card key={a.id}>
             <CardHeader>
@@ -69,7 +72,7 @@ export function AssessmentsClient({
                     {" • "}
                     {a.status.toUpperCase()}
                     {" • "}
-                    {a.authoring_mode}
+                    {stats.completed} complete / {stats.needsReview} new
                   </CardDescription>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">

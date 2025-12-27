@@ -1104,7 +1104,7 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
                                     <div className="flex items-end justify-end sm:justify-start">
                                       <Button
                                         type="button"
-                                        variant="secondary"
+                                        variant={evidenceUpload === "required" ? "secondary" : "primary"}
                                         disabled={saving || readonly}
                                         onClick={() => void updateEvidenceUpload(q.id, evidenceUpload === "required" ? "optional" : "required")}
                                       >

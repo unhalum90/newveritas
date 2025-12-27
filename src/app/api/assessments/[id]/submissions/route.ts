@@ -8,6 +8,9 @@ function avg(nums: number[]) {
   return s / nums.length;
 }
 
+const TAB_SWITCH_COUNT_THRESHOLD = 3;
+const TAB_SWITCH_DURATION_THRESHOLD_MS = 20000;
+
 export async function GET(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id: assessmentId } = await ctx.params;
   const { supabase, pendingCookies } = createRouteSupabaseClient(request);
@@ -31,7 +34,7 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
   const { data: submissions, error: sError } = await supabase
     .from("submissions")
     .select(
-      "id, student_id, status, started_at, submitted_at, scoring_status, scoring_started_at, scored_at, scoring_error",
+      "id, student_id, status, started_at, submitted_at, scoring_status, scoring_started_at, scored_at, scoring_error, review_status, published_at, final_score_override, teacher_comment",
     )
     .eq("assessment_id", assessmentId)
     .order("started_at", { ascending: false });
@@ -79,6 +82,49 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
       : { data: [], error: null };
 
   if (scError) return NextResponse.json({ error: scError.message }, { status: 500 });
+
+  const { data: integrityEvents, error: ieError } =
+    submissionIds.length > 0
+      ? await supabase
+          .from("integrity_events")
+          .select("submission_id, event_type, duration_ms")
+          .in("submission_id", submissionIds)
+      : { data: [], error: null };
+
+  if (ieError) return NextResponse.json({ error: ieError.message }, { status: 500 });
+
+  const integrityBySubmission = new Map<
+    string,
+    {
+      fast_start: number;
+      slow_start: number;
+      screenshot_attempt: number;
+      tab_switch_count: number;
+      tab_switch_total_ms: number;
+    }
+  >();
+
+  for (const row of integrityEvents ?? []) {
+    const curr =
+      integrityBySubmission.get(row.submission_id) ?? {
+        fast_start: 0,
+        slow_start: 0,
+        screenshot_attempt: 0,
+        tab_switch_count: 0,
+        tab_switch_total_ms: 0,
+      };
+    if (row.event_type === "tab_switch") {
+      curr.tab_switch_count += 1;
+      curr.tab_switch_total_ms += typeof row.duration_ms === "number" ? row.duration_ms : 0;
+    } else if (row.event_type === "fast_start") {
+      curr.fast_start += 1;
+    } else if (row.event_type === "slow_start") {
+      curr.slow_start += 1;
+    } else if (row.event_type === "screenshot_attempt") {
+      curr.screenshot_attempt += 1;
+    }
+    integrityBySubmission.set(row.submission_id, curr);
+  }
 
   const scoreBuckets = new Map<
     string,
@@ -131,6 +177,16 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
       avg_score: avg(scoreBuckets.get(s.id)?.all ?? []),
       reasoning_avg: avg(scoreBuckets.get(s.id)?.reasoning ?? []),
       evidence_avg: avg(scoreBuckets.get(s.id)?.evidence ?? []),
+      integrity_flag_count: (() => {
+        const summary = integrityBySubmission.get(s.id);
+        if (!summary) return 0;
+        const tabSwitchFlag =
+          summary.tab_switch_count > TAB_SWITCH_COUNT_THRESHOLD ||
+          summary.tab_switch_total_ms > TAB_SWITCH_DURATION_THRESHOLD_MS
+            ? 1
+            : 0;
+        return summary.fast_start + summary.slow_start + summary.screenshot_attempt + tabSwitchFlag;
+      })(),
     })),
   });
   pendingCookies.forEach(({ name, value, options }) => res.cookies.set(name, value, options));
