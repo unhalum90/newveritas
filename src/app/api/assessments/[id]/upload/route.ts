@@ -11,7 +11,7 @@ async function extractPdfText(bytes: Uint8Array) {
   const globalWithDom = globalThis as typeof globalThis & { DOMMatrix?: unknown };
   if (!globalWithDom.DOMMatrix) {
     try {
-      const { DOMMatrix } = await import("dommatrix");
+      const { default: DOMMatrix } = await import("dommatrix");
       globalWithDom.DOMMatrix = DOMMatrix;
     } catch (error) {
       console.warn("PDF extract: DOMMatrix polyfill failed.", error);

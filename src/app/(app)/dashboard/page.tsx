@@ -98,9 +98,11 @@ export default async function DashboardPage() {
     }
   }
 
+  const pickSingle = <T,>(value?: T | T[] | null) => (Array.isArray(value) ? value[0] ?? null : value ?? null);
+
   const lastActivityByClass = new Map<string, string>();
   for (const submission of activitySubmissions ?? []) {
-    const classId = submission.assessments?.class_id;
+    const classId = pickSingle(submission.assessments)?.class_id;
     const timestamp = submission.submitted_at ?? submission.created_at;
     if (!classId || !timestamp) continue;
     const existing = lastActivityByClass.get(classId);
@@ -169,15 +171,18 @@ export default async function DashboardPage() {
               <div className="text-sm text-[var(--muted)]">No submissions yet.</div>
             ) : (
               <div className="space-y-3">
-                {recentSubmissions.map((submission) => (
+                {recentSubmissions.map((submission) => {
+                  const assessment = pickSingle(submission.assessments);
+                  const student = pickSingle(submission.students);
+                  return (
                   <div
                     key={`${submission.assessment_id}-${submission.student_id}-${submission.submitted_at ?? submission.created_at ?? ""}`}
                     className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm"
                   >
                     <div>
-                      <div className="font-medium text-[var(--text)]">{submission.assessments?.title ?? "Assessment"}</div>
+                      <div className="font-medium text-[var(--text)]">{assessment?.title ?? "Assessment"}</div>
                       <div className="text-xs text-[var(--muted)]">
-                        {submission.students?.first_name ?? "Student"} {submission.students?.last_name ?? ""}
+                        {student?.first_name ?? "Student"} {student?.last_name ?? ""}
                       </div>
                     </div>
                     <div className="text-xs text-[var(--muted)]">
@@ -185,7 +190,8 @@ export default async function DashboardPage() {
                       {formatTimestamp(submission.submitted_at ?? submission.created_at)}
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </CardContent>
