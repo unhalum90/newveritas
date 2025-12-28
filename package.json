@@ -13,6 +13,8 @@
     "@supabase/ssr": "^0.7.0",
     "@supabase/supabase-js": "^2.57.0",
     "@tanstack/react-query": "^5.90.12",
+    "dommatrix": "^0.1.1",
+    "driver.js": "^1.4.0",
     "next": "16.0.10",
     "pdfjs-dist": "5.4.296",
     "react": "19.2.1",

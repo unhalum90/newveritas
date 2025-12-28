@@ -8,6 +8,16 @@ import { getSupabaseErrorMessage } from "@/lib/supabase/errors";
 export const runtime = "nodejs";
 
 async function extractPdfText(bytes: Uint8Array) {
+  const globalWithDom = globalThis as typeof globalThis & { DOMMatrix?: unknown };
+  if (!globalWithDom.DOMMatrix) {
+    try {
+      const { DOMMatrix } = await import("dommatrix");
+      globalWithDom.DOMMatrix = DOMMatrix;
+    } catch (error) {
+      console.warn("PDF extract: DOMMatrix polyfill failed.", error);
+    }
+  }
+
   // NOTE: We intentionally avoid `pdf-parse` here because under Next.js/Turbopack it can
   // trigger `pdfjs-dist` worker resolution errors ("Setting up fake worker failed...").
   // Using `pdfjs-dist` directly and forcing a resolvable worker module avoids Turbopack's

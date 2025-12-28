@@ -129,6 +129,16 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
   const readonly = assessment?.status !== "draft";
 
   useEffect(() => {
+    if (!dirty) return;
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [dirty]);
+
+  useEffect(() => {
     const next =
       typeof assessment?.assessment_integrity?.pledge_text === "string" ? assessment?.assessment_integrity?.pledge_text : "";
     setPledgeDraft(next ?? "");
@@ -478,6 +488,9 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
         <div className="flex items-center gap-2">
           <Button type="button" variant="secondary" disabled={saving} onClick={() => router.push("/assessments")}>
             Back
+          </Button>
+          <Button type="button" variant="secondary" onClick={() => window.open(`/student/assessments/${assessmentId}`, "_blank")}>
+            Preview as Student
           </Button>
           <Button type="button" variant="secondary" disabled={saving || readonly} onClick={saveDraft}>
             {saving ? "Saving…" : "Save Draft"}

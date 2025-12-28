@@ -87,9 +87,17 @@ export default async function AssessmentsPage() {
             <CardDescription>Create your first assessment to begin.</CardDescription>
           </CardHeader>
           <CardContent>
-            <Link href="/assessments/new">
-              <Button type="button">Create Assessment</Button>
-            </Link>
+            <div className="space-y-3 text-sm text-[var(--muted)]">
+              <p>Follow these steps to get your first assessment live:</p>
+              <ol className="list-decimal space-y-1 pl-5">
+                <li>Create a draft assessment.</li>
+                <li>Add questions or upload a PDF.</li>
+                <li>Publish it to your class.</li>
+              </ol>
+              <Link href="/assessments/new">
+                <Button type="button">Create Assessment</Button>
+              </Link>
+            </div>
           </CardContent>
         </Card>
       ) : (

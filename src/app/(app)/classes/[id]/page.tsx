@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { AddStudents } from "@/components/classes/add-students";
+import { StudentTable } from "@/components/classes/student-table";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -51,56 +52,14 @@ export default async function ClassDetailPage({ params }: { params: Promise<{ id
             <Link href="/student/login" className="text-[var(--text)] hover:underline">
               /student/login
             </Link>
-            . First login = create password.
+            . Copy links below to share student access.
           </CardDescription>
         </CardHeader>
         <CardContent>
           {!students?.length ? (
             <div className="text-sm text-[var(--muted)]">No students yet.</div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm text-[var(--text)]">
-                <thead>
-                  <tr className="text-left text-[var(--muted)]">
-                    <th className="py-2 pr-4">Name</th>
-                    <th className="py-2 pr-4">Email</th>
-                    <th className="py-2 pr-4">Code</th>
-                    <th className="py-2 pr-4">Student link</th>
-                    <th className="py-2 pr-4">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {students.map((s) => (
-                    <tr key={s.id} className="border-t border-[var(--border)]">
-                      <td className="py-2 pr-4">
-                        {s.first_name} {s.last_name}
-                      </td>
-                      <td className="py-2 pr-4">{s.email ?? "—"}</td>
-                      <td className="py-2 pr-4 font-mono">{s.student_code ?? "—"}</td>
-                      <td className="py-2 pr-4">
-                        {s.student_code ? (
-                          <Link
-                            className="text-[var(--text)] hover:underline"
-                            href={`/student/login?code=${encodeURIComponent(s.student_code)}`}
-                          >
-                            Login
-                          </Link>
-                        ) : (
-                          "—"
-                        )}
-                      </td>
-                      <td className="py-2 pr-4">
-                        {s.auth_user_id ? (
-                          <span className="text-[var(--primary)]">Activated</span>
-                        ) : (
-                          <span className="text-[var(--muted)]">Not activated</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <StudentTable classId={id} students={students} />
           )}
         </CardContent>
       </Card>

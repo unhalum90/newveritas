@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 
 import { AppHeader } from "@/components/app/app-header";
 import { DisabledAccount } from "@/components/auth/disabled-account";
+import { TeacherTour } from "@/components/onboarding/teacher-tour";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -41,6 +42,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <div className="veritas-wizard min-h-screen bg-[var(--background)] text-[var(--text)]">
       <AppHeader />
+      <TeacherTour />
       <main className="mx-auto max-w-6xl px-6 py-10">{children}</main>
     </div>
   );

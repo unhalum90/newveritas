@@ -43,6 +43,17 @@ export function AddStudents({ classId }: { classId: string }) {
 
   const parsedCsv = useMemo(() => parseCsv(csv), [csv]);
 
+  function downloadCsvTemplate() {
+    const template = "first_name,last_name,email\nAva,Ng,ava@example.com\nJon,Smith,jon@example.com\n";
+    const blob = new Blob([template], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "students_template.csv";
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
   async function submit(students: StudentInput[]) {
     setLoading(true);
     setError(null);
@@ -107,6 +118,9 @@ export function AddStudents({ classId }: { classId: string }) {
           <CardDescription>Format: `first_name,last_name,email` (email optional).</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
+          <Button type="button" variant="secondary" onClick={downloadCsvTemplate}>
+            Download CSV Template
+          </Button>
           <div className="space-y-2">
             <Label htmlFor="csv">Paste CSV</Label>
             <textarea
@@ -118,6 +132,20 @@ export function AddStudents({ classId }: { classId: string }) {
             />
           </div>
           <div className="text-xs text-[var(--muted)]">{parsedCsv.length} students parsed.</div>
+          {parsedCsv.length ? (
+            <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-3 text-xs text-[var(--muted)]">
+              <div className="font-medium text-[var(--text)]">Preview</div>
+              <ul className="mt-2 space-y-1">
+                {parsedCsv.slice(0, 5).map((student, idx) => (
+                  <li key={`${student.first_name}-${student.last_name}-${idx}`}>
+                    {student.first_name} {student.last_name}
+                    {student.email ? ` (${student.email})` : ""}
+                  </li>
+                ))}
+                {parsedCsv.length > 5 ? <li>+ {parsedCsv.length - 5} more</li> : null}
+              </ul>
+            </div>
+          ) : null}
           {error ? <p className="text-sm text-[var(--danger)]">{error}</p> : null}
           <Button type="button" disabled={loading || parsedCsv.length === 0} onClick={() => submit(parsedCsv)}>
             {loading ? "Adding…" : "Add Students"}

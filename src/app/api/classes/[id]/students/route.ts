@@ -41,6 +41,10 @@ const createSchema = z.object({
   students: z.array(studentSchema).min(1).max(500),
 });
 
+const deleteSchema = z.object({
+  student_ids: z.array(z.string().uuid()).min(1).max(500),
+});
+
 export async function POST(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
   const { supabase, pendingCookies } = createRouteSupabaseClient(request);
@@ -87,6 +91,29 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
   }
 
   const res = NextResponse.json({ ok: true, created });
+  pendingCookies.forEach(({ name, value, options }) => res.cookies.set(name, value, options));
+  return res;
+}
+
+export async function DELETE(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const { id } = await ctx.params;
+  const { supabase, pendingCookies } = createRouteSupabaseClient(request);
+  const { data, error } = await supabase.auth.getUser();
+  if (error || !data.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const body = await request.json().catch(() => null);
+  const parsed = deleteSchema.safeParse(body);
+  if (!parsed.success) return NextResponse.json({ error: "Invalid payload." }, { status: 400 });
+
+  const { error: deleteError } = await supabase
+    .from("students")
+    .delete()
+    .eq("class_id", id)
+    .in("id", parsed.data.student_ids);
+
+  if (deleteError) return NextResponse.json({ error: deleteError.message }, { status: 500 });
+
+  const res = NextResponse.json({ ok: true });
   pendingCookies.forEach(({ name, value, options }) => res.cookies.set(name, value, options));
   return res;
 }

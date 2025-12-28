@@ -7,12 +7,13 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
-function NavLink({ href, label }: { href: string; label: string }) {
+function NavLink({ href, label, dataTour }: { href: string; label: string; dataTour?: string }) {
   const pathname = usePathname();
   const active = pathname === href || pathname.startsWith(`${href}/`);
   return (
     <Link
       href={href}
+      data-tour={dataTour}
       className={`text-sm transition-colors ${
         active
           ? "font-semibold text-[var(--primary)]"
@@ -34,8 +35,9 @@ export function AppHeader() {
         </Link>
         <nav className="flex items-center gap-5">
           <NavLink href="/dashboard" label="Dashboard" />
-          <NavLink href="/classes" label="Classes" />
-          <NavLink href="/assessments" label="Assessments" />
+          <NavLink href="/classes" label="Classes" dataTour="nav-classes" />
+          <NavLink href="/assessments" label="Assessments" dataTour="nav-assessments" />
+          <NavLink href="/help" label="Help" dataTour="nav-help" />
           <NavLink href="/settings" label="Settings" />
           <Button
             variant="ghost"

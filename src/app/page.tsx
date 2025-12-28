@@ -1,10 +1,11 @@
 import Link from "next/link";
+import Image from "next/image";
 
 export default function Home() {
   const featureItems: Array<{ title: string; body: string }> = [
     { title: "Socratic follow-ups", body: "Adaptive probing based on what students actually say (per assessment)." },
     { title: "Question rotation", body: "Create multiple prompts that assess the same target skill to reduce sharing." },
-    { title: "Integrity settings", body: "Time limits and integrity options that don’t interrupt the student experience." },
+    { title: "Integrity settings", body: "Time limits and integrity options that don't interrupt the student experience." },
     { title: "Teacher-validated scoring", body: "AI assists, teachers maintain professional judgment." },
     { title: "Works on any device", body: "Students record on phones, tablets, or laptops." },
     { title: "Admin-ready", body: "School admin onboarding and bulk account workflows (where enabled)." },
@@ -14,7 +15,8 @@ export default function Home() {
 
   return (
     <div className="veritas-wizard min-h-screen bg-[var(--background)] text-[var(--text)]">
-      <header className="border-b border-[var(--border)] bg-[color-mix(in_oklab,var(--background),black_10%)]">
+      {/* Sticky Header */}
+      <header className="sticky top-0 z-50 border-b border-[var(--border)] bg-[color-mix(in_oklab,var(--background),black_10%)] backdrop-blur-sm">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
           <Link href="/" className="text-lg font-semibold tracking-tight">
             SayVeritas
@@ -51,15 +53,16 @@ export default function Home() {
       </header>
 
       <main>
-        {/* Hero */}
+        {/* Hero - DARK BACKGROUND */}
         <section className="border-b border-[var(--border)]">
-          <div className="mx-auto max-w-6xl px-6 py-14 md:py-20">
-            <div className="grid gap-10 md:grid-cols-2 md:items-center">
+          <div className="mx-auto max-w-6xl px-6 py-16 md:py-24">
+            <div className="grid gap-12 md:grid-cols-2 md:items-center">
+              {/* Left Column - Content */}
               <div>
                 <p className="mb-3 inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-xs text-[var(--muted)]">
                   Oral assessment • AI-assisted scoring • Teacher-verified
                 </p>
-                <div className="mb-5 flex flex-wrap gap-2">
+                <div className="mb-6 flex flex-wrap gap-2">
                   <span className="rounded-full border border-[color-mix(in_oklab,var(--primary),white_35%)] bg-[color-mix(in_oklab,var(--primary),black_75%)] px-3 py-1 text-xs text-[color-mix(in_oklab,white,black_8%)]">
                     AI scoring
                   </span>
@@ -73,23 +76,27 @@ export default function Home() {
                     Mobile-ready
                   </span>
                 </div>
-                <h1 className="text-4xl font-semibold leading-tight tracking-tight md:text-5xl">
-                  Stop grading. Start teaching.
+                
+                {/* ENLARGED HERO HEADLINE - was 4xl/5xl, now 5xl/7xl */}
+                <h1 className="text-5xl font-bold leading-tight tracking-tight md:text-7xl">
+                  Stop grading. <br />
+                  <span className="text-[var(--primary)]">Start teaching.</span>
                 </h1>
-                <p className="mt-4 text-base leading-relaxed text-[var(--muted)] md:text-lg">
+                
+                <p className="mt-6 text-lg leading-relaxed text-[var(--muted)] md:text-xl">
                   AI-powered oral assessment that scores student understanding in minutes—so you can focus on the students who
                   need you most.
                 </p>
-                <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+                <div className="mt-8 flex flex-col gap-3 sm:flex-row">
                   <a
                     href="#how"
-                    className="inline-flex h-11 items-center justify-center rounded-md bg-[var(--primary)] px-5 text-base text-white hover:opacity-90"
+                    className="inline-flex h-12 items-center justify-center rounded-md bg-[var(--primary)] px-6 text-base font-medium text-white hover:opacity-90"
                   >
                     See how it works
                   </a>
                   <a
                     href="mailto:hello@edusynapse.org?subject=SayVeritas%20Early%20Access"
-                    className="inline-flex h-11 items-center justify-center rounded-md border border-[var(--border)] bg-[var(--surface)] px-5 text-base hover:opacity-90"
+                    className="inline-flex h-12 items-center justify-center rounded-md border-2 border-[var(--border)] bg-transparent px-6 text-base hover:bg-[var(--surface)]"
                   >
                     Request early access
                   </a>
@@ -103,249 +110,524 @@ export default function Home() {
                 </p>
               </div>
 
-              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5">
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="rounded-lg border border-[var(--border)] bg-[color-mix(in_oklab,var(--surface),black_10%)] p-4">
-                    <p className="text-xs font-medium text-[var(--muted)]">Before</p>
-                    <p className="mt-2 text-sm text-[var(--text)]">Stack of grading. Late nights. Slow interventions.</p>
-                    <p className="mt-3 text-xs text-[var(--muted)]">“I’ll grade this weekend…”</p>
+              {/* Right Column - Screenshot Placeholder */}
+              <div className="relative">
+                {/* IMAGE PLACEHOLDER: Large annotated screenshot of teacher dashboard */}
+                {/* Recommended: 1200x800px screenshot showing:
+                    - AI score (88/100) with override button
+                    - Reasoning analysis panel
+                    - Integrity flags section
+                    Add callout annotations pointing to these features */}
+                <div className="relative overflow-hidden rounded-xl border-2 border-[var(--primary)] bg-[var(--surface)] shadow-2xl">
+                  <div className="flex h-[500px] items-center justify-center bg-gradient-to-br from-[var(--surface)] to-[color-mix(in_oklab,var(--surface),black_20%)]">
+                    <div className="text-center">
+                      <div className="mx-auto mb-4 h-24 w-24 rounded-full bg-[var(--primary)] opacity-20" />
+                      <p className="text-sm font-medium text-[var(--muted)]">
+                        📸 Teacher Dashboard Screenshot
+                      </p>
+                      <p className="mt-2 text-xs text-[var(--muted)]">
+                        Show: AI score, reasoning analysis, integrity flags
+                      </p>
+                    </div>
                   </div>
-                  <div className="rounded-lg border border-[var(--border)] bg-[color-mix(in_oklab,var(--surface),black_4%)] p-4">
-                    <p className="text-xs font-medium text-[var(--muted)]">After</p>
-                    <p className="mt-2 text-sm text-[var(--text)]">Scores + flags in minutes. Focused follow-up.</p>
-                    <p className="mt-3 text-xs text-[var(--muted)]">“Here’s who needs help today.”</p>
-                  </div>
+                  {/* Add actual screenshot here: */}
+                  {/* <Image 
+                    src="/screenshots/teacher-dashboard.png" 
+                    alt="Teacher reviewing student assessment with AI-generated scores and reasoning analysis"
+                    width={1200}
+                    height={800}
+                    className="w-full"
+                  /> */}
                 </div>
-                <div className="mt-4 rounded-lg border border-[var(--border)] p-4">
-                  <p className="text-sm font-medium">What you get</p>
-                  <ul className="mt-2 space-y-2 text-sm text-[var(--muted)]">
-                    <li>• Teacher-authored questions, AI-assisted scoring.</li>
-                    <li>• Integrity-aware, sequential student flow (no preview / no redo).</li>
-                    <li>• Results that highlight who needs intervention.</li>
-                  </ul>
+                
+                {/* Optional: Floating callout annotations */}
+                <div className="absolute left-4 top-1/4 hidden rounded-lg border border-[var(--primary)] bg-[var(--background)] px-3 py-2 text-xs font-medium shadow-lg md:block">
+                  <span className="text-[var(--primary)]">→</span> Override AI score
+                </div>
+                <div className="absolute bottom-1/4 right-4 hidden rounded-lg border border-[var(--primary)] bg-[var(--background)] px-3 py-2 text-xs font-medium shadow-lg md:block">
+                  Integrity flags <span className="text-[var(--primary)]">←</span>
                 </div>
               </div>
             </div>
           </div>
         </section>
 
-        {/* Problem */}
+        {/* Social Proof Bar - LIGHT BACKGROUND (NEW) */}
+        <section className="border-b border-[var(--border)] bg-[#F8FAFC]">
+          <div className="mx-auto max-w-6xl px-6 py-8">
+            <div className="text-center">
+              <p className="text-sm font-medium text-[#64748B]">Trusted by innovative educators</p>
+              <div className="mt-6 flex flex-wrap items-center justify-center gap-8">
+                {/* IMAGE PLACEHOLDERS: School/University Logos */}
+                {/* Recommended: 150x60px logos, grayscale or subtle color */}
+                {["CVA", "Endicott College", "Beta School 3"].map((school, idx) => (
+                  <div
+                    key={school}
+                    className="flex h-16 w-32 items-center justify-center rounded-lg border border-[#E2E8F0] bg-white px-4 shadow-sm"
+                  >
+                    <p className="text-xs font-medium text-[#94A3B8]">{school} Logo</p>
+                    {/* Replace with actual logo: */}
+                    {/* <Image 
+                      src={`/logos/${school.toLowerCase().replace(/\s+/g, '-')}.png`}
+                      alt={school}
+                      width={150}
+                      height={60}
+                      className="grayscale opacity-60 hover:opacity-100"
+                    /> */}
+                  </div>
+                ))}
+              </div>
+              <p className="mt-6 text-sm text-[#64748B]">
+                Join <span className="font-semibold text-[#1E293B]">50+ educators</span> transforming assessment
+              </p>
+            </div>
+          </div>
+        </section>
+
+        {/* Stats Section - WHITE BACKGROUND (NEW) */}
+        <section className="border-b border-[var(--border)] bg-white">
+          <div className="mx-auto max-w-6xl px-6 py-16">
+            <div className="grid gap-8 md:grid-cols-3">
+              <div className="text-center">
+                <div className="text-5xl font-bold text-[var(--primary)] md:text-6xl">6 hours</div>
+                <p className="mt-3 text-base text-[#64748B]">saved per week</p>
+                <p className="mt-2 text-sm text-[#94A3B8]">vs. traditional grading</p>
+              </div>
+              <div className="text-center">
+                <div className="text-5xl font-bold text-[var(--primary)] md:text-6xl">30 min</div>
+                <p className="mt-3 text-base text-[#64748B]">to review 90 students</p>
+                <p className="mt-2 text-sm text-[#94A3B8]">with AI-assisted scoring</p>
+              </div>
+              <div className="text-center">
+                <div className="text-5xl font-bold text-[var(--primary)] md:text-6xl">10-15%</div>
+                <p className="mt-3 text-base text-[#64748B]">need targeted support</p>
+                <p className="mt-2 text-sm text-[#94A3B8]">focus on who matters most</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Problem Section - DARK BACKGROUND */}
         <section className="border-b border-[var(--border)] bg-[color-mix(in_oklab,var(--background),black_6%)]">
           <div className="mx-auto max-w-6xl px-6 py-14">
-            <details className="group rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-0">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-6 py-5">
-                <h2 className="text-2xl font-semibold tracking-tight md:text-3xl">
-                  The grading treadmill is killing good teaching
-                </h2>
-                <span className="text-sm text-[var(--muted)] group-open:hidden">Expand</span>
-                <span className="hidden text-sm text-[var(--muted)] group-open:inline">Collapse</span>
-              </summary>
-              <div className="border-t border-[var(--border)] px-6 py-6">
-                <div className="grid gap-4 md:grid-cols-3">
-                  <div className="rounded-xl border border-[var(--border)] bg-[color-mix(in_oklab,var(--surface),black_6%)] p-5">
-                    <p className="text-sm font-semibold">The time trap</p>
-                    <p className="mt-2 text-sm text-[var(--muted)]">
-                      Teachers spend hours grading. By the time scores are back, the moment for intervention has passed.
-                    </p>
-                  </div>
-                  <div className="rounded-xl border border-[var(--border)] bg-[color-mix(in_oklab,var(--surface),black_6%)] p-5">
-                    <p className="text-sm font-semibold">The scale problem</p>
-                    <p className="mt-2 text-sm text-[var(--muted)]">
-                      Oral assessments reveal deep understanding—but 5 minutes per student doesn’t scale.
-                    </p>
-                  </div>
-                  <div className="rounded-xl border border-[var(--border)] bg-[color-mix(in_oklab,var(--surface),black_6%)] p-5">
-                    <p className="text-sm font-semibold">The integrity crisis</p>
-                    <p className="mt-2 text-sm text-[var(--muted)]">
-                      Answers spread quickly. Traditional assessment formats struggle to keep up.
-                    </p>
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-8">
+              <h2 className="text-3xl font-semibold tracking-tight md:text-4xl">
+                The grading treadmill is killing good teaching
+              </h2>
+              <div className="mt-8 grid gap-6 md:grid-cols-3">
+                <div className="rounded-xl border border-[var(--border)] bg-[color-mix(in_oklab,var(--surface),black_6%)] p-6">
+                  <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-[var(--primary)] text-xl">⏱️</div>
+                  <p className="text-base font-semibold">The time trap</p>
+                  <p className="mt-3 text-sm leading-relaxed text-[var(--muted)]">
+                    Teachers spend hours grading. By the time scores are back, the moment for intervention has passed.
+                  </p>
+                </div>
+                <div className="rounded-xl border border-[var(--border)] bg-[color-mix(in_oklab,var(--surface),black_6%)] p-6">
+                  <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-[#60a5fa] text-xl">📊</div>
+                  <p className="text-base font-semibold">The scale problem</p>
+                  <p className="mt-3 text-sm leading-relaxed text-[var(--muted)]">
+                    Oral assessments reveal deep understanding—but 5 minutes per student doesn't scale.
+                  </p>
+                </div>
+                <div className="rounded-xl border border-[var(--border)] bg-[color-mix(in_oklab,var(--surface),black_6%)] p-6">
+                  <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-[#f59e0b] text-xl">🔒</div>
+                  <p className="text-base font-semibold">The integrity crisis</p>
+                  <p className="mt-3 text-sm leading-relaxed text-[var(--muted)]">
+                    Answers spread quickly. Traditional assessment formats struggle to keep up.
+                  </p>
+                </div>
+              </div>
+              <p className="mt-8 text-center text-base text-[var(--muted)]">
+                What if you could assess authentic understanding—at scale—without losing control?
+              </p>
+            </div>
+          </div>
+        </section>
+
+        {/* See It In Action - LIGHT BACKGROUND (NEW) */}
+        <section className="border-b border-[var(--border)] bg-[#F8FAFC]">
+          <div className="mx-auto max-w-6xl px-6 py-16">
+            <h2 className="text-center text-3xl font-semibold tracking-tight text-[#0F172A] md:text-4xl">
+              See It In Action
+            </h2>
+            <p className="mx-auto mt-4 max-w-2xl text-center text-lg text-[#64748B]">
+              From assessment creation to student responses to teacher review—here's how SayVeritas works in real classrooms.
+            </p>
+            
+            {/* IMAGE PLACEHOLDER: 3 Screenshots Side-by-Side */}
+            <div className="mt-12 grid gap-6 md:grid-cols-3">
+              {/* Screenshot 1: Assessment Creation */}
+              <div className="rounded-xl border border-[#E2E8F0] bg-white p-4 shadow-lg">
+                <div className="flex aspect-[4/3] items-center justify-center rounded-lg bg-gradient-to-br from-[#F1F5F9] to-[#E2E8F0]">
+                  <div className="text-center">
+                    <div className="mx-auto mb-3 h-16 w-16 rounded-full bg-[var(--primary)] opacity-20" />
+                    <p className="text-xs font-medium text-[#64748B]">📝 Assessment Creation</p>
                   </div>
                 </div>
-                <p className="mt-6 text-sm text-[var(--muted)]">
-                  What if you could assess authentic understanding—at scale—without losing control?
+                {/* <Image 
+                  src="/screenshots/assessment-creation.png"
+                  alt="Teacher creating assessment with rubric and question builder"
+                  width={400}
+                  height={300}
+                  className="w-full rounded-lg"
+                /> */}
+                <p className="mt-4 text-center text-sm font-medium text-[#1E293B]">1. Teacher Creates</p>
+                <p className="mt-2 text-center text-xs text-[#64748B]">
+                  Upload materials, set rubric, generate questions
                 </p>
               </div>
-            </details>
-          </div>
-        </section>
 
-        {/* Solution */}
-        <section id="how" className="border-b border-[var(--border)]">
-          <div className="mx-auto max-w-6xl px-6 py-14">
-            <details className="group rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6" open>
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-4">
-                <h2 className="text-2xl font-semibold tracking-tight md:text-3xl">
-                  Assessment that thinks like a professor, scales like technology
-                </h2>
-                <span className="text-sm text-[var(--muted)] group-open:hidden">Expand</span>
-                <span className="hidden text-sm text-[var(--muted)] group-open:inline">Collapse</span>
-              </summary>
-              <div className="mt-6 grid gap-4 md:grid-cols-2">
-                <div className="rounded-xl border border-[var(--border)] bg-[color-mix(in_oklab,var(--surface),black_6%)] p-5">
-                  <p className="text-sm font-semibold">1) Create an assessment</p>
-                  <p className="mt-2 text-sm text-[var(--muted)]">
-                    Start from scratch, upload material (PDF), or generate a draft with AI—then refine it in the builder.
-                  </p>
+              {/* Screenshot 2: Student Recording */}
+              <div className="rounded-xl border border-[#E2E8F0] bg-white p-4 shadow-lg">
+                <div className="flex aspect-[4/3] items-center justify-center rounded-lg bg-gradient-to-br from-[#F1F5F9] to-[#E2E8F0]">
+                  <div className="text-center">
+                    <div className="mx-auto mb-3 h-16 w-16 rounded-full bg-[#60a5fa] opacity-20" />
+                    <p className="text-xs font-medium text-[#64748B]">🎤 Student Recording</p>
+                  </div>
                 </div>
-                <div className="rounded-xl border border-[var(--border)] bg-[color-mix(in_oklab,var(--surface),black_6%)] p-5">
-                  <p className="text-sm font-semibold">2) Students record responses</p>
-                  <p className="mt-2 text-sm text-[var(--muted)]">
-                    Students answer by voice (any device). Questions are revealed sequentially to reduce answer-sharing.
-                  </p>
-                </div>
-                <div className="rounded-xl border border-[var(--border)] bg-[color-mix(in_oklab,var(--surface),black_6%)] p-5">
-                  <p className="text-sm font-semibold">3) AI scores & flags</p>
-                  <p className="mt-2 text-sm text-[var(--muted)]">
-                    Transcription + rubric-based scoring (Reasoning & Evidence) produce fast, reviewable results.
-                  </p>
-                </div>
-                <div className="rounded-xl border border-[var(--border)] bg-[color-mix(in_oklab,var(--surface),black_6%)] p-5">
-                  <p className="text-sm font-semibold">4) Intervene where it matters</p>
-                  <p className="mt-2 text-sm text-[var(--muted)]">
-                    Spend your time on the 10–15% who need targeted support—not on routine grading.
-                  </p>
-                </div>
+                {/* <Image 
+                  src="/screenshots/student-recording-mobile.png"
+                  alt="Student recording oral response on mobile phone"
+                  width={400}
+                  height={300}
+                  className="w-full rounded-lg"
+                /> */}
+                <p className="mt-4 text-center text-sm font-medium text-[#1E293B]">2. Student Responds</p>
+                <p className="mt-2 text-center text-xs text-[#64748B]">
+                  Record by voice, any device, anywhere
+                </p>
               </div>
-            </details>
+
+              {/* Screenshot 3: Teacher Review */}
+              <div className="rounded-xl border border-[#E2E8F0] bg-white p-4 shadow-lg">
+                <div className="flex aspect-[4/3] items-center justify-center rounded-lg bg-gradient-to-br from-[#F1F5F9] to-[#E2E8F0]">
+                  <div className="text-center">
+                    <div className="mx-auto mb-3 h-16 w-16 rounded-full bg-[#34d399] opacity-20" />
+                    <p className="text-xs font-medium text-[#64748B]">✅ Teacher Review</p>
+                  </div>
+                </div>
+                {/* <Image 
+                  src="/screenshots/teacher-review-dashboard.png"
+                  alt="Teacher reviewing AI-scored submissions with reasoning analysis"
+                  width={400}
+                  height={300}
+                  className="w-full rounded-lg"
+                /> */}
+                <p className="mt-4 text-center text-sm font-medium text-[#1E293B]">3. Teacher Reviews</p>
+                <p className="mt-2 text-center text-xs text-[#64748B]">
+                  AI scores, teacher verifies, intervene where needed
+                </p>
+              </div>
+            </div>
           </div>
         </section>
 
-        {/* Features */}
-        <section id="features" className="border-b border-[var(--border)] bg-[color-mix(in_oklab,var(--background),black_6%)]">
-          <div className="mx-auto max-w-6xl px-6 py-14">
-            <details className="group rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-0">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-6 py-5">
-                <h2 className="text-2xl font-semibold tracking-tight md:text-3xl">Built for real classrooms</h2>
-                <span className="text-sm text-[var(--muted)] group-open:hidden">Expand</span>
-                <span className="hidden text-sm text-[var(--muted)] group-open:inline">Collapse</span>
-              </summary>
-              <div className="border-t border-[var(--border)] px-6 py-6">
-                <div className="grid gap-4 md:grid-cols-2">
-                  {featureItems.map((item, idx) => (
-                    <div
-                      key={item.title}
-                      className="rounded-xl border border-[var(--border)] bg-[color-mix(in_oklab,var(--surface),black_6%)] p-5"
-                      style={{ borderLeftColor: featureAccents[idx % featureAccents.length], borderLeftWidth: 6 }}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span
-                          className="h-2 w-2 rounded-full"
-                          style={{ backgroundColor: featureAccents[idx % featureAccents.length] }}
-                        />
-                        <p className="text-sm font-semibold">{item.title}</p>
+        {/* How It Works - WHITE BACKGROUND */}
+        <section id="how" className="border-b border-[var(--border)] bg-white">
+          <div className="mx-auto max-w-6xl px-6 py-16">
+            <h2 className="text-center text-3xl font-semibold tracking-tight text-[#0F172A] md:text-4xl">
+              Assessment that thinks like a professor, scales like technology
+            </h2>
+            
+            {/* Horizontal Timeline Layout */}
+            <div className="relative mt-12">
+              {/* Timeline Line */}
+              <div className="absolute left-0 right-0 top-12 hidden h-0.5 bg-[#E2E8F0] md:block" />
+              
+              <div className="grid gap-8 md:grid-cols-4">
+                {[
+                  {
+                    number: "1",
+                    title: "Create an assessment",
+                    description: "Start from scratch, upload material (PDF), or generate a draft with AI—then refine it in the builder.",
+                    color: "#14b8a6"
+                  },
+                  {
+                    number: "2",
+                    title: "Students record responses",
+                    description: "Students answer by voice (any device). Questions are revealed sequentially to reduce answer-sharing.",
+                    color: "#60a5fa"
+                  },
+                  {
+                    number: "3",
+                    title: "AI scores & flags",
+                    description: "Transcription + rubric-based scoring (Reasoning & Evidence) produce fast, reviewable results.",
+                    color: "#a78bfa"
+                  },
+                  {
+                    number: "4",
+                    title: "Intervene where it matters",
+                    description: "Spend your time on the 10–15% who need targeted support—not on routine grading.",
+                    color: "#34d399"
+                  }
+                ].map((step, idx) => (
+                  <div key={step.number} className="relative">
+                    {/* Step Number Circle */}
+                    <div className="relative z-10 mx-auto flex h-24 w-24 items-center justify-center">
+                      <div 
+                        className="flex h-16 w-16 items-center justify-center rounded-full border-4 border-white font-bold text-white shadow-lg"
+                        style={{ backgroundColor: step.color }}
+                      >
+                        <span className="text-2xl">{step.number}</span>
                       </div>
-                      <p className="mt-2 text-sm text-[var(--muted)]">{item.body}</p>
                     </div>
-                  ))}
-                </div>
+                    
+                    {/* Step Content */}
+                    <div className="mt-4 text-center">
+                      <p className="text-base font-semibold text-[#0F172A]">{step.title}</p>
+                      <p className="mt-2 text-sm leading-relaxed text-[#64748B]">
+                        {step.description}
+                      </p>
+                    </div>
+                    
+                    {/* Arrow (except last step) */}
+                    {idx < 3 && (
+                      <div className="absolute right-0 top-12 hidden -translate-y-1/2 translate-x-1/2 text-2xl text-[#CBD5E1] md:block">
+                        →
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
-            </details>
+            </div>
           </div>
         </section>
 
-        {/* Use cases */}
+        {/* Mid-Page CTA - TEAL ACCENT (NEW) */}
+        <section className="border-b border-[var(--border)] bg-gradient-to-br from-[var(--primary)] to-[#0891b2]">
+          <div className="mx-auto max-w-4xl px-6 py-16 text-center">
+            <h3 className="text-3xl font-bold text-white md:text-4xl">Ready to reclaim your time?</h3>
+            <p className="mx-auto mt-4 max-w-2xl text-lg text-white/90">
+              Join our beta program and get priority onboarding, direct input on features, and founder pricing locked for 3 years.
+            </p>
+            <div className="mt-8 flex flex-col justify-center gap-4 sm:flex-row">
+              <a
+                href="mailto:hello@edusynapse.org?subject=SayVeritas%20Demo%20Request"
+                className="inline-flex h-12 items-center justify-center rounded-md bg-white px-8 text-base font-medium text-[var(--primary)] shadow-lg hover:bg-white/90"
+              >
+                Request Demo
+              </a>
+              <Link
+                href="/signup"
+                className="inline-flex h-12 items-center justify-center rounded-md border-2 border-white bg-transparent px-8 text-base font-medium text-white hover:bg-white/10"
+              >
+                Create Teacher Account
+              </Link>
+            </div>
+          </div>
+        </section>
+
+        {/* Features - LIGHT BACKGROUND */}
+        <section id="features" className="border-b border-[var(--border)] bg-[#F8FAFC]">
+          <div className="mx-auto max-w-6xl px-6 py-16">
+            <h2 className="text-center text-3xl font-semibold tracking-tight text-[#0F172A] md:text-4xl">
+              Built for real classrooms
+            </h2>
+            <div className="mt-12 grid gap-6 md:grid-cols-2">
+              {featureItems.map((item, idx) => (
+                <div
+                  key={item.title}
+                  className="group rounded-xl border border-[#E2E8F0] bg-white p-6 shadow-sm transition-shadow hover:shadow-md"
+                  style={{ 
+                    borderLeftColor: featureAccents[idx % featureAccents.length], 
+                    borderLeftWidth: 4 
+                  }}
+                >
+                  <div className="flex items-center gap-3">
+                    <span
+                      className="h-3 w-3 rounded-full"
+                      style={{ backgroundColor: featureAccents[idx % featureAccents.length] }}
+                    />
+                    <p className="text-base font-semibold text-[#0F172A]">{item.title}</p>
+                  </div>
+                  <p className="mt-3 text-sm leading-relaxed text-[#64748B]">{item.body}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Use Cases - DARK BACKGROUND */}
         <section id="use-cases" className="border-b border-[var(--border)]">
-          <div className="mx-auto max-w-6xl px-6 py-14">
-            <details className="group rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-0" open>
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-6 py-5">
-                <h2 className="text-2xl font-semibold tracking-tight md:text-3xl">Perfect for…</h2>
-                <span className="text-sm text-[var(--muted)] group-open:hidden">Expand</span>
-                <span className="hidden text-sm text-[var(--muted)] group-open:inline">Collapse</span>
-              </summary>
-              <div className="border-t border-[var(--border)] px-6 py-6">
-                <div className="grid gap-4 md:grid-cols-3">
-                  <div className="rounded-xl border border-[var(--border)] bg-[color-mix(in_oklab,var(--surface),black_6%)] p-5">
-                    <p className="text-sm font-semibold">Performance academies</p>
-                    <p className="mt-2 text-sm text-[var(--muted)]">
-                      Traveling students can demonstrate understanding on their schedule—with rigor intact.
-                    </p>
-                  </div>
-                  <div className="rounded-xl border border-[var(--border)] bg-[color-mix(in_oklab,var(--surface),black_6%)] p-5">
-                    <p className="text-sm font-semibold">Higher education</p>
-                    <p className="mt-2 text-sm text-[var(--muted)]">
-                      Bring oral assessment to large classes without adding grading overhead.
-                    </p>
-                  </div>
-                  <div className="rounded-xl border border-[var(--border)] bg-[color-mix(in_oklab,var(--surface),black_6%)] p-5">
-                    <p className="text-sm font-semibold">IB / AP programs</p>
-                    <p className="mt-2 text-sm text-[var(--muted)]">
-                      High-stakes courses that demand authentic evidence of understanding.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </details>
-          </div>
-        </section>
-
-        {/* Trust */}
-        <section id="security" className="border-b border-[var(--border)] bg-[color-mix(in_oklab,var(--background),black_6%)]">
-          <div className="mx-auto max-w-6xl px-6 py-14">
-            <details className="group rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-0" open>
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-6 py-5">
-                <h2 className="text-2xl font-semibold tracking-tight md:text-3xl">Your data. Your students. Your control.</h2>
-                <span className="text-sm text-[var(--muted)] group-open:hidden">Expand</span>
-                <span className="hidden text-sm text-[var(--muted)] group-open:inline">Collapse</span>
-              </summary>
-              <div className="border-t border-[var(--border)] px-6 py-6">
-                <div className="grid gap-4 md:grid-cols-2">
-                  {[
-                    ["FERPA-aware by design", "Protect student work with access controls and teacher visibility."],
-                    ["Teacher review required", "AI provides recommendations; teachers make final decisions."],
-                    ["Transparent integrity", "Flags inform review—students aren’t “punished by algorithm.”"],
-                    ["School-level control", "Admin tools and bulk onboarding (where enabled)."],
-                  ].map(([title, body]) => (
-                    <div
-                      key={title}
-                      className="rounded-xl border border-[var(--border)] bg-[color-mix(in_oklab,var(--surface),black_6%)] p-5"
-                    >
-                      <p className="text-sm font-semibold">{title}</p>
-                      <p className="mt-2 text-sm text-[var(--muted)]">{body}</p>
+          <div className="mx-auto max-w-6xl px-6 py-16">
+            <h2 className="text-center text-3xl font-semibold tracking-tight md:text-4xl">Perfect for…</h2>
+            <div className="mt-12 grid gap-8 md:grid-cols-3">
+              {[
+                {
+                  title: "Performance academies",
+                  description: "Traveling students can demonstrate understanding on their schedule—with rigor intact.",
+                  emoji: "🏆",
+                  color: "#14b8a6"
+                },
+                {
+                  title: "Higher education",
+                  description: "Bring oral assessment to large classes without adding grading overhead.",
+                  emoji: "🎓",
+                  color: "#60a5fa"
+                },
+                {
+                  title: "IB / AP programs",
+                  description: "High-stakes courses that demand authentic evidence of understanding.",
+                  emoji: "📚",
+                  color: "#a78bfa"
+                }
+              ].map((useCase) => (
+                <div
+                  key={useCase.title}
+                  className="group rounded-xl border border-[var(--border)] bg-[var(--surface)] p-8 transition-all hover:border-[var(--primary)] hover:shadow-lg"
+                >
+                  {/* IMAGE PLACEHOLDER: Use case photo */}
+                  <div className="mb-6 flex aspect-video items-center justify-center rounded-lg bg-[color-mix(in_oklab,var(--surface),black_10%)]">
+                    <div className="text-center">
+                      <div className="text-6xl">{useCase.emoji}</div>
+                      <p className="mt-3 text-xs text-[var(--muted)]">Photo: {useCase.title}</p>
                     </div>
-                  ))}
+                  </div>
+                  {/* Replace with actual photo:
+                  <Image 
+                    src={`/use-cases/${useCase.title.toLowerCase().replace(/\s+/g, '-')}.jpg`}
+                    alt={useCase.title}
+                    width={400}
+                    height={300}
+                    className="w-full rounded-lg"
+                  /> */}
+                  
+                  <p className="text-lg font-semibold" style={{ color: useCase.color }}>
+                    {useCase.title}
+                  </p>
+                  <p className="mt-3 text-sm leading-relaxed text-[var(--muted)]">
+                    {useCase.description}
+                  </p>
                 </div>
-              </div>
-            </details>
+              ))}
+            </div>
           </div>
         </section>
 
-        {/* CTA */}
+        {/* Testimonial - LIGHT BACKGROUND (NEW) */}
+        <section className="border-b border-[var(--border)] bg-white">
+          <div className="mx-auto max-w-4xl px-6 py-16">
+            <div className="rounded-2xl border border-[#E2E8F0] bg-gradient-to-br from-[#F8FAFC] to-white p-8 shadow-lg md:p-12">
+              <div className="flex flex-col items-center gap-8 md:flex-row">
+                {/* IMAGE PLACEHOLDER: Teacher headshot */}
+                <div className="flex-shrink-0">
+                  <div className="flex h-24 w-24 items-center justify-center rounded-full border-4 border-[var(--primary)] bg-[#F1F5F9]">
+                    <span className="text-3xl">👤</span>
+                  </div>
+                  {/* Replace with actual photo:
+                  <Image 
+                    src="/testimonials/sarah-m.jpg"
+                    alt="Sarah M., Biology Teacher"
+                    width={96}
+                    height={96}
+                    className="rounded-full"
+                  /> */}
+                </div>
+                
+                <div className="flex-1 text-center md:text-left">
+                  <p className="text-2xl leading-relaxed text-[#0F172A]">
+                    "Finally, I have time to actually <span className="font-semibold text-[var(--primary)]">teach</span> instead of grade papers. SayVeritas gave me my weekends back."
+                  </p>
+                  <div className="mt-6">
+                    <p className="font-semibold text-[#0F172A]">Sarah M.</p>
+                    <p className="text-sm text-[#64748B]">Biology Teacher, [School Name]</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Trust Section - DARK BACKGROUND */}
+        <section id="security" className="border-b border-[var(--border)] bg-[color-mix(in_oklab,var(--background),black_6%)]">
+          <div className="mx-auto max-w-6xl px-6 py-16">
+            <h2 className="text-center text-3xl font-semibold tracking-tight md:text-4xl">
+              Your data. Your students. Your control.
+            </h2>
+            <div className="mt-12 grid gap-6 md:grid-cols-2">
+              {[
+                {
+                  title: "FERPA-aware by design",
+                  description: "Protect student work with access controls and teacher visibility.",
+                  icon: "🔒"
+                },
+                {
+                  title: "Teacher review required",
+                  description: "AI provides recommendations; teachers make final decisions.",
+                  icon: "✓"
+                },
+                {
+                  title: "Transparent integrity",
+                  description: "Flags inform review—students aren't \"punished by algorithm.\"",
+                  icon: "👁️"
+                },
+                {
+                  title: "School-level control",
+                  description: "Admin tools and bulk onboarding (where enabled).",
+                  icon: "⚙️"
+                },
+              ].map((item) => (
+                <div
+                  key={item.title}
+                  className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6"
+                >
+                  <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-lg bg-[var(--primary)] text-2xl">
+                    {item.icon}
+                  </div>
+                  <p className="text-base font-semibold">{item.title}</p>
+                  <p className="mt-3 text-sm leading-relaxed text-[var(--muted)]">{item.description}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Final CTA - DARK BACKGROUND */}
         <section className="border-b border-[var(--border)]">
-          <div className="mx-auto max-w-6xl px-6 py-14">
-            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-8">
-              <h3 className="text-xl font-semibold tracking-tight">Join the beta program</h3>
-              <p className="mt-2 text-sm text-[var(--muted)]">
-                Early access partners get priority onboarding and direct input on features.
+          <div className="mx-auto max-w-4xl px-6 py-16">
+            <div className="rounded-2xl border-2 border-[var(--primary)] bg-[var(--surface)] p-10 text-center">
+              <h3 className="text-3xl font-bold tracking-tight md:text-4xl">Join the beta program</h3>
+              <p className="mx-auto mt-4 max-w-2xl text-lg text-[var(--muted)]">
+                Early access partners get priority onboarding, direct input on features, and founder pricing locked for 3 years.
               </p>
-              <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+              <div className="mt-8 flex flex-col justify-center gap-4 sm:flex-row">
                 <Link
                   href="/signup"
-                  className="inline-flex h-11 items-center justify-center rounded-md bg-[var(--primary)] px-5 text-white hover:opacity-90"
+                  className="inline-flex h-12 items-center justify-center rounded-md bg-[var(--primary)] px-8 text-base font-medium text-white shadow-lg hover:opacity-90"
                 >
-                  Create teacher account
+                  Create Teacher Account
                 </Link>
                 <a
                   href="mailto:hello@edusynapse.org?subject=SayVeritas%20Demo%20Request"
-                  className="inline-flex h-11 items-center justify-center rounded-md border border-[var(--border)] bg-[var(--surface)] px-5 hover:opacity-90"
+                  className="inline-flex h-12 items-center justify-center rounded-md border-2 border-[var(--border)] bg-transparent px-8 text-base hover:bg-[var(--surface)]"
                 >
-                  Request a demo
+                  Request a Demo
                 </a>
               </div>
+              <p className="mt-6 text-sm text-[var(--muted)]">
+                Questions? <a href="mailto:hello@edusynapse.org" className="underline hover:text-[var(--text)]">Schedule a call</a>
+              </p>
             </div>
           </div>
         </section>
       </main>
 
       <footer className="border-t border-[var(--border)] bg-[color-mix(in_oklab,var(--background),black_10%)]">
-        <div className="mx-auto flex max-w-6xl flex-col gap-2 px-6 py-8 text-sm text-[var(--muted)] md:flex-row md:items-center md:justify-between">
-          <p>© SayVeritas</p>
-          <div className="flex gap-4">
+        <div className="mx-auto flex max-w-6xl flex-col gap-4 px-6 py-10 text-sm text-[var(--muted)] md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="font-semibold text-[var(--text)]">SayVeritas</p>
+            <p className="mt-1">© 2025 EduSynapse Group. All rights reserved.</p>
+          </div>
+          <div className="flex gap-6">
             <Link className="hover:text-[var(--text)]" href="/login">
               Teacher sign in
             </Link>
             <Link className="hover:text-[var(--text)]" href="/student/login">
               Student login
             </Link>
+            <a className="hover:text-[var(--text)]" href="mailto:hello@edusynapse.org">
+              Contact
+            </a>
           </div>
         </div>
       </footer>
