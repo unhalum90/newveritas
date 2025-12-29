@@ -1087,6 +1087,8 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
                                         value={editingQuestionType}
                                         onChange={(e) => setEditingQuestionType(e.target.value)}
                                         disabled={saving}
+                                        list="questionTypeOptions"
+                                        placeholder="open_response or evidence_followup"
                                       />
                                     </div>
                                     <div className="space-y-2">
@@ -1161,7 +1163,8 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
                             value={newQuestionType}
                             onChange={(e) => setNewQuestionType(e.target.value)}
                             disabled={readonly || saving}
-                            placeholder="open_response"
+                            list="questionTypeOptions"
+                            placeholder="open_response or evidence_followup"
                           />
                         </div>
                         <div className="flex items-end justify-end gap-2">
@@ -1192,6 +1195,11 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
                     + Add Question to Bank
                   </button>
                 )}
+
+                <datalist id="questionTypeOptions">
+                  <option value="open_response" />
+                  <option value="evidence_followup" />
+                </datalist>
 
                 {questionRequiredError ? (
                   <div className="flex items-center gap-2 text-sm text-[var(--danger)]">

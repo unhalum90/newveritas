@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 
+import { isEvidenceFollowup } from "@/lib/assessments/question-types";
 import { createRouteSupabaseClient } from "@/lib/supabase/route";
 
 const patchSchema = z.object({
@@ -20,7 +21,12 @@ export async function PATCH(request: NextRequest, ctx: { params: Promise<{ id: s
   const parsed = patchSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: "Invalid payload." }, { status: 400 });
 
-  const { error: updateError } = await supabase.from("assessment_questions").update(parsed.data).eq("id", id);
+  const updatePayload = { ...parsed.data };
+  if ("question_type" in parsed.data && isEvidenceFollowup(parsed.data.question_type ?? null)) {
+    updatePayload.evidence_upload = "required";
+  }
+
+  const { error: updateError } = await supabase.from("assessment_questions").update(updatePayload).eq("id", id);
   if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
 
   const res = NextResponse.json({ ok: true });

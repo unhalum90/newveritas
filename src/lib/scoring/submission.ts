@@ -1,3 +1,4 @@
+import { isEvidenceFollowup } from "@/lib/assessments/question-types";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { logOpenAiCall, logOpenAiError } from "@/lib/ops/api-logging";
 
@@ -49,6 +50,21 @@ function getGeminiTextFromResponse(data: unknown) {
     ?.candidates?.[0]?.content?.parts?.[0]?.text;
   if (typeof text !== "string" || !text.trim()) throw new Error("Gemini returned empty response.");
   return text;
+}
+
+function parseEvidenceFollowups(raw: unknown) {
+  if (typeof raw !== "string" || !raw.trim()) return null;
+  try {
+    const parsed = JSON.parse(raw) as { summary?: unknown; questions?: unknown };
+    const summary = typeof parsed.summary === "string" ? parsed.summary.trim() : "";
+    const questions = Array.isArray(parsed.questions)
+      ? parsed.questions.map((q) => (typeof q === "string" ? q.trim() : "")).filter((q) => q.length > 0)
+      : [];
+    if (!summary && questions.length === 0) return null;
+    return { summary, questions };
+  } catch {
+    return null;
+  }
 }
 
 function isGeminiApiKeyUnsupportedError(message: string) {
@@ -520,7 +536,7 @@ export async function scoreSubmission(submissionId: string) {
   try {
     const { data: questions, error: qError } = await admin
       .from("assessment_questions")
-      .select("id, order_index, question_text")
+      .select("id, order_index, question_text, question_type")
       .eq("assessment_id", submission.assessment_id)
       .order("order_index", { ascending: true });
     if (qError) throw qError;
@@ -542,6 +558,13 @@ export async function scoreSubmission(submissionId: string) {
 
     const byQuestion = new Map<string, (typeof responses)[number]>();
     for (const r of responses ?? []) byQuestion.set(r.question_id, r);
+
+    const { data: evidenceRows } = await admin
+      .from("evidence_images")
+      .select("question_id, ai_description")
+      .eq("submission_id", submissionId);
+    const evidenceByQuestion = new Map<string, { ai_description: string | null }>();
+    for (const e of evidenceRows ?? []) evidenceByQuestion.set(e.question_id, { ai_description: e.ai_description ?? null });
 
     const bucketFallback = process.env.SUPABASE_RECORDINGS_BUCKET || "student-recordings";
     let attempted = 0;
@@ -590,9 +613,23 @@ export async function scoreSubmission(submissionId: string) {
 
       let primary: Awaited<ReturnType<typeof scoreWithOpenAi>>;
       try {
+        let questionText = q.question_text;
+        if (isEvidenceFollowup(q.question_type)) {
+          const evidence = evidenceByQuestion.get(q.id);
+          const followups = parseEvidenceFollowups(evidence?.ai_description ?? null);
+          if (followups) {
+            const summary = followups.summary ? `Evidence summary:\n${followups.summary}\n\n` : "";
+            const bullets = followups.questions.length
+              ? `Evidence follow-up questions:\n${followups.questions.map((item) => `- ${item}`).join("\n")}\n\n`
+              : "";
+            if (summary || bullets) {
+              questionText = `${q.question_text}\n\n${summary}${bullets}`.trim();
+            }
+          }
+        }
         if (process.env.OPENAI_API_KEY) {
           primary = await scoreWithOpenAi({
-            questionText: q.question_text,
+            questionText,
             transcript: scoringTranscript,
             rubricReasoning,
             rubricEvidence,

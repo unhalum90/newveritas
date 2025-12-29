@@ -1032,3 +1032,44 @@ create or replace view public.credit_balances as
 select user_id, sum(delta) as balance
 from public.credit_adjustments
 group by user_id;
+
+-- =========================
+-- Compliance: Consent + Retention + Classification
+-- =========================
+
+-- Consent tracking + restriction controls (students)
+alter table public.students add column if not exists consent_audio boolean not null default false;
+alter table public.students add column if not exists consent_audio_at timestamptz;
+alter table public.students add column if not exists consent_revoked_at timestamptz;
+alter table public.students add column if not exists disabled boolean not null default false;
+
+-- Retention settings (per school)
+alter table public.schools add column if not exists retention_audio_days int not null default 30;
+alter table public.schools add column if not exists retention_transcript_days int not null default 30;
+alter table public.schools add column if not exists retention_log_days int not null default 90;
+
+-- Data classification (per table)
+alter table public.teachers add column if not exists data_classification text not null default 'personal';
+alter table public.schools add column if not exists data_classification text not null default 'anonymous';
+alter table public.school_admins add column if not exists data_classification text not null default 'personal';
+alter table public.platform_admins add column if not exists data_classification text not null default 'personal';
+alter table public.workspaces add column if not exists data_classification text not null default 'anonymous';
+alter table public.classes add column if not exists data_classification text not null default 'educational';
+alter table public.students add column if not exists data_classification text not null default 'educational';
+alter table public.assessments add column if not exists data_classification text not null default 'educational';
+alter table public.assessment_sources add column if not exists data_classification text not null default 'educational';
+alter table public.assessment_integrity add column if not exists data_classification text not null default 'educational';
+alter table public.assessment_assets add column if not exists data_classification text not null default 'educational';
+alter table public.assessment_questions add column if not exists data_classification text not null default 'educational';
+alter table public.rubrics add column if not exists data_classification text not null default 'educational';
+alter table public.rubric_standards add column if not exists data_classification text not null default 'educational';
+alter table public.submissions add column if not exists data_classification text not null default 'educational';
+alter table public.integrity_events add column if not exists data_classification text not null default 'educational';
+alter table public.submission_responses add column if not exists data_classification text not null default 'audio';
+alter table public.evidence_images add column if not exists data_classification text not null default 'educational';
+alter table public.question_scores add column if not exists data_classification text not null default 'educational';
+alter table public.api_logs add column if not exists data_classification text not null default 'anonymous';
+alter table public.system_logs add column if not exists data_classification text not null default 'anonymous';
+alter table public.support_tickets add column if not exists data_classification text not null default 'personal';
+alter table public.admin_audit_trail add column if not exists data_classification text not null default 'personal';
+alter table public.credit_adjustments add column if not exists data_classification text not null default 'personal';

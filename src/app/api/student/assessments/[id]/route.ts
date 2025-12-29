@@ -16,12 +16,13 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
   const admin = createSupabaseAdminClient();
   const { data: student, error: sError } = await admin
     .from("students")
-    .select("id, class_id")
+    .select("id, class_id, consent_audio, consent_audio_at, consent_revoked_at, disabled")
     .eq("auth_user_id", data.user.id)
     .maybeSingle();
 
   if (sError) return NextResponse.json({ error: sError.message }, { status: 500 });
   if (!student) return NextResponse.json({ error: "Student record not found." }, { status: 404 });
+  if (student.disabled) return NextResponse.json({ error: "Student access restricted." }, { status: 403 });
 
   const { data: assessment, error: aError } = await admin
     .from("assessments")
@@ -125,6 +126,12 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
     },
     progress: { answered_count: answeredCount, total_count: totalCount },
     latest_submission: latestSubmission ?? null,
+    student: {
+      consent_audio: Boolean(student.consent_audio),
+      consent_audio_at: student.consent_audio_at ?? null,
+      consent_revoked_at: student.consent_revoked_at ?? null,
+      disabled: Boolean(student.disabled),
+    },
   });
   pendingCookies.forEach(({ name, value, options }) => res.cookies.set(name, value, options));
   return res;

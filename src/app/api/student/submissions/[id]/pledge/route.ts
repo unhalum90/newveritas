@@ -26,12 +26,13 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
 
   const { data: student, error: sError } = await admin
     .from("students")
-    .select("id")
+    .select("id, disabled")
     .eq("auth_user_id", data.user.id)
     .maybeSingle();
 
   if (sError) return NextResponse.json({ error: sError.message }, { status: 500 });
   if (!student) return NextResponse.json({ error: "Student record not found." }, { status: 404 });
+  if (student.disabled) return NextResponse.json({ error: "Student access restricted." }, { status: 403 });
 
   const { data: submission, error: subError } = await admin
     .from("submissions")
@@ -79,4 +80,3 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
   pendingCookies.forEach(({ name, value, options }) => res.cookies.set(name, value, options));
   return res;
 }
-

@@ -23,12 +23,16 @@ export async function POST(request: NextRequest) {
   const admin = createSupabaseAdminClient();
   const { data: student, error: sError } = await admin
     .from("students")
-    .select("id, class_id")
+    .select("id, class_id, consent_audio, consent_revoked_at, disabled")
     .eq("auth_user_id", data.user.id)
     .maybeSingle();
 
   if (sError) return NextResponse.json({ error: sError.message }, { status: 500 });
   if (!student) return NextResponse.json({ error: "Student record not found." }, { status: 404 });
+  if (student.disabled) return NextResponse.json({ error: "Student access restricted." }, { status: 403 });
+  if (!student.consent_audio || student.consent_revoked_at) {
+    return NextResponse.json({ error: "Audio consent required." }, { status: 409 });
+  }
 
   const assessmentId = parsed.data.assessment_id;
   const { data: assessment, error: aError } = await admin
@@ -71,4 +75,3 @@ export async function POST(request: NextRequest) {
   pendingCookies.forEach(({ name, value, options }) => res.cookies.set(name, value, options));
   return res;
 }
-

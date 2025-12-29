@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
+import { isEvidenceFollowup } from "@/lib/assessments/question-types";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createRouteSupabaseClient } from "@/lib/supabase/route";
 
@@ -28,12 +29,13 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
 
   const { data: student, error: sError } = await admin
     .from("students")
-    .select("id")
+    .select("id, disabled")
     .eq("auth_user_id", data.user.id)
     .maybeSingle();
 
   if (sError) return NextResponse.json({ error: sError.message }, { status: 500 });
   if (!student) return NextResponse.json({ error: "Student record not found." }, { status: 404 });
+  if (student.disabled) return NextResponse.json({ error: "Student access restricted." }, { status: 403 });
 
   const { data: submission, error: subError } = await admin
     .from("submissions")
@@ -93,12 +95,16 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
 
   const { data: student, error: sError } = await admin
     .from("students")
-    .select("id")
+    .select("id, consent_audio, consent_revoked_at, disabled")
     .eq("auth_user_id", data.user.id)
     .maybeSingle();
 
   if (sError) return NextResponse.json({ error: sError.message }, { status: 500 });
   if (!student) return NextResponse.json({ error: "Student record not found." }, { status: 404 });
+  if (student.disabled) return NextResponse.json({ error: "Student access restricted." }, { status: 403 });
+  if (!student.consent_audio || student.consent_revoked_at) {
+    return NextResponse.json({ error: "Audio consent required." }, { status: 409 });
+  }
 
   const { data: submission, error: subError } = await admin
     .from("submissions")
@@ -124,7 +130,7 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
   // Validate question belongs to the assessment.
   const { data: q, error: qError } = await admin
     .from("assessment_questions")
-    .select("id, evidence_upload")
+    .select("id, evidence_upload, question_type")
     .eq("id", questionId)
     .eq("assessment_id", submission.assessment_id)
     .maybeSingle();
@@ -158,7 +164,7 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
   }
 
   // Enforce evidence requirement (upload happens before recording).
-  if (q.evidence_upload === "required") {
+  if (q.evidence_upload === "required" || isEvidenceFollowup(q.question_type)) {
     const { data: evidence, error: eError } = await admin
       .from("evidence_images")
       .select("id")

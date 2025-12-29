@@ -28,12 +28,13 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
   const admin = createSupabaseAdminClient();
   const { data: student, error: sError } = await admin
     .from("students")
-    .select("id, class_id, first_name, last_name")
+    .select("id, class_id, first_name, last_name, disabled")
     .eq("auth_user_id", data.user.id)
     .maybeSingle();
 
   if (sError) return NextResponse.json({ error: sError.message }, { status: 500 });
   if (!student) return NextResponse.json({ error: "Student record not found." }, { status: 404 });
+  if (student.disabled) return NextResponse.json({ error: "Student access restricted." }, { status: 403 });
 
   const { data: assessment, error: aError } = await admin
     .from("assessments")

@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 
+import { isEvidenceFollowup } from "@/lib/assessments/question-types";
 import { createRouteSupabaseClient } from "@/lib/supabase/route";
 
 export async function GET(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
@@ -48,13 +49,16 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
 
   const orderIndex = (last?.order_index ?? 0) + 1;
 
+  const questionType = parsed.data.question_type ?? null;
+  const evidenceUpload = isEvidenceFollowup(questionType) ? "required" : parsed.data.evidence_upload ?? "optional";
+
   const { data: created, error: createError } = await supabase
     .from("assessment_questions")
     .insert({
       assessment_id: assessmentId,
       question_text: parsed.data.question_text,
-      question_type: parsed.data.question_type ?? null,
-      evidence_upload: parsed.data.evidence_upload ?? "optional",
+      question_type: questionType,
+      evidence_upload: evidenceUpload,
       order_index: orderIndex,
     })
     .select("id")

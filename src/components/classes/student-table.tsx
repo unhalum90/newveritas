@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
@@ -27,9 +27,11 @@ function buildLoginLink(code: string) {
 async function copyToClipboard(text: string) {
   try {
     await navigator.clipboard.writeText(text);
+    return true;
   } catch (error) {
     console.warn("Clipboard copy failed.", error);
   }
+  return false;
 }
 
 export function StudentTable({ classId, students }: { classId: string; students: StudentRow[] }) {
@@ -39,6 +41,14 @@ export function StudentTable({ classId, students }: { classId: string; students:
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [deleting, setDeleting] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [copyStatus, setCopyStatus] = useState<{ message: string; tone: "success" | "error" } | null>(null);
+  const copyTimeoutRef = useRef<number | null>(null);
+
+  function flashCopyStatus(message: string, tone: "success" | "error" = "success") {
+    setCopyStatus({ message, tone });
+    if (copyTimeoutRef.current) window.clearTimeout(copyTimeoutRef.current);
+    copyTimeoutRef.current = window.setTimeout(() => setCopyStatus(null), 2200);
+  }
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -102,14 +112,22 @@ export function StudentTable({ classId, students }: { classId: string; students:
     const targets = (selectedList.length ? selectedList : filtered).filter((student) => student.student_code);
     if (!targets.length) return;
     const text = targets.map((student) => buildLoginLink(student.student_code!)).join("\n");
-    await copyToClipboard(text);
+    const ok = await copyToClipboard(text);
+    flashCopyStatus(
+      ok ? `Copied ${targets.length} login link${targets.length === 1 ? "" : "s"}.` : "Clipboard blocked. Copy failed.",
+      ok ? "success" : "error",
+    );
   }
 
   async function copyCodes() {
     const targets = (selectedList.length ? selectedList : filtered).filter((student) => student.student_code);
     if (!targets.length) return;
     const text = targets.map((student) => student.student_code!).join("\n");
-    await copyToClipboard(text);
+    const ok = await copyToClipboard(text);
+    flashCopyStatus(
+      ok ? `Copied ${targets.length} code${targets.length === 1 ? "" : "s"}.` : "Clipboard blocked. Copy failed.",
+      ok ? "success" : "error",
+    );
   }
 
   async function deleteSelected() {
@@ -186,6 +204,11 @@ export function StudentTable({ classId, students }: { classId: string; students:
         <Button type="button" variant="secondary" onClick={exportCsv} disabled={!filtered.length}>
           Export CSV
         </Button>
+        {copyStatus ? (
+          <span className={`text-xs ${copyStatus.tone === "success" ? "text-[var(--primary)]" : "text-[var(--danger)]"}`}>
+            {copyStatus.message}
+          </span>
+        ) : null}
       </div>
 
       {!filtered.length ? (
@@ -236,7 +259,10 @@ export function StudentTable({ classId, students }: { classId: string; students:
                         variant="ghost"
                         size="sm"
                         className="underline underline-offset-4"
-                        onClick={() => copyToClipboard(buildLoginLink(student.student_code!))}
+                        onClick={async () => {
+                          const ok = await copyToClipboard(buildLoginLink(student.student_code!));
+                          flashCopyStatus(ok ? "Copied login link." : "Clipboard blocked. Copy failed.", ok ? "success" : "error");
+                        }}
                       >
                         Copy Link
                       </Button>

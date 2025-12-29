@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { isEvidenceFollowup } from "@/lib/assessments/question-types";
 
 type EvidenceUploadSetting = "disabled" | "optional" | "required";
 
@@ -59,6 +60,8 @@ type EvidenceRow = {
   height_px: number | null;
   uploaded_at: string;
   signed_url: string;
+  ai_description?: string | null;
+  analyzed_at?: string | null;
 };
 
 type ResponseRow = {
@@ -67,6 +70,13 @@ type ResponseRow = {
   duration_seconds: number | null;
   created_at: string;
   signed_url: string;
+};
+
+type StudentAccess = {
+  consent_audio: boolean;
+  consent_audio_at: string | null;
+  consent_revoked_at: string | null;
+  disabled: boolean;
 };
 
 const FAST_START_THRESHOLD_MS = 3000;
@@ -78,6 +88,21 @@ function normalizeEvidenceSetting(v: unknown): EvidenceUploadSetting {
   return "optional";
 }
 
+function parseEvidenceAnalysis(raw?: string | null) {
+  if (!raw || typeof raw !== "string") return null;
+  try {
+    const parsed = JSON.parse(raw) as { summary?: unknown; questions?: unknown };
+    const summary = typeof parsed.summary === "string" ? parsed.summary.trim() : "";
+    const questions = Array.isArray(parsed.questions)
+      ? parsed.questions.map((q) => (typeof q === "string" ? q.trim() : "")).filter((q) => q.length > 0)
+      : [];
+    if (!summary && questions.length === 0) return null;
+    return { summary, questions };
+  } catch {
+    return null;
+  }
+}
+
 export function StudentAssessmentClient({ assessmentId }: { assessmentId: string }) {
   const [assessment, setAssessment] = useState<Assessment | null>(null);
   const [latest, setLatest] = useState<Submission | null>(null);
@@ -87,6 +112,10 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
   const [pledgeOpen, setPledgeOpen] = useState(false);
   const [pledgeWorking, setPledgeWorking] = useState(false);
   const [pledgeError, setPledgeError] = useState<string | null>(null);
+  const [consentOpen, setConsentOpen] = useState(false);
+  const [consentWorking, setConsentWorking] = useState(false);
+  const [consentError, setConsentError] = useState<string | null>(null);
+  const [studentAccess, setStudentAccess] = useState<StudentAccess | null>(null);
   const [responses, setResponses] = useState<ResponseRow[]>([]);
   const [evidenceByQuestion, setEvidenceByQuestion] = useState<Record<string, EvidenceRow | null>>({});
   const [evidenceLoading, setEvidenceLoading] = useState(false);
@@ -97,6 +126,7 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
   const [recordingError, setRecordingError] = useState<string | null>(null);
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
   const autoRecordQuestionId = useRef<string | null>(null);
+  const autoSubmitAttemptedRef = useRef(false);
   const recordingStartedAtRef = useRef<number | null>(null);
   const hiddenAtRef = useRef<number | null>(null);
   const hiddenQuestionIdRef = useRef<string | null>(null);
@@ -110,10 +140,22 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
     return !assessment.pledge.accepted_at;
   }, [assessment?.pledge, latest]);
 
+  const accessRestricted = Boolean(studentAccess?.disabled);
+  const consentRequired = useMemo(() => {
+    if (!studentAccess) return false;
+    if (studentAccess.disabled) return false;
+    return !studentAccess.consent_audio || Boolean(studentAccess.consent_revoked_at);
+  }, [studentAccess]);
+
   useEffect(() => {
-    if (pledgeRequired) setPledgeOpen(true);
+    if (pledgeRequired && !consentRequired) setPledgeOpen(true);
     else setPledgeOpen(false);
-  }, [pledgeRequired]);
+  }, [consentRequired, pledgeRequired]);
+
+  useEffect(() => {
+    if (consentRequired) setConsentOpen(true);
+    else setConsentOpen(false);
+  }, [consentRequired]);
 
   const activeEvidence = useMemo(() => {
     if (!activeQuestion) return null;
@@ -124,6 +166,15 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
     if (!activeQuestion) return null;
     return responses.find((r) => r.question_id === activeQuestion.id) ?? null;
   }, [activeQuestion, responses]);
+
+  const isEvidenceFollowupQuestion = useMemo(() => isEvidenceFollowup(activeQuestion?.question_type), [activeQuestion?.question_type]);
+
+  const evidenceSetting = useMemo(() => {
+    const setting = normalizeEvidenceSetting(activeQuestion?.evidence_upload);
+    return isEvidenceFollowupQuestion ? "required" : setting;
+  }, [activeQuestion?.evidence_upload, isEvidenceFollowupQuestion]);
+
+  const evidenceAnalysis = useMemo(() => parseEvidenceAnalysis(activeEvidence?.ai_description ?? null), [activeEvidence?.ai_description]);
 
   const completedCount = useMemo(() => responses.length, [responses.length]);
 
@@ -189,12 +240,14 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
           assessment?: Assessment;
           latest_submission?: Submission | null;
           progress?: { answered_count?: number; total_count?: number };
+          student?: StudentAccess;
           error?: string;
         }
       | null;
     if (!res.ok || !data?.assessment) throw new Error(data?.error ?? "Unable to load assessment.");
     setAssessment(data.assessment);
     setLatest(data.latest_submission ?? null);
+    setStudentAccess(data.student ?? null);
     if (data.latest_submission?.status === "started") {
       await refreshResponses(data.latest_submission.id);
     } else {
@@ -224,6 +277,26 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
     }
   }
 
+  async function acceptConsent() {
+    setConsentWorking(true);
+    setConsentError(null);
+    try {
+      const res = await fetch("/api/student/consent", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ consent: true }),
+      });
+      const data = (await res.json().catch(() => null)) as { error?: string } | null;
+      if (!res.ok) throw new Error(data?.error ?? "Unable to save consent.");
+      await refreshAssessment();
+      setConsentOpen(false);
+    } catch (e) {
+      setConsentError(e instanceof Error ? e.message : "Unable to save consent.");
+    } finally {
+      setConsentWorking(false);
+    }
+  }
+
   useEffect(() => {
     (async () => {
       setLoading(true);
@@ -249,6 +322,8 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
     setWorking(true);
     setError(null);
     try {
+      if (accessRestricted) throw new Error("Your access has been restricted. Contact your teacher.");
+      if (consentRequired) throw new Error("Provide audio consent to begin this assessment.");
       const res = await fetch("/api/student/submissions", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -270,6 +345,8 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
     setWorking(true);
     setError(null);
     try {
+      if (accessRestricted) throw new Error("Your access has been restricted. Contact your teacher.");
+      if (consentRequired) throw new Error("Provide audio consent to submit this assessment.");
       if (pledgeRequired) throw new Error("Accept the academic integrity pledge to continue.");
       if (!canSubmitAttempt) {
         throw new Error("Record a response for every question before submitting.");
@@ -284,6 +361,18 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
       setWorking(false);
     }
   }
+
+  useEffect(() => {
+    if (!latest || latest.status !== "started") {
+      autoSubmitAttemptedRef.current = false;
+      return;
+    }
+    if (accessRestricted || consentRequired) return;
+    if (!canSubmitAttempt || working) return;
+    if (autoSubmitAttemptedRef.current) return;
+    autoSubmitAttemptedRef.current = true;
+    void submit();
+  }, [accessRestricted, canSubmitAttempt, consentRequired, latest?.status, working]);
 
   useEffect(() => {
     if (!recording) return;
@@ -347,6 +436,14 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
       setRecordingError("Start the assessment before recording.");
       return;
     }
+    if (accessRestricted) {
+      setRecordingError("Your access has been restricted. Contact your teacher.");
+      return;
+    }
+    if (consentRequired) {
+      setRecordingError("Provide audio consent before recording.");
+      return;
+    }
     if (pledgeRequired) {
       setRecordingError("Accept the academic integrity pledge to begin.");
       return;
@@ -360,7 +457,7 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
       return;
     }
 
-    const evidenceSetting = normalizeEvidenceSetting(activeQuestion.evidence_upload);
+    const evidenceSetting = isEvidenceFollowup(activeQuestion.question_type) ? "required" : normalizeEvidenceSetting(activeQuestion.evidence_upload);
     if (evidenceSetting === "required" && !activeEvidence) {
       setRecordingError("Upload the required evidence image before recording.");
       return;
@@ -477,8 +574,8 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
     if (autoRecordQuestionId.current === activeQuestion.id) return;
     if (recording || working) return;
     if (!latest || latest.status !== "started") return;
-    if (pledgeRequired || activeResponse) return;
-    const nextEvidenceSetting = normalizeEvidenceSetting(activeQuestion.evidence_upload);
+    if (accessRestricted || consentRequired || pledgeRequired || activeResponse) return;
+    const nextEvidenceSetting = isEvidenceFollowup(activeQuestion.question_type) ? "required" : normalizeEvidenceSetting(activeQuestion.evidence_upload);
     if (nextEvidenceSetting === "required" && !activeEvidence) return;
 
     autoRecordQuestionId.current = activeQuestion.id;
@@ -489,6 +586,8 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
     activeResponse?.id,
     latest?.status,
     pledgeRequired,
+    consentRequired,
+    accessRestricted,
     recording,
     working,
   ]);
@@ -496,6 +595,14 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
   async function handleEvidenceSelected(file: File) {
     if (!latest || latest.status !== "started") {
       setEvidenceError("Start the assessment before uploading evidence.");
+      return;
+    }
+    if (accessRestricted) {
+      setEvidenceError("Your access has been restricted. Contact your teacher.");
+      return;
+    }
+    if (consentRequired) {
+      setEvidenceError("Provide audio consent before uploading evidence.");
       return;
     }
     if (pledgeRequired) {
@@ -523,6 +630,14 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
 
   async function removeEvidence() {
     if (!latest || latest.status !== "started") return;
+    if (accessRestricted) {
+      setEvidenceError("Your access has been restricted. Contact your teacher.");
+      return;
+    }
+    if (consentRequired) {
+      setEvidenceError("Provide audio consent before removing evidence.");
+      return;
+    }
     if (pledgeRequired) {
       setEvidenceError("Accept the academic integrity pledge to continue.");
       return;
@@ -549,11 +664,35 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
   const total = assessment?.question_count ?? 0;
   const attempted = completedCount;
   const started = latest?.status === "started";
-  const evidenceSetting = normalizeEvidenceSetting(activeQuestion?.evidence_upload);
+  const recordingProgress = recordingLimitSeconds
+    ? Math.min(100, Math.round((recordingSeconds / recordingLimitSeconds) * 100))
+    : 0;
 
   return (
     <div className="min-h-screen bg-zinc-50 px-6 py-10">
       <div className="mx-auto w-full max-w-4xl space-y-6">
+        {consentOpen ? (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6">
+            <div className="w-full max-w-xl rounded-xl border border-zinc-800 bg-zinc-950 p-6 text-zinc-100 shadow-2xl">
+              <div className="text-lg font-semibold">Audio Consent</div>
+              <div className="mt-1 text-sm text-zinc-300">
+                We record your response audio to share with your teacher and to provide feedback. You can revoke this consent at any time.
+              </div>
+              <ul className="mt-4 list-disc space-y-2 pl-5 text-sm text-zinc-200">
+                <li>Your recordings are used only for this assessment.</li>
+                <li>We do not train AI models on student recordings.</li>
+                <li>You can contact your teacher to revoke access.</li>
+              </ul>
+              {consentError ? <div className="mt-3 text-sm text-red-300">{consentError}</div> : null}
+              <div className="mt-5 flex items-center justify-end gap-2">
+                <Button type="button" disabled={consentWorking} onClick={acceptConsent}>
+                  {consentWorking ? "Saving…" : "I Agree"}
+                </Button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
         {assessment?.pledge?.enabled === true && pledgeOpen ? (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6">
             <div className="w-full max-w-xl rounded-xl border border-zinc-800 bg-zinc-950 p-6 text-zinc-100 shadow-2xl">
@@ -589,13 +728,18 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
                 Back
               </Button>
             </Link>
-            <Button type="button" disabled={working || latest?.status === "submitted"} onClick={startOrResume}>
+            <Button type="button" disabled={working || latest?.status === "submitted" || accessRestricted || consentRequired} onClick={startOrResume}>
               {working ? "Working…" : latest?.status === "started" ? "Resume" : "Start"}
             </Button>
           </div>
         </div>
 
         {error ? <div className="text-sm text-red-600">{error}</div> : null}
+        {accessRestricted ? (
+          <div className="text-sm text-red-600">
+            Your access has been restricted. Contact your teacher for help.
+          </div>
+        ) : null}
         {loading ? <div className="text-sm text-zinc-600">Loading…</div> : null}
 
         {assessment ? (
@@ -627,7 +771,7 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
                   </CardHeader>
                   <CardContent className="flex items-center justify-between gap-3">
                     <div className="text-sm text-[var(--muted)]">When you click Start, you should be ready to answer immediately.</div>
-                    <Button type="button" disabled={working || latest?.status === "submitted"} onClick={startOrResume}>
+                    <Button type="button" disabled={working || latest?.status === "submitted" || accessRestricted || consentRequired} onClick={startOrResume}>
                       {working ? "Starting…" : "Start Assessment"}
                     </Button>
                   </CardContent>
@@ -670,7 +814,11 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
                           <div>
                             <div className="text-sm font-medium text-zinc-900">Evidence</div>
                             <div className="mt-0.5 text-xs text-zinc-600">
-                              {evidenceSetting === "required" ? "Required before recording." : "Optional. Upload a photo of your work."}
+                              {evidenceSetting === "required"
+                                ? isEvidenceFollowupQuestion
+                                  ? "Required. Upload to generate follow-up questions."
+                                  : "Required before recording."
+                                : "Optional. Upload a photo of your work."}
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
@@ -688,7 +836,7 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
                               <Button
                                 type="button"
                                 variant="secondary"
-                                disabled={working || recording || evidenceUploading}
+                                disabled={working || evidenceUploading}
                                 onClick={() => evidenceInputRef.current?.click()}
                               >
                                 {evidenceUploading ? "Uploading…" : "Upload Evidence"}
@@ -697,7 +845,7 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
                               <Button
                                 type="button"
                                 variant="secondary"
-                                disabled={working || recording || evidenceUploading}
+                                disabled={working || evidenceUploading}
                                 onClick={removeEvidence}
                               >
                                 {evidenceUploading ? "Removing…" : "Remove"}
@@ -719,6 +867,29 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
                             <div className="mt-2 text-xs text-zinc-600">
                               Uploaded {new Date(activeEvidence.uploaded_at).toLocaleString()}
                             </div>
+                            {isEvidenceFollowupQuestion ? (
+                              <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
+                                <div className="text-xs font-semibold uppercase text-emerald-700">AI follow-up questions</div>
+                                {evidenceAnalysis ? (
+                                  <>
+                                    {evidenceAnalysis.summary ? (
+                                      <div className="mt-1 text-xs text-emerald-800">{evidenceAnalysis.summary}</div>
+                                    ) : null}
+                                    {evidenceAnalysis.questions.length ? (
+                                      <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-emerald-900">
+                                        {evidenceAnalysis.questions.map((item, idx) => (
+                                          <li key={`${activeEvidence.id}-followup-${idx}`}>{item}</li>
+                                        ))}
+                                      </ul>
+                                    ) : (
+                                      <div className="mt-2 text-xs text-emerald-800">No follow-up questions generated.</div>
+                                    )}
+                                  </>
+                                ) : (
+                                  <div className="mt-2 text-xs text-emerald-800">Generating questions...</div>
+                                )}
+                              </div>
+                            ) : null}
                           </div>
                         ) : null}
                       </div>
@@ -730,6 +901,12 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
                         <div className="text-xs text-zinc-600">
                           {recording ? `Recording: ${recordingSeconds}s / ${recordingLimitSeconds}s` : `Limit: ${recordingLimitSeconds}s`}
                         </div>
+                      </div>
+                      <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-zinc-200">
+                        <div
+                          className={`h-full ${recording ? "bg-emerald-500" : "bg-zinc-400"}`}
+                          style={{ width: `${recording ? recordingProgress : 0}%` }}
+                        />
                       </div>
                       <div className="mt-3 flex flex-wrap items-center gap-2">
                         {recording ? (

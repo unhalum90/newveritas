@@ -625,6 +625,9 @@ export default function Home() {
             <Link className="hover:text-[var(--text)]" href="/student/login">
               Student login
             </Link>
+            <Link className="hover:text-[var(--text)]" href="/privacy">
+              Privacy
+            </Link>
             <a className="hover:text-[var(--text)]" href="mailto:hello@edusynapse.org">
               Contact
             </a>

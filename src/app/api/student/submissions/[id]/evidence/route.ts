@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import sharp from "sharp";
 
+import { analyzeEvidenceImage } from "@/lib/ai/evidence";
+import { isEvidenceFollowup } from "@/lib/assessments/question-types";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createRouteSupabaseClient } from "@/lib/supabase/route";
 
@@ -51,9 +53,14 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
 
   const admin = createSupabaseAdminClient();
 
-  const { data: student, error: sError } = await admin.from("students").select("id").eq("auth_user_id", data.user.id).maybeSingle();
+  const { data: student, error: sError } = await admin
+    .from("students")
+    .select("id, disabled")
+    .eq("auth_user_id", data.user.id)
+    .maybeSingle();
   if (sError) return NextResponse.json({ error: sError.message }, { status: 500 });
   if (!student) return NextResponse.json({ error: "Student record not found." }, { status: 404 });
+  if (student.disabled) return NextResponse.json({ error: "Student access restricted." }, { status: 403 });
 
   const { data: submission, error: subError } = await admin
     .from("submissions")
@@ -76,7 +83,9 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
 
   const { data: evidence, error: eError } = await admin
     .from("evidence_images")
-    .select("id, storage_bucket, storage_path, mime_type, file_size_bytes, width_px, height_px, uploaded_at, created_at")
+    .select(
+      "id, storage_bucket, storage_path, mime_type, file_size_bytes, width_px, height_px, uploaded_at, created_at, ai_description, analyzed_at",
+    )
     .eq("submission_id", submissionId)
     .eq("question_id", questionId)
     .maybeSingle();
@@ -119,9 +128,17 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
 
   const admin = createSupabaseAdminClient();
 
-  const { data: student, error: sError } = await admin.from("students").select("id").eq("auth_user_id", data.user.id).maybeSingle();
+  const { data: student, error: sError } = await admin
+    .from("students")
+    .select("id, consent_audio, consent_revoked_at, disabled")
+    .eq("auth_user_id", data.user.id)
+    .maybeSingle();
   if (sError) return NextResponse.json({ error: sError.message }, { status: 500 });
   if (!student) return NextResponse.json({ error: "Student record not found." }, { status: 404 });
+  if (student.disabled) return NextResponse.json({ error: "Student access restricted." }, { status: 403 });
+  if (!student.consent_audio || student.consent_revoked_at) {
+    return NextResponse.json({ error: "Audio consent required." }, { status: 409 });
+  }
 
   const { data: submission, error: subError } = await admin
     .from("submissions")
@@ -147,14 +164,14 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
   // Validate question belongs to the assessment and evidence upload is enabled.
   const { data: q, error: qError } = await admin
     .from("assessment_questions")
-    .select("id, evidence_upload")
+    .select("id, evidence_upload, question_type, question_text")
     .eq("id", questionId)
     .eq("assessment_id", submission.assessment_id)
     .maybeSingle();
   if (qError) return NextResponse.json({ error: qError.message }, { status: 500 });
   if (!q) return NextResponse.json({ error: "Invalid question." }, { status: 400 });
 
-  const evidenceSetting = normalizeEvidenceSetting(q.evidence_upload) ?? "optional";
+  const evidenceSetting = isEvidenceFollowup(q.question_type) ? "required" : normalizeEvidenceSetting(q.evidence_upload) ?? "optional";
   if (evidenceSetting === "disabled") return NextResponse.json({ error: "Evidence upload is disabled for this question." }, { status: 409 });
 
   // Enforce sequential answering: only allow evidence for the next unanswered question.
@@ -215,20 +232,67 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
     height_px: processed.height,
     uploaded_at: new Date().toISOString(),
     deleted_at: null,
+    ai_description: null,
+    analyzed_at: null,
   };
 
   const { data: row, error: upsertError } = await admin
     .from("evidence_images")
     .upsert(upsertPayload, { onConflict: "submission_id,question_id" })
-    .select("id, submission_id, question_id, storage_bucket, storage_path, mime_type, file_size_bytes, width_px, height_px, uploaded_at")
+    .select(
+      "id, submission_id, question_id, storage_bucket, storage_path, mime_type, file_size_bytes, width_px, height_px, uploaded_at, ai_description, analyzed_at",
+    )
     .single();
 
   if (upsertError) return NextResponse.json({ error: upsertError.message }, { status: 500 });
 
+  let analysis = row.ai_description ? row.ai_description : null;
+  let analyzedAt = row.analyzed_at ? row.analyzed_at : null;
+  if (isEvidenceFollowup(q.question_type) && process.env.OPENAI_API_KEY) {
+    const ai = await analyzeEvidenceImage({
+      image: out,
+      questionText: q.question_text,
+      context: {
+        assessmentId: submission.assessment_id,
+        studentId: student.id,
+        submissionId,
+        questionId,
+      },
+    });
+    if (ai) {
+      analysis = JSON.stringify(ai);
+      analyzedAt = new Date().toISOString();
+      try {
+        await admin
+          .from("evidence_images")
+          .update({ ai_description: analysis, analyzed_at: analyzedAt })
+          .eq("id", row.id);
+      } catch {
+        // Best-effort: analysis metadata is optional.
+      }
+    }
+  }
+
+  if (isEvidenceFollowup(q.question_type) && !analysis) {
+    analysis = JSON.stringify({ summary: "AI questions unavailable. Continue with the prompt.", questions: [] });
+    analyzedAt = new Date().toISOString();
+    try {
+      await admin
+        .from("evidence_images")
+        .update({ ai_description: analysis, analyzed_at: analyzedAt })
+        .eq("id", row.id);
+    } catch {
+      // Best-effort: analysis metadata is optional.
+    }
+  }
+
   const { data: signedUrl, error: signedError } = await admin.storage.from(bucket).createSignedUrl(path, 60 * 60);
   if (signedError) return NextResponse.json({ error: signedError.message }, { status: 500 });
 
-  const res = NextResponse.json({ ok: true, evidence: { ...row, signed_url: signedUrl.signedUrl } });
+  const res = NextResponse.json({
+    ok: true,
+    evidence: { ...row, ai_description: analysis, analyzed_at: analyzedAt, signed_url: signedUrl.signedUrl },
+  });
   pendingCookies.forEach(({ name, value, options }) => res.cookies.set(name, value, options));
   return res;
 }
@@ -247,9 +311,17 @@ export async function DELETE(request: NextRequest, ctx: { params: Promise<{ id: 
 
   const admin = createSupabaseAdminClient();
 
-  const { data: student, error: sError } = await admin.from("students").select("id").eq("auth_user_id", data.user.id).maybeSingle();
+  const { data: student, error: sError } = await admin
+    .from("students")
+    .select("id, consent_audio, consent_revoked_at, disabled")
+    .eq("auth_user_id", data.user.id)
+    .maybeSingle();
   if (sError) return NextResponse.json({ error: sError.message }, { status: 500 });
   if (!student) return NextResponse.json({ error: "Student record not found." }, { status: 404 });
+  if (student.disabled) return NextResponse.json({ error: "Student access restricted." }, { status: 403 });
+  if (!student.consent_audio || student.consent_revoked_at) {
+    return NextResponse.json({ error: "Audio consent required." }, { status: 409 });
+  }
 
   const { data: submission, error: subError } = await admin
     .from("submissions")
