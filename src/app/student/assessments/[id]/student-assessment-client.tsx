@@ -39,6 +39,13 @@ type Assessment = {
   grace_restart_used?: boolean | null;
   integrity: Integrity | null;
   asset_url: string | null;
+  audio_intro?: {
+    asset_url: string;
+    original_filename: string | null;
+    duration_seconds: number | null;
+    max_duration_seconds: number | null;
+    require_full_listen: boolean;
+  } | null;
   question_count: number;
   current_question: Question | null;
   pledge?: Pledge;
@@ -90,6 +97,13 @@ const GRACE_RESTART_THRESHOLD_MS = 10000;
 const LONG_PAUSE_THRESHOLD_MS = 10000;
 const AUDIO_ACTIVITY_THRESHOLD = 0.03;
 
+function formatDuration(value?: number | null) {
+  if (!value || !Number.isFinite(value)) return "Length unknown";
+  const minutes = Math.floor(value / 60);
+  const seconds = Math.round(value % 60);
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
 function normalizeEvidenceSetting(v: unknown): EvidenceUploadSetting {
   if (v === "disabled" || v === "optional" || v === "required") return v;
   return "optional";
@@ -129,6 +143,7 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
   const [evidenceLoading, setEvidenceLoading] = useState(false);
   const [evidenceUploading, setEvidenceUploading] = useState(false);
   const [evidenceError, setEvidenceError] = useState<string | null>(null);
+  const [audioIntroCompleted, setAudioIntroCompleted] = useState(false);
   const [recording, setRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [recordingError, setRecordingError] = useState<string | null>(null);
@@ -146,6 +161,8 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
   const evidenceInputRef = useRef<HTMLInputElement | null>(null);
 
   const activeQuestion = assessment?.current_question ?? null;
+  const audioIntro = assessment?.audio_intro ?? null;
+  const requireAudioIntro = Boolean(audioIntro && (audioIntro.require_full_listen ?? true));
   const isPracticeMode = Boolean(assessment?.is_practice_mode);
   const pledgeRequired = useMemo(() => {
     if (previewMode) return false;
@@ -163,6 +180,7 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
   }, [studentAccess, previewMode]);
   const canGraceRestart =
     !previewMode && Boolean(assessment?.integrity?.allow_grace_restart) && !Boolean(assessment?.grace_restart_used);
+  const audioGateActive = Boolean(latest?.status === "started" && requireAudioIntro && !audioIntroCompleted);
 
   useEffect(() => {
     if (pledgeRequired && !consentRequired) setPledgeOpen(true);
@@ -173,6 +191,14 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
     if (consentRequired) setConsentOpen(true);
     else setConsentOpen(false);
   }, [consentRequired]);
+
+  useEffect(() => {
+    if (!requireAudioIntro) {
+      setAudioIntroCompleted(true);
+      return;
+    }
+    setAudioIntroCompleted(false);
+  }, [audioIntro?.asset_url, audioIntro?.require_full_listen, latest?.id, requireAudioIntro]);
 
   const activeEvidence = useMemo(() => {
     if (!activeQuestion) return null;
@@ -704,6 +730,7 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
     if (autoRecordQuestionId.current === activeQuestion.id) return;
     if (recording || working) return;
     if (!latest || latest.status !== "started") return;
+    if (audioGateActive) return;
     if (accessRestricted || consentRequired || pledgeRequired) return;
     const readyForRecording = isAudioFollowupQuestion
       ? !activePrimaryResponse || (followupNeeded && Boolean(followupPrompt))
@@ -726,6 +753,7 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
     pledgeRequired,
     consentRequired,
     accessRestricted,
+    audioGateActive,
     recording,
     working,
   ]);
@@ -978,6 +1006,26 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
                         {working ? "Starting…" : "Start Another Attempt"}
                       </Button>
                     ) : null}
+                  </CardContent>
+                </Card>
+              ) : audioGateActive && audioIntro ? (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Audio Intro</CardTitle>
+                    <CardDescription>Listen to the full audio before your questions appear.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-zinc-700">
+                      <span>{audioIntro.original_filename?.trim() || "Audio intro"}</span>
+                      <span>{formatDuration(audioIntro.duration_seconds)}</span>
+                    </div>
+                    <audio
+                      controls
+                      src={audioIntro.asset_url}
+                      className="w-full"
+                      onEnded={() => setAudioIntroCompleted(true)}
+                    />
+                    <div className="text-xs text-zinc-600">Once the audio finishes, your first question will appear.</div>
                   </CardContent>
                 </Card>
               ) : activeQuestion ? (

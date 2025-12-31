@@ -39,6 +39,7 @@ export async function GET(request: NextRequest) {
         .from("assessment_assets")
         .select("assessment_id, asset_url, created_at")
         .in("assessment_id", ids)
+        .eq("asset_type", "image")
         .order("created_at", { ascending: false })
     : { data: [], error: null };
 

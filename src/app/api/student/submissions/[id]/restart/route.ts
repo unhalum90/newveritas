@@ -76,9 +76,30 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
     .eq("id", submissionId);
   if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
 
+  const { data: priorPledge, error: pledgeError } = await admin
+    .from("submissions")
+    .select("integrity_pledge_accepted_at, integrity_pledge_version, integrity_pledge_ip_address")
+    .eq("assessment_id", submission.assessment_id)
+    .eq("student_id", student.id)
+    .not("integrity_pledge_accepted_at", "is", null)
+    .order("integrity_pledge_accepted_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (pledgeError) return NextResponse.json({ error: pledgeError.message }, { status: 500 });
+
+  const payload: Record<string, unknown> = {
+    assessment_id: submission.assessment_id,
+    student_id: student.id,
+  };
+  if (priorPledge?.integrity_pledge_accepted_at) {
+    payload.integrity_pledge_accepted_at = priorPledge.integrity_pledge_accepted_at;
+    payload.integrity_pledge_version = priorPledge.integrity_pledge_version ?? null;
+    payload.integrity_pledge_ip_address = priorPledge.integrity_pledge_ip_address ?? null;
+  }
+
   const { data: created, error: createError } = await admin
     .from("submissions")
-    .insert({ assessment_id: submission.assessment_id, student_id: student.id })
+    .insert(payload)
     .select("id, status, started_at, submitted_at")
     .single();
   if (createError) return NextResponse.json({ error: createError.message }, { status: 500 });

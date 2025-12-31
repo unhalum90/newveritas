@@ -448,9 +448,13 @@ with check (
 create table if not exists public.assessment_assets (
   id uuid primary key default gen_random_uuid(),
   assessment_id uuid references public.assessments(id) on delete cascade,
-  asset_type text not null, -- image
+  asset_type text not null, -- image | audio_intro
   asset_url text not null,
   generation_prompt text,
+  original_filename text,
+  duration_seconds int,
+  max_duration_seconds int,
+  require_full_listen boolean not null default true,
   created_at timestamptz not null default now()
 );
 
@@ -458,6 +462,10 @@ create table if not exists public.assessment_assets (
 alter table public.assessment_assets add column if not exists asset_type text not null default 'image';
 alter table public.assessment_assets add column if not exists asset_url text;
 alter table public.assessment_assets add column if not exists generation_prompt text;
+alter table public.assessment_assets add column if not exists original_filename text;
+alter table public.assessment_assets add column if not exists duration_seconds int;
+alter table public.assessment_assets add column if not exists max_duration_seconds int;
+alter table public.assessment_assets add column if not exists require_full_listen boolean not null default true;
 alter table public.assessment_assets add column if not exists created_at timestamptz not null default now();
 
 create index if not exists assessment_assets_assessment_id_idx on public.assessment_assets(assessment_id);

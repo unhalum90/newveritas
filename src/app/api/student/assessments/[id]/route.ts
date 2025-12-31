@@ -45,13 +45,25 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
 
     const { data: asset, error: assetError } = await admin
       .from("assessment_assets")
-      .select("asset_url, generation_prompt, created_at")
+      .select("asset_url, created_at")
       .eq("assessment_id", assessmentId)
+      .eq("asset_type", "image")
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
 
     if (assetError) return NextResponse.json({ error: assetError.message }, { status: 500 });
+
+    const { data: audioIntro, error: audioError } = await admin
+      .from("assessment_assets")
+      .select("asset_url, original_filename, duration_seconds, max_duration_seconds, require_full_listen, created_at")
+      .eq("assessment_id", assessmentId)
+      .eq("asset_type", "audio_intro")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (audioError) return NextResponse.json({ error: audioError.message }, { status: 500 });
 
     const { data: questionIds, error: qIdError } = await admin
       .from("assessment_questions")
@@ -72,6 +84,15 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
         grace_restart_used: false,
         integrity: assessment.assessment_integrity,
         asset_url: asset?.asset_url ?? null,
+        audio_intro: audioIntro
+          ? {
+              asset_url: audioIntro.asset_url,
+              original_filename: audioIntro.original_filename ?? null,
+              duration_seconds: audioIntro.duration_seconds ?? null,
+              max_duration_seconds: audioIntro.max_duration_seconds ?? null,
+              require_full_listen: audioIntro.require_full_listen ?? true,
+            }
+          : null,
         question_count: totalCount,
         current_question: null,
         pledge: { enabled: false },
@@ -125,13 +146,25 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
 
   const { data: asset, error: assetError } = await admin
     .from("assessment_assets")
-    .select("asset_url, generation_prompt, created_at")
+    .select("asset_url, created_at")
     .eq("assessment_id", assessmentId)
+    .eq("asset_type", "image")
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
 
   if (assetError) return NextResponse.json({ error: assetError.message }, { status: 500 });
+
+  const { data: audioIntro, error: audioError } = await admin
+    .from("assessment_assets")
+    .select("asset_url, original_filename, duration_seconds, max_duration_seconds, require_full_listen, created_at")
+    .eq("assessment_id", assessmentId)
+    .eq("asset_type", "audio_intro")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (audioError) return NextResponse.json({ error: audioError.message }, { status: 500 });
 
   const { data: questionRows, error: qIdError } = await admin
     .from("assessment_questions")
@@ -162,7 +195,25 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
     | null = null;
 
   const pledgeEnabled = Boolean((assessment.assessment_integrity as { pledge_enabled?: boolean } | null)?.pledge_enabled);
-  const pledgeAccepted = Boolean(latestSubmission?.integrity_pledge_accepted_at);
+  const { data: priorPledge, error: pledgeError } = await admin
+    .from("submissions")
+    .select("integrity_pledge_accepted_at, integrity_pledge_version")
+    .eq("assessment_id", assessmentId)
+    .eq("student_id", student.id)
+    .not("integrity_pledge_accepted_at", "is", null)
+    .order("integrity_pledge_accepted_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (pledgeError) return NextResponse.json({ error: pledgeError.message }, { status: 500 });
+
+  const pledgeAcceptedAt = latestSubmission?.integrity_pledge_accepted_at ?? priorPledge?.integrity_pledge_accepted_at ?? null;
+  const pledgeAcceptedVersion =
+    typeof latestSubmission?.integrity_pledge_version === "number"
+      ? latestSubmission.integrity_pledge_version
+      : typeof priorPledge?.integrity_pledge_version === "number"
+        ? priorPledge.integrity_pledge_version
+        : null;
+  const pledgeAccepted = Boolean(pledgeAcceptedAt);
 
   if (latestSubmission?.status === "started" && totalCount > 0 && (!pledgeEnabled || pledgeAccepted)) {
     const { data: answered, error: answeredError } = await admin
@@ -213,6 +264,15 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
       grace_restart_used: Boolean(restartEvent),
       integrity: assessment.assessment_integrity,
       asset_url: asset?.asset_url ?? null,
+      audio_intro: audioIntro
+        ? {
+            asset_url: audioIntro.asset_url,
+            original_filename: audioIntro.original_filename ?? null,
+            duration_seconds: audioIntro.duration_seconds ?? null,
+            max_duration_seconds: audioIntro.max_duration_seconds ?? null,
+            require_full_listen: audioIntro.require_full_listen ?? true,
+          }
+        : null,
       question_count: totalCount,
       current_question: currentQuestion,
       pledge: pledgeEnabled
@@ -227,7 +287,8 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
               ((assessment.assessment_integrity as { pledge_text?: string }).pledge_text ?? "").trim()
                 ? ((assessment.assessment_integrity as { pledge_text?: string }).pledge_text as string)
                 : DEFAULT_PLEDGE_TEXT,
-            accepted_at: latestSubmission?.integrity_pledge_accepted_at ?? null,
+            accepted_at: pledgeAcceptedAt,
+            accepted_version: pledgeAcceptedVersion,
           }
         : { enabled: false },
     },

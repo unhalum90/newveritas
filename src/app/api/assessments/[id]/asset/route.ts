@@ -13,6 +13,7 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
     .from("assessment_assets")
     .select("id, assessment_id, asset_type, asset_url, generation_prompt, created_at")
     .eq("assessment_id", assessmentId)
+    .eq("asset_type", "image")
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -43,7 +44,11 @@ export async function PUT(request: NextRequest, ctx: { params: Promise<{ id: str
   const generationPrompt = parsed.data.generation_prompt ?? null;
 
   // Enforce "one visual asset" by deleting any previous rows before inserting the new one.
-  const { error: deleteError } = await supabase.from("assessment_assets").delete().eq("assessment_id", assessmentId);
+  const { error: deleteError } = await supabase
+    .from("assessment_assets")
+    .delete()
+    .eq("assessment_id", assessmentId)
+    .eq("asset_type", "image");
   if (deleteError) return NextResponse.json({ error: deleteError.message }, { status: 500 });
 
   if (!assetUrl) {

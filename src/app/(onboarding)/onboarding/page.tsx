@@ -85,8 +85,10 @@ export default function OnboardingPage() {
       const data = (await res.json().catch(() => null)) as { teacher?: Teacher; error?: string } | null;
       if (!res.ok) throw new Error(data?.error ?? "Update failed.");
       if (data?.teacher) setTeacher(data.teacher);
+      return true;
     } catch (e) {
       setError(e instanceof Error ? e.message : "Update failed.");
+      return false;
     } finally {
       setSaving(false);
     }
@@ -301,8 +303,8 @@ export default function OnboardingPage() {
                 type="button"
                 disabled={saving}
                 onClick={async () => {
-                  await patchTeacher({ onboarding_stage: "COMPLETE" });
-                  router.push("/dashboard");
+                  const ok = await patchTeacher({ onboarding_stage: "COMPLETE" });
+                  if (ok) router.push("/dashboard");
                 }}
               >
                 {saving ? "Finishing…" : "Enter Dashboard"}

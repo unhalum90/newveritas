@@ -77,7 +77,21 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
     .eq("assessment_id", submission.assessment_id)
     .maybeSingle();
   if (iError) return NextResponse.json({ error: iError.message }, { status: 500 });
-  if (integrity?.pledge_enabled && !submission.integrity_pledge_accepted_at) {
+  let pledgeAcceptedAt = submission.integrity_pledge_accepted_at;
+  if (integrity?.pledge_enabled && !pledgeAcceptedAt) {
+    const { data: priorPledge, error: pledgeError } = await admin
+      .from("submissions")
+      .select("integrity_pledge_accepted_at")
+      .eq("assessment_id", submission.assessment_id)
+      .eq("student_id", student.id)
+      .not("integrity_pledge_accepted_at", "is", null)
+      .order("integrity_pledge_accepted_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (pledgeError) return NextResponse.json({ error: pledgeError.message }, { status: 500 });
+    pledgeAcceptedAt = priorPledge?.integrity_pledge_accepted_at ?? null;
+  }
+  if (integrity?.pledge_enabled && !pledgeAcceptedAt) {
     return NextResponse.json({ error: "Accept the academic integrity pledge before starting." }, { status: 409 });
   }
 
@@ -157,7 +171,21 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
     .eq("assessment_id", submission.assessment_id)
     .maybeSingle();
   if (iError) return NextResponse.json({ error: iError.message }, { status: 500 });
-  if (integrity?.pledge_enabled && !submission.integrity_pledge_accepted_at) {
+  let pledgeAcceptedAt = submission.integrity_pledge_accepted_at;
+  if (integrity?.pledge_enabled && !pledgeAcceptedAt) {
+    const { data: priorPledge, error: pledgeError } = await admin
+      .from("submissions")
+      .select("integrity_pledge_accepted_at")
+      .eq("assessment_id", submission.assessment_id)
+      .eq("student_id", student.id)
+      .not("integrity_pledge_accepted_at", "is", null)
+      .order("integrity_pledge_accepted_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (pledgeError) return NextResponse.json({ error: pledgeError.message }, { status: 500 });
+    pledgeAcceptedAt = priorPledge?.integrity_pledge_accepted_at ?? null;
+  }
+  if (integrity?.pledge_enabled && !pledgeAcceptedAt) {
     return NextResponse.json({ error: "Accept the academic integrity pledge before starting." }, { status: 409 });
   }
 

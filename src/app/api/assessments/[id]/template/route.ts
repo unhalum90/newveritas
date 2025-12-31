@@ -132,7 +132,8 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
       const { error: deleteAssetsError } = await supabase
         .from("assessment_assets")
         .delete()
-        .eq("assessment_id", assessmentId);
+        .eq("assessment_id", assessmentId)
+        .eq("asset_type", "image");
       if (deleteAssetsError) throw deleteAssetsError;
       const { data: assetRow, error: assetError } = await supabase
         .from("assessment_assets")
@@ -154,7 +155,8 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
       const { error: clearAssetsError } = await supabase
         .from("assessment_assets")
         .delete()
-        .eq("assessment_id", assessmentId);
+        .eq("assessment_id", assessmentId)
+        .eq("asset_type", "image");
       if (clearAssetsError) throw clearAssetsError;
       const { error: unlinkAssetError } = await supabase
         .from("assessments")

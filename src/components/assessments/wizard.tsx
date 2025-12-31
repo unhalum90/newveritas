@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { AssessmentReviewDialog } from "@/components/assessments/assessment-review-dialog";
@@ -54,6 +54,18 @@ type AssessmentAsset = {
   asset_type: string;
   asset_url: string;
   generation_prompt: string | null;
+  created_at: string;
+};
+
+type AudioAsset = {
+  id: string;
+  assessment_id: string;
+  asset_type: string;
+  asset_url: string;
+  original_filename: string | null;
+  duration_seconds: number | null;
+  max_duration_seconds: number | null;
+  require_full_listen: boolean;
   created_at: string;
 };
 
@@ -120,6 +132,15 @@ const BLOOMS_OPTIONS = [
   { value: "create", label: "Create (synthesize new ideas)" },
 ] as const;
 
+const MAX_AUDIO_SECONDS = 180;
+
+function formatSeconds(value?: number | null) {
+  if (!value || !Number.isFinite(value)) return "Unknown length";
+  const minutes = Math.floor(value / 60);
+  const seconds = Math.round(value % 60);
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
 function getBloomsLabel(value?: string | null) {
   if (!value) return "Understand (default)";
   const option = BLOOMS_OPTIONS.find((item) => item.value === value);
@@ -158,6 +179,9 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
   const [assetUrl, setAssetUrl] = useState("");
   const [assetPrompt, setAssetPrompt] = useState("");
   const [assetOptions, setAssetOptions] = useState<string[]>([]);
+  const [audioIntro, setAudioIntro] = useState<AudioAsset | null>(null);
+  const [audioUploading, setAudioUploading] = useState(false);
+  const [audioError, setAudioError] = useState<string | null>(null);
   const [templates, setTemplates] = useState<TemplateSummary[]>([]);
   const [templatesLoading, setTemplatesLoading] = useState(false);
   const [templateError, setTemplateError] = useState<string | null>(null);
@@ -194,8 +218,10 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
   const [validationOpen, setValidationOpen] = useState(false);
   const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
   const [reviewOpen, setReviewOpen] = useState(false);
+  const audioInputRef = useRef<HTMLInputElement | null>(null);
 
   const readonly = assessment?.status !== "draft";
+  const assetBusy = saving || audioUploading;
 
   useEffect(() => {
     if (!dirty) return;
@@ -245,12 +271,15 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
 
   const load = useCallback(async () => {
     setError(null);
-    const [data, q, assetResult, rubricsResult] = await Promise.all([
+    const [data, q, assetResult, audioResult, rubricsResult] = await Promise.all([
       jsonFetch<{ assessment: Assessment }>(`/api/assessments/${assessmentId}`, { cache: "no-store" }),
       jsonFetch<{ questions: Question[] }>(`/api/assessments/${assessmentId}/questions`, { cache: "no-store" }),
       jsonFetch<{ asset: AssessmentAsset | null }>(`/api/assessments/${assessmentId}/asset`, { cache: "no-store" }).catch(
         () => ({ asset: null }),
       ),
+      jsonFetch<{ asset: AudioAsset | null }>(`/api/assessments/${assessmentId}/audio`, { cache: "no-store" }).catch(() => ({
+        asset: null,
+      })),
       jsonFetch<{ rubrics: Rubric[] }>(`/api/assessments/${assessmentId}/rubrics`, { cache: "no-store" }).catch(() => ({ rubrics: [] })),
     ]);
 
@@ -261,6 +290,7 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
 
     setAssetUrl(assetResult.asset?.asset_url ?? "");
     setAssetPrompt(assetResult.asset?.generation_prompt ?? "");
+    setAudioIntro(audioResult.asset ?? null);
 
     const next: Record<RubricType, Rubric | null> = { reasoning: null, evidence: null };
     for (const item of rubricsResult.rubrics) {
@@ -469,9 +499,15 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
       : assetPrompt.trim()
         ? "Visual prompt provided"
         : "No visual selected";
+    const audioSummary = audioIntro ? "Audio intro attached" : "No audio intro";
     const assetDetails: string[] = [];
     if (assetUrl.trim()) assetDetails.push(`Image URL: ${assetUrl.trim().slice(0, 80)}${assetUrl.trim().length > 80 ? "..." : ""}`);
     if (assetPrompt.trim()) assetDetails.push(`Prompt: ${assetPrompt.trim().slice(0, 120)}${assetPrompt.trim().length > 120 ? "..." : ""}`);
+    if (audioIntro) {
+      const durationLabel = formatSeconds(audioIntro.duration_seconds);
+      const audioLabel = audioIntro.original_filename ? audioIntro.original_filename.trim() : "Audio intro";
+      assetDetails.push(`Audio: ${audioLabel} (${durationLabel})`);
+    }
 
     const questionDetails = questions
       .slice(0, 3)
@@ -505,7 +541,7 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
       {
         step: 3,
         title: "Visual Assets",
-        summary: assetSummary,
+        summary: `${assetSummary} • ${audioSummary}`,
         details: assetDetails,
       },
       {
@@ -523,6 +559,7 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
     ];
   }, [
     assessment,
+    audioIntro,
     assetPrompt,
     assetUrl,
     className,
@@ -573,6 +610,79 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
       setError(e instanceof Error ? e.message : "Generation failed.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  function readAudioDuration(file: File) {
+    return new Promise<number>((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const audio = new Audio();
+      audio.preload = "metadata";
+      audio.onloadedmetadata = () => {
+        const duration = audio.duration;
+        URL.revokeObjectURL(url);
+        if (!Number.isFinite(duration) || duration <= 0) {
+          reject(new Error("Unable to read audio duration."));
+          return;
+        }
+        resolve(duration);
+      };
+      audio.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject(new Error("Unable to read audio duration."));
+      };
+      audio.src = url;
+    });
+  }
+
+  async function handleAudioSelected(file: File) {
+    if (readonly) return;
+    setAudioError(null);
+    setAudioUploading(true);
+    try {
+      const name = (file.name || "").toLowerCase();
+      const type = (file.type || "").toLowerCase();
+      const allowed = type.includes("audio/") || name.endsWith(".mp3") || name.endsWith(".wav");
+      if (!allowed) {
+        throw new Error("Audio must be MP3 or WAV.");
+      }
+      const duration = await readAudioDuration(file);
+      if (duration > MAX_AUDIO_SECONDS) {
+        throw new Error("Audio must be 3 minutes or less.");
+      }
+      const form = new FormData();
+      form.append("file", file);
+      form.append("duration_seconds", String(Math.round(duration)));
+      form.append("max_duration_seconds", String(MAX_AUDIO_SECONDS));
+      form.append("require_full_listen", "true");
+      const res = await fetch(`/api/assessments/${assessmentId}/audio`, {
+        method: "POST",
+        body: form,
+      });
+      const data = (await res.json().catch(() => null)) as { asset?: AudioAsset | null; error?: string } | null;
+      if (!res.ok) throw new Error(data?.error ?? "Audio upload failed.");
+      setAudioIntro(data?.asset ?? null);
+    } catch (e) {
+      setAudioError(e instanceof Error ? e.message : "Audio upload failed.");
+    } finally {
+      setAudioUploading(false);
+      if (audioInputRef.current) audioInputRef.current.value = "";
+    }
+  }
+
+  async function removeAudioIntro() {
+    if (readonly) return;
+    setAudioError(null);
+    setAudioUploading(true);
+    try {
+      const res = await fetch(`/api/assessments/${assessmentId}/audio`, { method: "DELETE" });
+      const data = (await res.json().catch(() => null)) as { error?: string } | null;
+      if (!res.ok) throw new Error(data?.error ?? "Unable to remove audio.");
+      setAudioIntro(null);
+    } catch (e) {
+      setAudioError(e instanceof Error ? e.message : "Unable to remove audio.");
+    } finally {
+      setAudioUploading(false);
     }
   }
 
@@ -1226,7 +1336,7 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
             <Card>
               <CardHeader>
                 <CardTitle>Visual Assets</CardTitle>
-                <CardDescription>Generate options or paste a URL. Choose one image to anchor the assessment.</CardDescription>
+                <CardDescription>Generate options or paste a URL. Add an optional audio intro for students to listen to.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
@@ -1247,7 +1357,7 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
                     <Button
                       type="button"
                       variant="secondary"
-                      disabled={saving || readonly || !assetPrompt.trim()}
+                      disabled={assetBusy || readonly || !assetPrompt.trim()}
                       onClick={generateAssetFromPrompt}
                     >
                       {saving ? "Generating…" : "Generate 3 Options"}
@@ -1308,6 +1418,58 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
                   </div>
                 ) : null}
 
+                <div className="space-y-3 rounded-md border border-[var(--border)] bg-[var(--surface)] p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-medium text-[var(--text)]">Audio intro (optional)</div>
+                      <div className="text-xs text-[var(--muted)]">
+                        MP3 or WAV. Max length 3 minutes. If provided, students must listen before questions appear.
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        ref={audioInputRef}
+                        type="file"
+                        accept="audio/mpeg,audio/mp3,audio/wav,.mp3,.wav"
+                        className="hidden"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (f) void handleAudioSelected(f);
+                        }}
+                        disabled={readonly}
+                      />
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        disabled={assetBusy || readonly}
+                        onClick={() => audioInputRef.current?.click()}
+                      >
+                        {audioUploading ? "Uploading…" : audioIntro ? "Replace audio" : "Upload audio"}
+                      </Button>
+                    </div>
+                  </div>
+
+                  {audioIntro ? (
+                    <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="text-sm text-[var(--text)]">
+                          {audioIntro.original_filename?.trim() || "Audio intro"}
+                        </div>
+                        <div className="text-xs text-[var(--muted)]">{formatSeconds(audioIntro.duration_seconds)}</div>
+                      </div>
+                      <audio controls src={audioIntro.asset_url} className="mt-2 w-full" />
+                      <div className="mt-3 flex items-center justify-end">
+                        <Button type="button" variant="secondary" disabled={assetBusy || readonly} onClick={removeAudioIntro}>
+                          Remove audio
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-xs text-[var(--muted)]">No audio uploaded yet.</div>
+                  )}
+                  {audioError ? <div className="text-xs text-red-500">{audioError}</div> : null}
+                </div>
+
                 <div className="text-xs text-[var(--muted)]">
                   Visuals are optional for publishing. Add one if you want an image-based anchor prompt.
                 </div>
@@ -1316,7 +1478,7 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
                   <Button
                     type="button"
                     variant="secondary"
-                    disabled={saving || readonly}
+                    disabled={assetBusy || readonly}
                     onClick={async () => {
                       setSaving(true);
                       setError(null);
@@ -1338,12 +1500,12 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
                     Clear
                   </Button>
                   <div className="flex items-center gap-2">
-                    <Button type="button" variant="secondary" disabled={saving} onClick={() => goToStep(2)}>
+                    <Button type="button" variant="secondary" disabled={assetBusy} onClick={() => goToStep(2)}>
                       ← Back
                     </Button>
                     <Button
                       type="button"
-                      disabled={saving}
+                      disabled={assetBusy}
                       onClick={() => {
                         if (!assetUrl.trim()) {
                           goToStep(4);
