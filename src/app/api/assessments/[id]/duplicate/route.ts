@@ -14,7 +14,7 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
 
   const { data: assessment, error: getError } = await supabase
     .from("assessments")
-    .select("id, class_id, title, subject, target_language, instructions, authoring_mode")
+    .select("id, class_id, title, subject, target_language, instructions, authoring_mode, is_practice_mode")
     .eq("id", id)
     .maybeSingle();
 
@@ -32,6 +32,7 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
       instructions: assessment.instructions ?? null,
       status: "draft",
       authoring_mode: assessment.authoring_mode ?? "manual",
+      is_practice_mode: assessment.is_practice_mode ?? false,
       selected_asset_id: null,
     })
     .select("id")
@@ -42,7 +43,7 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
   const [questionsRes, rubricsRes, integrityRes] = await Promise.all([
     supabase
       .from("assessment_questions")
-      .select("question_text, question_type, order_index")
+      .select("question_text, question_type, blooms_level, order_index")
       .eq("assessment_id", id),
     supabase
       .from("rubrics")
@@ -51,7 +52,7 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
     supabase
       .from("assessment_integrity")
       .select(
-        "pause_threshold_seconds, tab_switch_monitor, shuffle_questions, pledge_enabled, pledge_version, pledge_text, recording_limit_seconds, viewing_timer_seconds",
+        "pause_threshold_seconds, tab_switch_monitor, shuffle_questions, allow_grace_restart, pledge_enabled, pledge_version, pledge_text, recording_limit_seconds, viewing_timer_seconds",
       )
       .eq("assessment_id", id)
       .maybeSingle(),
@@ -73,6 +74,7 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
         assessment_id: created.id,
         question_text: q.question_text,
         question_type: q.question_type ?? "open_response",
+        blooms_level: q.blooms_level ?? null,
         order_index: q.order_index,
       })),
     );
@@ -133,6 +135,7 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
       pause_threshold_seconds: integrityRes.data.pause_threshold_seconds,
       tab_switch_monitor: integrityRes.data.tab_switch_monitor,
       shuffle_questions: integrityRes.data.shuffle_questions,
+      allow_grace_restart: integrityRes.data.allow_grace_restart ?? false,
       pledge_enabled: integrityRes.data.pledge_enabled,
       pledge_version: integrityRes.data.pledge_version,
       pledge_text: integrityRes.data.pledge_text ?? null,

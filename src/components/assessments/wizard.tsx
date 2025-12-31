@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 
 type ClassRow = { id: string; name: string };
-type AuthoringMode = "manual" | "upload" | "ai";
+type AuthoringMode = "manual" | "upload" | "ai" | "template";
 
 type Assessment = {
   id: string;
@@ -21,11 +21,13 @@ type Assessment = {
   instructions: string | null;
   status: "draft" | "live" | "closed";
   authoring_mode: AuthoringMode;
+  is_practice_mode?: boolean | null;
   classes?: { name?: string | null } | null;
   assessment_integrity: {
     pause_threshold_seconds: number | null;
     tab_switch_monitor: boolean;
     shuffle_questions: boolean;
+    allow_grace_restart: boolean;
     pledge_enabled: boolean;
     pledge_version: number;
     pledge_text: string | null;
@@ -39,6 +41,7 @@ type Question = {
   question_text: string;
   question_type?: string | null;
   evidence_upload?: "disabled" | "optional" | "required";
+  blooms_level?: string | null;
   order_index: number;
 };
 
@@ -60,6 +63,16 @@ type Rubric = {
   scale_min: number;
   scale_max: number;
   created_at: string;
+};
+
+type TemplateSummary = {
+  id: string;
+  title: string;
+  subject: string | null;
+  grade_band: string | null;
+  blooms_level_avg: string | null;
+  description: string | null;
+  question_count: number;
 };
 
 function getErrorMessage(payload: unknown) {
@@ -87,6 +100,47 @@ const steps = [
 
 type StepNumber = (typeof steps)[number]["n"];
 
+const QUESTION_TYPE_OPTIONS = [
+  { value: "open_response", label: "Open response" },
+  { value: "evidence_followup", label: "Evidence follow-up (photo)" },
+  { value: "artifact_followup", label: "Evidence follow-up (artifact alias)" },
+  { value: "audio_followup", label: "Audio follow-up (AI question)" },
+] as const;
+const CUSTOM_QUESTION_TYPE = "__custom__";
+
+const BLOOMS_OPTIONS = [
+  { value: "remember", label: "Remember (recall facts)" },
+  { value: "understand", label: "Understand (explain concepts)" },
+  { value: "apply", label: "Apply (use in new context)" },
+  { value: "analyze", label: "Analyze (examine relationships)" },
+  { value: "evaluate", label: "Evaluate (judge/defend)" },
+  { value: "create", label: "Create (synthesize new ideas)" },
+] as const;
+
+function getBloomsLabel(value?: string | null) {
+  if (!value) return "Understand (default)";
+  const option = BLOOMS_OPTIONS.find((item) => item.value === value);
+  return option ? option.label : value;
+}
+
+function getQuestionTypeLabel(type?: string | null) {
+  const normalized = (type ?? "").trim() || "open_response";
+  const option = QUESTION_TYPE_OPTIONS.find((item) => item.value === normalized);
+  return option ? option.label : normalized;
+}
+
+function splitQuestionType(type?: string | null) {
+  const normalized = (type ?? "").trim();
+  const option = QUESTION_TYPE_OPTIONS.find((item) => item.value === normalized);
+  if (option) {
+    return { preset: option.value, custom: "" };
+  }
+  if (!normalized) {
+    return { preset: QUESTION_TYPE_OPTIONS[0].value, custom: "" };
+  }
+  return { preset: CUSTOM_QUESTION_TYPE, custom: normalized };
+}
+
 export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -101,15 +155,23 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
   const [assetUrl, setAssetUrl] = useState("");
   const [assetPrompt, setAssetPrompt] = useState("");
   const [assetOptions, setAssetOptions] = useState<string[]>([]);
+  const [templates, setTemplates] = useState<TemplateSummary[]>([]);
+  const [templatesLoading, setTemplatesLoading] = useState(false);
+  const [templateError, setTemplateError] = useState<string | null>(null);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
   const [pledgeDraft, setPledgeDraft] = useState("");
   const [questionsCount, setQuestionsCount] = useState<number>(0);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [addingQuestion, setAddingQuestion] = useState(false);
   const [newQuestionText, setNewQuestionText] = useState("");
-  const [newQuestionType, setNewQuestionType] = useState("");
+  const [newQuestionTypePreset, setNewQuestionTypePreset] = useState<string>(QUESTION_TYPE_OPTIONS[0].value);
+  const [newQuestionTypeCustom, setNewQuestionTypeCustom] = useState("");
+  const [newQuestionBloom, setNewQuestionBloom] = useState<string>("understand");
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
   const [editingQuestionText, setEditingQuestionText] = useState("");
-  const [editingQuestionType, setEditingQuestionType] = useState("");
+  const [editingQuestionTypePreset, setEditingQuestionTypePreset] = useState<string>(QUESTION_TYPE_OPTIONS[0].value);
+  const [editingQuestionTypeCustom, setEditingQuestionTypeCustom] = useState("");
+  const [editingQuestionBloom, setEditingQuestionBloom] = useState<string>("understand");
   const [rubrics, setRubrics] = useState<Record<RubricType, Rubric | null>>({
     reasoning: null,
     evidence: null,
@@ -154,6 +216,25 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
       }
     })();
   }, []);
+
+  useEffect(() => {
+    if (assessment?.authoring_mode !== "template") return;
+    if (templatesLoading || templates.length) return;
+    (async () => {
+      setTemplateError(null);
+      setTemplatesLoading(true);
+      try {
+        const data = await jsonFetch<{ templates: TemplateSummary[] }>("/api/assessment-templates", {
+          cache: "no-store",
+        });
+        setTemplates(data.templates ?? []);
+      } catch (e) {
+        setTemplateError(e instanceof Error ? e.message : "Unable to load templates.");
+      } finally {
+        setTemplatesLoading(false);
+      }
+    })();
+  }, [assessment?.authoring_mode, templates.length, templatesLoading]);
 
   const load = useCallback(async () => {
     setError(null);
@@ -213,6 +294,7 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
             target_language: assessment.target_language,
             instructions: assessment.instructions,
             authoring_mode: assessment.authoring_mode,
+            is_practice_mode: assessment.is_practice_mode ?? false,
           }),
         });
         setDirty(false);
@@ -253,10 +335,11 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
       if (!assessment.title.trim()) return false;
       if (assessment.authoring_mode === "upload") return Boolean(startPdfFile);
       if (assessment.authoring_mode === "ai") return startAiPrompt.trim().length >= 20;
+      if (assessment.authoring_mode === "template") return Boolean(selectedTemplateId);
       return true;
     }
     return true;
-  }, [assessment, startAiPrompt, startPdfFile, step]);
+  }, [assessment, selectedTemplateId, startAiPrompt, startPdfFile, step]);
 
   async function saveDraft() {
     await persistDraft(false);
@@ -305,6 +388,7 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
     pause_threshold_seconds: 2.5,
     tab_switch_monitor: true,
     shuffle_questions: true,
+    allow_grace_restart: false,
     pledge_enabled: false,
     pledge_version: 1,
     pledge_text: null,
@@ -371,13 +455,21 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
     setSaving(true);
     setError(null);
     try {
+      const questionType =
+        newQuestionTypePreset === CUSTOM_QUESTION_TYPE ? newQuestionTypeCustom.trim() : newQuestionTypePreset;
       await jsonFetch(`/api/assessments/${assessmentId}/questions`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ question_text: newQuestionText.trim(), question_type: newQuestionType.trim() || null }),
+        body: JSON.stringify({
+          question_text: newQuestionText.trim(),
+          question_type: questionType || null,
+          blooms_level: newQuestionBloom || null,
+        }),
       });
       setNewQuestionText("");
-      setNewQuestionType("");
+      setNewQuestionTypePreset(QUESTION_TYPE_OPTIONS[0].value);
+      setNewQuestionTypeCustom("");
+      setNewQuestionBloom("understand");
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Save failed.");
@@ -389,7 +481,10 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
   function startEditQuestion(q: Question) {
     setEditingQuestionId(q.id);
     setEditingQuestionText(q.question_text);
-    setEditingQuestionType(q.question_type ?? "");
+    const next = splitQuestionType(q.question_type ?? null);
+    setEditingQuestionTypePreset(next.preset);
+    setEditingQuestionTypeCustom(next.custom);
+    setEditingQuestionBloom(q.blooms_level ?? "understand");
   }
 
   async function saveEditedQuestion() {
@@ -397,12 +492,15 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
     setSaving(true);
     setError(null);
     try {
+      const questionType =
+        editingQuestionTypePreset === CUSTOM_QUESTION_TYPE ? editingQuestionTypeCustom.trim() : editingQuestionTypePreset;
       await jsonFetch(`/api/questions/${editingQuestionId}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           question_text: editingQuestionText.trim(),
-          question_type: editingQuestionType.trim() || null,
+          question_type: questionType || null,
+          blooms_level: editingQuestionBloom || null,
         }),
       });
       setEditingQuestionId(null);
@@ -489,7 +587,11 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
           <Button type="button" variant="secondary" disabled={saving} onClick={() => router.push("/assessments")}>
             Back
           </Button>
-          <Button type="button" variant="secondary" onClick={() => window.open(`/student/assessments/${assessmentId}`, "_blank")}>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => window.open(`/student/assessments/${assessmentId}?preview=1`, "_blank")}
+          >
             Preview as Student
           </Button>
           <Button type="button" variant="secondary" disabled={saving || readonly} onClick={saveDraft}>
@@ -553,6 +655,7 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
                       { key: "manual", title: "Start from scratch", desc: "Fill out the wizard step-by-step." },
                       { key: "upload", title: "Upload existing material", desc: "Upload a PDF; we extract text and generate a draft." },
                       { key: "ai", title: "Generate with AI", desc: "Describe what you want; we generate a draft to review." },
+                      { key: "template", title: "Use a template", desc: "Browse pre-built questions by subject." },
                     ] as const
                   ).map((m) => (
                     <Card key={m.key} className={assessment.authoring_mode === m.key ? "ring-1 ring-[var(--primary)]" : ""}>
@@ -568,6 +671,7 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
                             setAssessment({ ...assessment, authoring_mode: m.key });
                             if (m.key !== "ai") setStartAiPrompt("");
                             if (m.key !== "upload") setStartPdfFile(null);
+                            if (m.key !== "template") setSelectedTemplateId(null);
                             setDirty(true);
                           }}
                           disabled={readonly}
@@ -723,6 +827,47 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
                   </div>
                 ) : null}
 
+                {assessment.authoring_mode === "template" ? (
+                  <div className="space-y-3 rounded-md border border-[var(--border)] bg-[var(--surface)] p-4">
+                    <div className="text-sm font-medium text-[var(--text)]">Choose a template</div>
+                    <div className="text-xs text-[var(--muted)]">Pick a starting point and customize it in the next steps.</div>
+                    {templateError ? <div className="text-sm text-[var(--danger)]">{templateError}</div> : null}
+                    {templatesLoading ? <div className="text-sm text-[var(--muted)]">Loading templates…</div> : null}
+                    {!templatesLoading && !templates.length ? (
+                      <div className="text-sm text-[var(--muted)]">No templates are available yet.</div>
+                    ) : null}
+                    <div className="grid grid-cols-1 gap-3">
+                      {templates.map((t) => {
+                        const selected = selectedTemplateId === t.id;
+                        return (
+                          <button
+                            key={t.id}
+                            type="button"
+                            onClick={() => setSelectedTemplateId(t.id)}
+                            className={`rounded-md border p-4 text-left transition-colors border-[var(--border)] ${
+                              selected ? "ring-2 ring-[var(--primary)]" : "hover:border-[var(--primary)]"
+                            }`}
+                            disabled={readonly}
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <div className="text-sm font-semibold text-[var(--text)]">{t.title}</div>
+                                <div className="mt-1 text-xs text-[var(--muted)]">
+                                  {[t.subject, t.grade_band, t.blooms_level_avg ? `Bloom's: ${t.blooms_level_avg}` : null]
+                                    .filter(Boolean)
+                                    .join(" • ")}
+                                </div>
+                                {t.description ? <div className="mt-2 text-sm text-[var(--muted)]">{t.description}</div> : null}
+                              </div>
+                              <div className="text-xs text-[var(--muted)]">{t.question_count} questions</div>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : null}
+
                 <div className="flex justify-end">
                   <Button
                     type="button"
@@ -780,14 +925,39 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
                         return;
                       }
 
+                      if (assessment.authoring_mode === "template") {
+                        if (!selectedTemplateId) return;
+                        void (async () => {
+                          setSaving(true);
+                          setError(null);
+                          try {
+                            await persistDraft(true);
+                            await jsonFetch(`/api/assessments/${assessmentId}/template`, {
+                              method: "POST",
+                              headers: { "content-type": "application/json" },
+                              body: JSON.stringify({ template_id: selectedTemplateId }),
+                            });
+                            await load();
+                            goToStep(2);
+                          } catch (e) {
+                            setError(e instanceof Error ? e.message : "Template apply failed.");
+                          } finally {
+                            setSaving(false);
+                          }
+                        })();
+                        return;
+                      }
+
                       if (dirty && !saving) void persistDraft(true);
                       goToStep(2);
                     }}
                   >
-                    {assessment.authoring_mode === "ai" || assessment.authoring_mode === "upload"
+                    {assessment.authoring_mode === "ai" || assessment.authoring_mode === "upload" || assessment.authoring_mode === "template"
                       ? saving
                         ? "Generating…"
-                        : "Generate Draft"
+                        : assessment.authoring_mode === "template"
+                          ? "Apply Template"
+                          : "Generate Draft"
                       : "Continue →"}
                   </Button>
                 </div>
@@ -800,6 +970,44 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
                 <CardDescription>Draft saves on blur (and every 3 seconds while typing).</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="instructions">Student instructions</Label>
+                  <textarea
+                    id="instructions"
+                    maxLength={500}
+                    className="min-h-28 w-full rounded-md border bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] border-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] disabled:opacity-60"
+                    placeholder="Explain what students should do and how to respond."
+                    value={assessment.instructions ?? ""}
+                    onChange={(e) => {
+                      setAssessment({ ...assessment, instructions: e.target.value || null });
+                      setDirty(true);
+                    }}
+                    onBlur={() => {
+                      if (dirty && !saving) void persistDraft(true);
+                    }}
+                    disabled={readonly}
+                  />
+                </div>
+                <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <div className="text-sm font-medium text-[var(--text)]">Practice Mode</div>
+                      <div className="text-xs text-[var(--muted)]">
+                        Practice assessments do not record scores. Students can retry multiple times.
+                      </div>
+                    </div>
+                    <Switch
+                      checked={Boolean(assessment.is_practice_mode)}
+                      onCheckedChange={(checked) => {
+                        setAssessment({ ...assessment, is_practice_mode: checked });
+                        setDirty(true);
+                        if (!saving) void persistDraft(true);
+                      }}
+                      disabled={readonly || saving}
+                      aria-label="Practice Mode"
+                    />
+                  </div>
+                </div>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
                     <Label htmlFor="subject">Subject</Label>
@@ -847,24 +1055,6 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
                       ))}
                     </select>
                   </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="instructions">Student instructions</Label>
-                  <textarea
-                    id="instructions"
-                    maxLength={500}
-                    className="min-h-28 w-full rounded-md border bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] border-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] disabled:opacity-60"
-                    placeholder="Explain what students should do and how to respond."
-                    value={assessment.instructions ?? ""}
-                    onChange={(e) => {
-                      setAssessment({ ...assessment, instructions: e.target.value || null });
-                      setDirty(true);
-                    }}
-                    onBlur={() => {
-                      if (dirty && !saving) void persistDraft(true);
-                    }}
-                    disabled={readonly}
-                  />
                 </div>
                 <div className="flex items-center justify-between gap-3">
                   <Button type="button" variant="secondary" disabled={saving} onClick={() => goToStep(1)}>
@@ -1037,7 +1227,8 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
                                 <span className="rounded-full border border-[var(--border)] bg-[var(--background)] px-2 py-1 text-xs font-semibold text-[var(--muted)]">
                                   QUESTION {q.order_index}
                                 </span>
-                                <span className="text-xs text-[var(--muted)]">{q.question_type ?? "open_response"}</span>
+                                <span className="text-xs text-[var(--muted)]">{getQuestionTypeLabel(q.question_type)}</span>
+                                <span className="text-xs text-[var(--muted)]">• {getBloomsLabel(q.blooms_level)}</span>
                               </div>
                               <div className="flex items-center gap-2">
                                 {editing ? (
@@ -1079,17 +1270,50 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
                                       disabled={saving}
                                     />
                                   </div>
-                                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                                    <div className="space-y-2">
+                                      <Label htmlFor={`bl-${q.id}`}>Bloom&apos;s level</Label>
+                                      <select
+                                        id={`bl-${q.id}`}
+                                        className="h-10 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 text-sm text-[var(--text)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] disabled:opacity-60"
+                                        value={editingQuestionBloom}
+                                        disabled={saving}
+                                        onChange={(e) => setEditingQuestionBloom(e.target.value)}
+                                      >
+                                        {BLOOMS_OPTIONS.map((option) => (
+                                          <option key={option.value} value={option.value}>
+                                            {option.label}
+                                          </option>
+                                        ))}
+                                      </select>
+                                      <p className="text-xs text-[var(--muted)]">Tag cognitive demand for scaffolding.</p>
+                                    </div>
                                     <div className="space-y-2">
                                       <Label htmlFor={`qt-${q.id}`}>Question type</Label>
-                                      <Input
+                                      <select
                                         id={`qt-${q.id}`}
-                                        value={editingQuestionType}
-                                        onChange={(e) => setEditingQuestionType(e.target.value)}
+                                        className="h-10 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 text-sm text-[var(--text)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] disabled:opacity-60"
+                                        value={editingQuestionTypePreset}
                                         disabled={saving}
-                                        list="questionTypeOptions"
-                                        placeholder="open_response or evidence_followup"
-                                      />
+                                        onChange={(e) => setEditingQuestionTypePreset(e.target.value)}
+                                      >
+                                        {QUESTION_TYPE_OPTIONS.map((option) => (
+                                          <option key={option.value} value={option.value}>
+                                            {option.label}
+                                          </option>
+                                        ))}
+                                        <option value={CUSTOM_QUESTION_TYPE}>Custom…</option>
+                                      </select>
+                                      {editingQuestionTypePreset === CUSTOM_QUESTION_TYPE ? (
+                                        <Input
+                                          value={editingQuestionTypeCustom}
+                                          onChange={(e) => setEditingQuestionTypeCustom(e.target.value)}
+                                          disabled={saving}
+                                          placeholder="Type a custom question type"
+                                        />
+                                      ) : (
+                                        <p className="text-xs text-[var(--muted)]">Choose a labeled type or switch to custom.</p>
+                                      )}
                                     </div>
                                     <div className="space-y-2">
                                       <Label htmlFor={`eu-${q.id}`}>Evidence upload</Label>
@@ -1111,10 +1335,14 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
                               ) : (
                                 <div className="space-y-2">
                                   <div className="text-sm italic text-[var(--text)]">“{q.question_text}”</div>
-                                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                                     <div className="space-y-1">
                                       <div className="text-xs text-[var(--muted)]">Evidence upload</div>
                                       <div className="text-sm text-[var(--text)] capitalize">{evidenceUpload}</div>
+                                    </div>
+                                    <div className="space-y-1">
+                                      <div className="text-xs text-[var(--muted)]">Bloom&apos;s level</div>
+                                      <div className="text-sm text-[var(--text)]">{getBloomsLabel(q.blooms_level)}</div>
                                     </div>
                                     <div className="flex items-end justify-end sm:justify-start">
                                       <Button
@@ -1155,17 +1383,49 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
                           placeholder="Type the question prompt students will see…"
                         />
                       </div>
-                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                        <div className="space-y-2">
+                          <Label htmlFor="newQuestionBloom">Bloom&apos;s level</Label>
+                          <select
+                            id="newQuestionBloom"
+                            className="h-10 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 text-sm text-[var(--text)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] disabled:opacity-60"
+                            value={newQuestionBloom}
+                            onChange={(e) => setNewQuestionBloom(e.target.value)}
+                            disabled={readonly || saving}
+                          >
+                            {BLOOMS_OPTIONS.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
                         <div className="space-y-2">
                           <Label htmlFor="newQuestionType">Question type</Label>
-                          <Input
+                          <select
                             id="newQuestionType"
-                            value={newQuestionType}
-                            onChange={(e) => setNewQuestionType(e.target.value)}
+                            className="h-10 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 text-sm text-[var(--text)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] disabled:opacity-60"
+                            value={newQuestionTypePreset}
+                            onChange={(e) => setNewQuestionTypePreset(e.target.value)}
                             disabled={readonly || saving}
-                            list="questionTypeOptions"
-                            placeholder="open_response or evidence_followup"
-                          />
+                          >
+                            {QUESTION_TYPE_OPTIONS.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                            <option value={CUSTOM_QUESTION_TYPE}>Custom…</option>
+                          </select>
+                          {newQuestionTypePreset === CUSTOM_QUESTION_TYPE ? (
+                            <Input
+                              value={newQuestionTypeCustom}
+                              onChange={(e) => setNewQuestionTypeCustom(e.target.value)}
+                              disabled={readonly || saving}
+                              placeholder="Type a custom question type"
+                            />
+                          ) : (
+                            <p className="text-xs text-[var(--muted)]">Use a labeled type or switch to custom.</p>
+                          )}
                         </div>
                         <div className="flex items-end justify-end gap-2">
                           <Button type="button" variant="secondary" disabled={saving} onClick={() => setAddingQuestion(false)}>
@@ -1195,11 +1455,6 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
                     + Add Question to Bank
                   </button>
                 )}
-
-                <datalist id="questionTypeOptions">
-                  <option value="open_response" />
-                  <option value="evidence_followup" />
-                </datalist>
 
                 {questionRequiredError ? (
                   <div className="flex items-center gap-2 text-sm text-[var(--danger)]">
@@ -1453,6 +1708,27 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
                     onCheckedChange={(checked) => updateIntegrity({ shuffle_questions: checked })}
                     disabled={saving || readonly}
                     aria-label="Dynamic Shuffle"
+                  />
+                </div>
+
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <div className="flex items-center gap-2 text-sm font-medium text-[var(--text)]">
+                      <span>Grace Restart</span>
+                      <span
+                        className="cursor-help text-xs text-[var(--muted)]"
+                        title="Allows one restart if a student pauses too long before speaking or gives an off-topic response."
+                      >
+                        (?)
+                      </span>
+                    </div>
+                    <div className="text-xs text-[var(--muted)]">Allow a single restart per student</div>
+                  </div>
+                  <Switch
+                    checked={integrity.allow_grace_restart}
+                    onCheckedChange={(checked) => updateIntegrity({ allow_grace_restart: checked })}
+                    disabled={saving || readonly}
+                    aria-label="Grace Restart"
                   />
                 </div>
 

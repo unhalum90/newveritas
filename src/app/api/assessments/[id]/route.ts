@@ -14,10 +14,10 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
     .from("assessments")
     .select(
       `
-      id, class_id, title, subject, target_language, instructions, status, authoring_mode, selected_asset_id, published_at, created_at, updated_at,
+      id, class_id, title, subject, target_language, instructions, status, authoring_mode, is_practice_mode, selected_asset_id, published_at, created_at, updated_at,
       classes(name),
       assessment_integrity(*),
-      assessment_questions(id, assessment_id, question_text, question_type, order_index, created_at),
+      assessment_questions(id, assessment_id, question_text, question_type, blooms_level, order_index, created_at),
       rubrics(id, assessment_id, rubric_type, instructions, scale_min, scale_max, created_at, rubric_standards(id, rubric_id, framework, standard_code, description))
     `,
     )
@@ -56,7 +56,8 @@ const patchSchema = z.object({
   subject: z.string().optional().nullable(),
   target_language: z.string().optional().nullable(),
   instructions: z.string().optional().nullable(),
-  authoring_mode: z.enum(["manual", "upload", "ai"]).optional(),
+  authoring_mode: z.enum(["manual", "upload", "ai", "template"]).optional(),
+  is_practice_mode: z.boolean().optional(),
 });
 
 export async function PATCH(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {

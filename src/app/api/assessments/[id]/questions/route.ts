@@ -12,7 +12,7 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
 
   const { data: questions, error: listError } = await supabase
     .from("assessment_questions")
-    .select("id, assessment_id, question_text, question_type, evidence_upload, order_index, created_at")
+    .select("id, assessment_id, question_text, question_type, blooms_level, evidence_upload, order_index, created_at")
     .eq("assessment_id", assessmentId)
     .order("order_index", { ascending: true });
 
@@ -26,6 +26,7 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
 const createSchema = z.object({
   question_text: z.string().min(1).max(500),
   question_type: z.string().optional().nullable(),
+  blooms_level: z.enum(["remember", "understand", "apply", "analyze", "evaluate", "create"]).optional().nullable(),
   evidence_upload: z.enum(["disabled", "optional", "required"]).optional(),
 });
 
@@ -51,6 +52,7 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
 
   const questionType = parsed.data.question_type ?? null;
   const evidenceUpload = isEvidenceFollowup(questionType) ? "required" : parsed.data.evidence_upload ?? "optional";
+  const bloomsLevel = parsed.data.blooms_level ?? "understand";
 
   const { data: created, error: createError } = await supabase
     .from("assessment_questions")
@@ -58,6 +60,7 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
       assessment_id: assessmentId,
       question_text: parsed.data.question_text,
       question_type: questionType,
+      blooms_level: bloomsLevel,
       evidence_upload: evidenceUpload,
       order_index: orderIndex,
     })

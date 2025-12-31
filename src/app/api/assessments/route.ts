@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
 
   const { data: assessments, error: listError } = await supabase
     .from("assessments")
-    .select("id, title, status, authoring_mode, created_at, class_id")
+    .select("id, title, status, authoring_mode, is_practice_mode, created_at, class_id")
     .in("class_id", classIds)
     .order("created_at", { ascending: false });
 
@@ -47,7 +47,7 @@ const createSchema = z.object({
   subject: z.string().optional().nullable(),
   target_language: z.string().optional().nullable(),
   instructions: z.string().optional().nullable(),
-  authoring_mode: z.enum(["manual", "upload", "ai"]).default("manual"),
+  authoring_mode: z.enum(["manual", "upload", "ai", "template"]).default("manual"),
   source_reference: z.string().optional().nullable(),
 });
 

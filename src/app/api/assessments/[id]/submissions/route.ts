@@ -24,7 +24,7 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
   // Ensure teacher can access this assessment (RLS scoped).
   const { data: assessment, error: aError } = await supabase
     .from("assessments")
-    .select("id, title, status")
+    .select("id, title, status, is_practice_mode")
     .eq("id", assessmentId)
     .maybeSingle();
 
@@ -55,6 +55,26 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
   const nameById = new Map<string, string>();
   for (const s of students ?? []) {
     nameById.set(s.id, `${s.first_name ?? ""} ${s.last_name ?? ""}`.trim());
+  }
+
+  const { data: restartEvents, error: restartError } =
+    studentIds.length > 0
+      ? await supabase
+          .from("assessment_restart_events")
+          .select("student_id, restart_reason, created_at")
+          .eq("assessment_id", assessmentId)
+          .in("student_id", studentIds)
+      : { data: [], error: null };
+  if (restartError) return NextResponse.json({ error: restartError.message }, { status: 500 });
+
+  const restartByStudent = new Map<string, { reason: string; created_at: string }>();
+  for (const row of restartEvents ?? []) {
+    if (!restartByStudent.has(row.student_id)) {
+      restartByStudent.set(row.student_id, {
+        reason: row.restart_reason,
+        created_at: row.created_at,
+      });
+    }
   }
 
   const submissionIds = (submissions ?? []).map((s) => s.id);
@@ -142,12 +162,13 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
   }
 
   const submitted = (submissions ?? []).filter((s) => s.status === "submitted");
-  const scoringComplete = submitted.filter((s) => s.scoring_status === "complete");
-  const scoringError = submitted.filter((s) => s.scoring_status === "error");
+  const isPracticeMode = Boolean(assessment.is_practice_mode);
+  const scoringComplete = isPracticeMode ? [] : submitted.filter((s) => s.scoring_status === "complete");
+  const scoringError = isPracticeMode ? [] : submitted.filter((s) => s.scoring_status === "error");
 
-  const avgScoresAcross = scoringComplete
-    .map((s) => avg(scoreBuckets.get(s.id)?.all ?? []))
-    .filter((n): n is number => typeof n === "number");
+  const avgScoresAcross = isPracticeMode
+    ? []
+    : scoringComplete.map((s) => avg(scoreBuckets.get(s.id)?.all ?? [])).filter((n): n is number => typeof n === "number");
 
   const timeToScoreSeconds = scoringComplete
     .map((s) => {
@@ -164,19 +185,22 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
     summary: {
       total_submissions: (submissions ?? []).length,
       submitted_count: submitted.length,
-      scoring_complete_count: scoringComplete.length,
-      scoring_error_count: scoringError.length,
+      scoring_complete_count: isPracticeMode ? 0 : scoringComplete.length,
+      scoring_error_count: isPracticeMode ? 0 : scoringError.length,
       completion_rate: (submissions ?? []).length ? submitted.length / (submissions ?? []).length : 0,
-      avg_score: avg(avgScoresAcross),
+      avg_score: isPracticeMode ? null : avg(avgScoresAcross),
       avg_time_to_score_seconds: avg(timeToScoreSeconds),
+      restart_count: restartByStudent.size,
     },
     submissions: (submissions ?? []).map((s) => ({
       ...s,
       student_name: nameById.get(s.student_id) ?? "Student",
       response_count: counts.get(s.id) ?? 0,
-      avg_score: avg(scoreBuckets.get(s.id)?.all ?? []),
-      reasoning_avg: avg(scoreBuckets.get(s.id)?.reasoning ?? []),
-      evidence_avg: avg(scoreBuckets.get(s.id)?.evidence ?? []),
+      avg_score: isPracticeMode ? null : avg(scoreBuckets.get(s.id)?.all ?? []),
+      reasoning_avg: isPracticeMode ? null : avg(scoreBuckets.get(s.id)?.reasoning ?? []),
+      evidence_avg: isPracticeMode ? null : avg(scoreBuckets.get(s.id)?.evidence ?? []),
+      restart_reason: restartByStudent.get(s.student_id)?.reason ?? null,
+      restart_at: restartByStudent.get(s.student_id)?.created_at ?? null,
       integrity_flag_count: (() => {
         const summary = integrityBySubmission.get(s.id);
         if (!summary) return 0;

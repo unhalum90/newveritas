@@ -31,7 +31,7 @@ export default async function AssessmentsPage() {
       : (
           await supabase
             .from("assessments")
-            .select("id, title, status, authoring_mode, created_at, class_id")
+            .select("id, title, status, authoring_mode, is_practice_mode, created_at, class_id")
             .in("class_id", classIds)
             .order("created_at", { ascending: false })
         ).data ?? [];

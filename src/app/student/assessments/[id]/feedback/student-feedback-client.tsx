@@ -164,7 +164,7 @@ export function StudentFeedbackClient({ assessmentId }: { assessmentId: string }
                   </CardHeader>
                   <CardContent className="space-y-4">
                     {q.response ? (
-                      <div className="rounded-md border border-zinc-200 bg-white p-3">
+                      <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-3">
                         <audio controls src={q.response.signed_url} className="h-10 w-full" />
                         <div className="mt-2 text-xs text-[var(--muted)]">
                           {q.response.duration_seconds ? `${q.response.duration_seconds}s` : ""}
@@ -181,7 +181,7 @@ export function StudentFeedbackClient({ assessmentId }: { assessmentId: string }
                     )}
 
                     {q.evidence ? (
-                      <div className="rounded-md border border-zinc-200 bg-white p-3">
+                      <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-3">
                         <div className="text-xs font-semibold text-[var(--muted)]">Evidence image</div>
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
@@ -197,7 +197,7 @@ export function StudentFeedbackClient({ assessmentId }: { assessmentId: string }
 
                     {q.scores ? (
                       <div className="grid gap-3 md:grid-cols-2">
-                        <div className="rounded-md border border-zinc-200 bg-white p-3">
+                        <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-3">
                           <div className="flex items-center justify-between text-xs text-[var(--muted)]">
                             <span>Reasoning</span>
                             <span className="font-semibold text-[var(--text)]">
@@ -208,7 +208,7 @@ export function StudentFeedbackClient({ assessmentId }: { assessmentId: string }
                             {q.scores.reasoning.justification ?? "Feedback pending."}
                           </div>
                         </div>
-                        <div className="rounded-md border border-zinc-200 bg-white p-3">
+                        <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-3">
                           <div className="flex items-center justify-between text-xs text-[var(--muted)]">
                             <span>Evidence</span>
                             <span className="font-semibold text-[var(--text)]">

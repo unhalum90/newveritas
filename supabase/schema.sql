@@ -266,6 +266,7 @@ create table if not exists public.assessments (
   instructions text,
   status text not null default 'draft', -- draft | live | closed
   authoring_mode text not null default 'manual', -- manual | upload | ai
+  is_practice_mode boolean not null default false,
   selected_asset_id uuid, -- points to assessment_assets.id (optional, v1)
   published_at timestamptz,
   created_at timestamptz not null default now(),
@@ -278,6 +279,7 @@ alter table public.assessments add column if not exists target_language text;
 alter table public.assessments add column if not exists instructions text;
 alter table public.assessments add column if not exists status text not null default 'draft';
 alter table public.assessments add column if not exists authoring_mode text not null default 'manual';
+alter table public.assessments add column if not exists is_practice_mode boolean not null default false;
 alter table public.assessments add column if not exists selected_asset_id uuid;
 alter table public.assessments add column if not exists published_at timestamptz;
 alter table public.assessments add column if not exists created_at timestamptz not null default now();
@@ -399,6 +401,7 @@ create table if not exists public.assessment_integrity (
   pause_threshold_seconds numeric not null default 2.5,
   tab_switch_monitor boolean not null default true,
   shuffle_questions boolean not null default true,
+  allow_grace_restart boolean not null default false,
   pledge_enabled boolean not null default false,
   pledge_version int not null default 1,
   pledge_text text,
@@ -410,6 +413,7 @@ create table if not exists public.assessment_integrity (
 alter table public.assessment_integrity add column if not exists pause_threshold_seconds numeric not null default 2.5;
 alter table public.assessment_integrity add column if not exists tab_switch_monitor boolean not null default true;
 alter table public.assessment_integrity add column if not exists shuffle_questions boolean not null default true;
+alter table public.assessment_integrity add column if not exists allow_grace_restart boolean not null default false;
 alter table public.assessment_integrity add column if not exists pledge_enabled boolean not null default false;
 alter table public.assessment_integrity add column if not exists pledge_version int not null default 1;
 alter table public.assessment_integrity add column if not exists pledge_text text;
@@ -487,6 +491,7 @@ create table if not exists public.assessment_questions (
   id uuid primary key default gen_random_uuid(),
   assessment_id uuid references public.assessments(id) on delete cascade,
   evidence_upload text not null default 'optional', -- disabled | optional | required
+  blooms_level text, -- remember | understand | apply | analyze | evaluate | create
   question_text text not null,
   question_type text,
   order_index int not null,
@@ -496,6 +501,7 @@ create table if not exists public.assessment_questions (
 -- Backfill columns if assessment_questions already exists
 alter table public.assessment_questions add column if not exists assessment_id uuid references public.assessments(id) on delete cascade;
 alter table public.assessment_questions add column if not exists evidence_upload text not null default 'optional';
+alter table public.assessment_questions add column if not exists blooms_level text;
 alter table public.assessment_questions add column if not exists question_text text;
 alter table public.assessment_questions add column if not exists question_type text;
 alter table public.assessment_questions add column if not exists order_index int;
@@ -512,6 +518,20 @@ begin
     alter table public.assessment_questions
       add constraint assessment_questions_evidence_upload_chk
       check (evidence_upload in ('disabled', 'optional', 'required'));
+  end if;
+end;
+$$;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'assessment_questions_blooms_level_chk'
+  ) then
+    alter table public.assessment_questions
+      add constraint assessment_questions_blooms_level_chk
+      check (blooms_level is null or blooms_level in ('remember', 'understand', 'apply', 'analyze', 'evaluate', 'create'));
   end if;
 end;
 $$;
@@ -739,6 +759,78 @@ using (
   )
 );
 
+-- Grace restart events (one per student per assessment)
+create table if not exists public.assessment_restart_events (
+  id uuid primary key default gen_random_uuid(),
+  assessment_id uuid references public.assessments(id) on delete cascade,
+  student_id uuid references public.students(id) on delete cascade,
+  submission_id uuid references public.submissions(id) on delete set null,
+  new_submission_id uuid references public.submissions(id) on delete set null,
+  question_id uuid references public.assessment_questions(id) on delete set null,
+  restart_reason text not null, -- slow_start | off_topic
+  metadata jsonb,
+  created_at timestamptz not null default now()
+);
+
+create unique index if not exists assessment_restart_events_uq
+on public.assessment_restart_events(assessment_id, student_id);
+
+create index if not exists assessment_restart_events_assessment_id_idx on public.assessment_restart_events(assessment_id);
+create index if not exists assessment_restart_events_student_id_idx on public.assessment_restart_events(student_id);
+
+alter table public.assessment_restart_events enable row level security;
+
+drop policy if exists "Restart events scoped to teacher" on public.assessment_restart_events;
+create policy "Restart events scoped to teacher"
+on public.assessment_restart_events
+for select
+using (
+  exists (
+    select 1
+    from public.assessments a
+    join public.classes c on c.id = a.class_id
+    join public.teachers t on t.workspace_id = c.workspace_id
+    where a.id = assessment_id and t.user_id = auth.uid()
+  )
+);
+
+-- Assessment templates (system or teacher-created)
+create table if not exists public.assessment_templates (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  subject text,
+  grade_band text,
+  blooms_level_avg text,
+  description text,
+  asset_url text,
+  instructions text,
+  target_language text,
+  questions jsonb not null,
+  rubrics jsonb not null,
+  is_public boolean not null default true,
+  created_by text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists assessment_templates_subject_idx on public.assessment_templates(subject);
+create index if not exists assessment_templates_grade_band_idx on public.assessment_templates(grade_band);
+create index if not exists assessment_templates_public_idx on public.assessment_templates(is_public);
+
+drop trigger if exists assessment_templates_set_updated_at on public.assessment_templates;
+create trigger assessment_templates_set_updated_at
+before update on public.assessment_templates
+for each row
+execute function public.set_updated_at();
+
+alter table public.assessment_templates enable row level security;
+
+drop policy if exists "Assessment templates are readable" on public.assessment_templates;
+create policy "Assessment templates are readable"
+on public.assessment_templates
+for select
+using (is_public = true);
+
 -- Students can insert events only for their own submissions.
 drop policy if exists "Students can insert integrity events" on public.integrity_events;
 create policy "Students can insert integrity events"
@@ -764,14 +856,35 @@ create table if not exists public.submission_responses (
   mime_type text,
   duration_seconds int,
   transcript text,
+  response_stage text not null default 'primary',
+  ai_followup_question text,
+  ai_followup_created_at timestamptz,
   created_at timestamptz not null default now()
 );
 
 -- Backfill columns if submission_responses already exists
 alter table public.submission_responses add column if not exists transcript text;
+alter table public.submission_responses add column if not exists response_stage text not null default 'primary';
+alter table public.submission_responses add column if not exists ai_followup_question text;
+alter table public.submission_responses add column if not exists ai_followup_created_at timestamptz;
 
-create unique index if not exists submission_responses_uq
-on public.submission_responses(submission_id, question_id);
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'submission_responses_stage_chk'
+  ) then
+    alter table public.submission_responses
+      add constraint submission_responses_stage_chk
+      check (response_stage in ('primary', 'followup'));
+  end if;
+end;
+$$;
+
+drop index if exists submission_responses_uq;
+create unique index if not exists submission_responses_stage_uq
+on public.submission_responses(submission_id, question_id, response_stage);
 
 create index if not exists submission_responses_submission_id_idx on public.submission_responses(submission_id);
 create index if not exists submission_responses_question_id_idx on public.submission_responses(question_id);

@@ -10,7 +10,7 @@ type SubmissionRow = {
   id: string;
   student_id: string;
   student_name: string;
-  status: "started" | "submitted";
+  status: "started" | "submitted" | "restarted";
   started_at: string;
   submitted_at: string | null;
   scoring_status?: string | null;
@@ -24,12 +24,15 @@ type SubmissionRow = {
   reasoning_avg?: number | null;
   evidence_avg?: number | null;
   integrity_flag_count?: number | null;
+  restart_reason?: string | null;
+  restart_at?: string | null;
 };
 
 type AssessmentMeta = {
   id: string;
   title: string;
   status: string;
+  is_practice_mode?: boolean | null;
 };
 
 type AssessmentSummary = {
@@ -40,6 +43,7 @@ type AssessmentSummary = {
   completion_rate: number;
   avg_score: number | null;
   avg_time_to_score_seconds: number | null;
+  restart_count?: number | null;
 };
 
 type QuestionWithResponse = {
@@ -47,6 +51,7 @@ type QuestionWithResponse = {
   order_index: number;
   question_text: string;
   question_type: string | null;
+  blooms_level?: string | null;
   response: { signed_url: string; duration_seconds: number | null; created_at: string; transcript: string | null } | null;
   evidence:
     | {
@@ -220,6 +225,7 @@ export function AssessmentResultsClient({ assessmentId }: { assessmentId: string
     () => submissions.find((s) => s.id === selectedSubmissionId) ?? null,
     [selectedSubmissionId, submissions],
   );
+  const isPracticeMode = Boolean(assessment?.is_practice_mode);
 
   const visibleSubmissions = useMemo(() => {
     if (!showFlaggedOnly) return submissions;
@@ -236,6 +242,7 @@ export function AssessmentResultsClient({ assessmentId }: { assessmentId: string
       started_at: formatTime(s.started_at) ?? "",
       submitted_at: formatTime(s.submitted_at) ?? "",
       scoring_error: s.scoring_status === "error" ? s.scoring_error ?? "" : "",
+      restart_reason: s.restart_reason ?? "",
     }));
   }, [submissions]);
 
@@ -438,6 +445,7 @@ export function AssessmentResultsClient({ assessmentId }: { assessmentId: string
   }, [detailLoading, rescoring, scoringPending, selectedSubmissionId]);
 
   async function handleRescore() {
+    if (isPracticeMode) return;
     if (!selectedSubmissionId) return;
     setRescoring(true);
     setError(null);
@@ -504,6 +512,7 @@ export function AssessmentResultsClient({ assessmentId }: { assessmentId: string
           <p className="mt-1 text-sm text-[var(--muted)]">
             {assessment?.title ? `${assessment.title} • ` : ""}
             {submissions.length} submissions
+            {isPracticeMode ? " • Practice mode" : ""}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -538,6 +547,9 @@ export function AssessmentResultsClient({ assessmentId }: { assessmentId: string
                 {summary.submitted_count}/{summary.total_submissions}
               </div>
               <div className="mt-1 text-sm text-[var(--muted)]">{Math.round(summary.completion_rate * 100)}%</div>
+              {typeof summary.restart_count === "number" ? (
+                <div className="mt-2 text-xs text-[var(--muted)]">Grace restarts used: {summary.restart_count}</div>
+              ) : null}
             </CardContent>
           </Card>
           <Card>
@@ -547,9 +559,9 @@ export function AssessmentResultsClient({ assessmentId }: { assessmentId: string
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-semibold text-[var(--text)]">
-                {typeof summary.avg_score === "number" ? summary.avg_score.toFixed(2) : "—"}
+                {isPracticeMode ? "Practice" : typeof summary.avg_score === "number" ? summary.avg_score.toFixed(2) : "—"}
               </div>
-              <div className="mt-1 text-sm text-[var(--muted)]">out of 5</div>
+              <div className="mt-1 text-sm text-[var(--muted)]">{isPracticeMode ? "Not scored" : "out of 5"}</div>
             </CardContent>
           </Card>
           <Card>
@@ -559,11 +571,13 @@ export function AssessmentResultsClient({ assessmentId }: { assessmentId: string
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-semibold text-[var(--text)]">
-                {summary.scoring_complete_count}
-                <span className="text-[var(--muted)]"> / </span>
-                {summary.scoring_error_count}
+                {isPracticeMode ? "—" : summary.scoring_complete_count}
+                {!isPracticeMode ? <span className="text-[var(--muted)]"> / </span> : null}
+                {!isPracticeMode ? summary.scoring_error_count : null}
               </div>
-              <div className="mt-1 text-sm text-[var(--muted)]">complete / error</div>
+              <div className="mt-1 text-sm text-[var(--muted)]">
+                {isPracticeMode ? "Practice mode" : "complete / error"}
+              </div>
             </CardContent>
           </Card>
           <Card>
@@ -625,26 +639,37 @@ export function AssessmentResultsClient({ assessmentId }: { assessmentId: string
                       <div className="flex items-center gap-2">
                         <div className="text-xs text-[var(--muted)]">{s.status.toUpperCase()}</div>
                         {s.status === "submitted" ? (
-                          <div
-                            className={`rounded-full border px-2 py-0.5 text-[11px] border-[var(--border)] ${
-                              s.scoring_status === "complete"
-                                ? "text-[var(--success)]"
+                          isPracticeMode ? (
+                            <div className="rounded-full border px-2 py-0.5 text-[11px] border-[var(--border)] text-[var(--primary)]">
+                              PRACTICE
+                            </div>
+                          ) : (
+                            <div
+                              className={`rounded-full border px-2 py-0.5 text-[11px] border-[var(--border)] ${
+                                s.scoring_status === "complete"
+                                  ? "text-[var(--success)]"
+                                  : s.scoring_status === "error"
+                                    ? "text-[var(--danger)]"
+                                    : "text-[var(--muted)]"
+                              }`}
+                              title={s.scoring_status === "error" ? s.scoring_error ?? "Scoring failed." : undefined}
+                            >
+                              {s.scoring_status === "complete"
+                                ? "SCORED"
                                 : s.scoring_status === "error"
-                                  ? "text-[var(--danger)]"
-                                  : "text-[var(--muted)]"
-                            }`}
-                            title={s.scoring_status === "error" ? s.scoring_error ?? "Scoring failed." : undefined}
-                          >
-                            {s.scoring_status === "complete"
-                              ? "SCORED"
-                              : s.scoring_status === "error"
-                                ? "SCORE ERROR"
-                                : "SCORING…"}
-                          </div>
+                                  ? "SCORE ERROR"
+                                  : "SCORING…"}
+                            </div>
+                          )
                         ) : null}
                         {s.review_status === "published" ? (
                           <div className="rounded-full border px-2 py-0.5 text-[11px] border-[var(--border)] text-[var(--primary)]">
                             PUBLISHED
+                          </div>
+                        ) : null}
+                        {s.restart_reason ? (
+                          <div className="rounded-full border px-2 py-0.5 text-[11px] border-[var(--border)] text-[var(--muted)]">
+                            RESTART ({s.restart_reason.replace("_", " ")})
                           </div>
                         ) : null}
                         {flagCount > 0 ? (
@@ -659,7 +684,7 @@ export function AssessmentResultsClient({ assessmentId }: { assessmentId: string
                       {" • "}
                       {s.response_count} recordings
                       {" • "}
-                      Avg {typeof s.avg_score === "number" ? s.avg_score.toFixed(2) : "—"}
+                      {isPracticeMode ? "Practice attempt" : `Avg ${typeof s.avg_score === "number" ? s.avg_score.toFixed(2) : "—"}`}
                     </div>
                   </button>
                 );
@@ -675,7 +700,7 @@ export function AssessmentResultsClient({ assessmentId }: { assessmentId: string
               <Button
                 type="button"
                 variant="secondary"
-                disabled={!selectedSubmissionId || rescoring}
+                disabled={isPracticeMode || !selectedSubmissionId || rescoring}
                 onClick={handleRescore}
               >
                 {rescoring ? "Re-scoring…" : "Re-score"}
@@ -805,6 +830,9 @@ export function AssessmentResultsClient({ assessmentId }: { assessmentId: string
                       <div className="text-xs text-[var(--muted)]">{q.question_type ?? "open_response"}</div>
                     </div>
                     <div className="mt-2 text-sm italic text-[var(--text)]">“{q.question_text}”</div>
+                    {q.blooms_level ? (
+                      <div className="mt-1 text-xs text-[var(--muted)]">Bloom&apos;s level: {q.blooms_level}</div>
+                    ) : null}
                     <div className="mt-3">
                       {q.evidence ? (
                         <div className="space-y-2">

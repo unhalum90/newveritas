@@ -1,4 +1,4 @@
-import { isEvidenceFollowup } from "@/lib/assessments/question-types";
+import { isAudioFollowup, isEvidenceFollowup } from "@/lib/assessments/question-types";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { logOpenAiCall, logOpenAiError } from "@/lib/ops/api-logging";
 
@@ -552,12 +552,25 @@ export async function scoreSubmission(submissionId: string) {
 
     const { data: responses, error: respError } = await admin
       .from("submission_responses")
-      .select("id, question_id, storage_bucket, storage_path, mime_type, transcript, duration_seconds")
+      .select(
+        "id, question_id, storage_bucket, storage_path, mime_type, transcript, duration_seconds, response_stage, ai_followup_question",
+      )
       .eq("submission_id", submissionId);
     if (respError) throw respError;
 
-    const byQuestion = new Map<string, (typeof responses)[number]>();
-    for (const r of responses ?? []) byQuestion.set(r.question_id, r);
+    const byQuestion = new Map<
+      string,
+      {
+        primary?: (typeof responses)[number];
+        followup?: (typeof responses)[number];
+      }
+    >();
+    for (const r of responses ?? []) {
+      const entry = byQuestion.get(r.question_id) ?? {};
+      const stage = r.response_stage === "followup" ? "followup" : "primary";
+      if (!entry[stage]) entry[stage] = r;
+      byQuestion.set(r.question_id, entry);
+    }
 
     const { data: evidenceRows } = await admin
       .from("evidence_images")
@@ -572,38 +585,74 @@ export async function scoreSubmission(submissionId: string) {
     let errorCount = 0;
     let firstError: string | null = null;
 
+    const loadTranscript = async (
+      resp: (typeof responses)[number],
+      questionId: string,
+      optional = false,
+    ): Promise<string | null> => {
+      let transcript = resp.transcript ?? "";
+      if (transcript.trim()) return transcript;
+
+      const bucket = resp.storage_bucket || bucketFallback;
+      const { data: file, error: dlError } = await admin.storage.from(bucket).download(resp.storage_path);
+      if (dlError) {
+        if (optional) return null;
+        throw dlError;
+      }
+      const buf = Buffer.from(await file.arrayBuffer());
+      const mime = resp.mime_type || "audio/webm";
+      try {
+        transcript = await transcribeAudio(buf, mime, {
+          operation: "transcription",
+          assessmentId: submission.assessment_id,
+          studentId: submission.student_id,
+          submissionId,
+          questionId,
+          audioDurationSeconds: resp.duration_seconds ?? null,
+        });
+        await admin.from("submission_responses").update({ transcript }).eq("id", resp.id);
+        return transcript;
+      } catch (e) {
+        if (optional) return null;
+        throw e;
+      }
+    };
+
     for (const q of questions ?? []) {
-      const resp = byQuestion.get(q.id);
-      if (!resp) continue;
+      const respSet = byQuestion.get(q.id);
+      const primaryResp = respSet?.primary ?? null;
+      if (!primaryResp) continue;
       attempted += 1;
 
-      let transcript = resp.transcript ?? "";
-      let scoringTranscript = stripPauseMarkers(transcript);
-      if (!transcript) {
-        const bucket = resp.storage_bucket || bucketFallback;
-        const { data: file, error: dlError } = await admin.storage.from(bucket).download(resp.storage_path);
-        if (dlError) throw dlError;
-        const buf = Buffer.from(await file.arrayBuffer());
-        const mime = resp.mime_type || "audio/webm";
-        try {
-          transcript = await transcribeAudio(buf, mime, {
-            operation: "transcription",
-            assessmentId: submission.assessment_id,
-            studentId: submission.student_id,
-            submissionId,
-            questionId: q.id,
-            audioDurationSeconds: resp.duration_seconds ?? null,
-          });
-          await admin.from("submission_responses").update({ transcript }).eq("id", resp.id);
-          scoringTranscript = stripPauseMarkers(transcript);
-        } catch (e) {
-          const msg = e instanceof Error ? e.message : "Transcription failed.";
-          console.error("Transcription failed", { submissionId, questionId: q.id }, e);
-          errorCount += 1;
-          firstError ??= msg;
-          continue;
+      let transcript = "";
+      try {
+        const primaryTranscript = await loadTranscript(primaryResp, q.id);
+        transcript = primaryTranscript ?? "";
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Transcription failed.";
+        console.error("Transcription failed", { submissionId, questionId: q.id }, e);
+        errorCount += 1;
+        firstError ??= msg;
+        continue;
+      }
+
+      let followupPrompt =
+        typeof primaryResp.ai_followup_question === "string" ? primaryResp.ai_followup_question.trim() : "";
+      if (isAudioFollowup(q.question_type)) {
+        const followupResp = respSet?.followup ?? null;
+        if (followupResp) {
+          try {
+            const followupTranscript = await loadTranscript(followupResp, q.id, true);
+            if (followupTranscript) {
+              transcript = `Primary response:\n${transcript}\n\nFollow-up response:\n${followupTranscript}`;
+            }
+          } catch {
+            // Best-effort follow-up transcription.
+          }
         }
       }
+
+      const scoringTranscript = stripPauseMarkers(transcript);
 
       if (!scoringTranscript.trim()) {
         errorCount += 1;
@@ -614,6 +663,9 @@ export async function scoreSubmission(submissionId: string) {
       let primary: Awaited<ReturnType<typeof scoreWithOpenAi>>;
       try {
         let questionText = q.question_text;
+        if (isAudioFollowup(q.question_type) && followupPrompt) {
+          questionText = `${questionText}\n\nFollow-up prompt:\n${followupPrompt}`.trim();
+        }
         if (isEvidenceFollowup(q.question_type)) {
           const evidence = evidenceByQuestion.get(q.id);
           const followups = parseEvidenceFollowups(evidence?.ai_description ?? null);

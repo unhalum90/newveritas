@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
-const publicPaths = ["/", "/login", "/signup", "/student/login", "/activate"];
+const publicPaths = ["/", "/about", "/login", "/signup", "/student/login", "/activate"];
 
 function isPublicPath(pathname: string) {
   return publicPaths.includes(pathname);
@@ -10,9 +10,8 @@ function isPublicPath(pathname: string) {
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Always allow the public landing page to render, even if the user is signed in.
-  // This keeps marketing/demo flows reachable at `/`.
-  if (pathname === "/") {
+  // Always allow public marketing pages to render, even if the user is signed in.
+  if (pathname === "/" || pathname === "/about") {
     return NextResponse.next();
   }
 

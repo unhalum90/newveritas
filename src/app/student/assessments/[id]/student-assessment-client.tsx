@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { isEvidenceFollowup } from "@/lib/assessments/question-types";
+import { isAudioFollowup, isEvidenceFollowup } from "@/lib/assessments/question-types";
 
 type EvidenceUploadSetting = "disabled" | "optional" | "required";
 
@@ -13,6 +13,7 @@ type Integrity = {
   pause_threshold_seconds: number | null;
   tab_switch_monitor: boolean;
   shuffle_questions: boolean;
+  allow_grace_restart?: boolean | null;
   recording_limit_seconds: number;
   viewing_timer_seconds: number;
 };
@@ -34,6 +35,8 @@ type Assessment = {
   title: string;
   instructions: string | null;
   published_at: string | null;
+  is_practice_mode?: boolean | null;
+  grace_restart_used?: boolean | null;
   integrity: Integrity | null;
   asset_url: string | null;
   question_count: number;
@@ -43,7 +46,7 @@ type Assessment = {
 
 type Submission = {
   id: string;
-  status: "started" | "submitted";
+  status: "started" | "submitted" | "restarted";
   started_at: string;
   submitted_at: string | null;
   review_status?: string | null;
@@ -70,6 +73,8 @@ type ResponseRow = {
   duration_seconds: number | null;
   created_at: string;
   signed_url: string;
+  response_stage?: "primary" | "followup" | null;
+  ai_followup_question?: string | null;
 };
 
 type StudentAccess = {
@@ -81,6 +86,7 @@ type StudentAccess = {
 
 const FAST_START_THRESHOLD_MS = 3000;
 const SLOW_START_THRESHOLD_MS = 6000;
+const GRACE_RESTART_THRESHOLD_MS = 10000;
 const AUDIO_ACTIVITY_THRESHOLD = 0.03;
 
 function normalizeEvidenceSetting(v: unknown): EvidenceUploadSetting {
@@ -103,7 +109,8 @@ function parseEvidenceAnalysis(raw?: string | null) {
   }
 }
 
-export function StudentAssessmentClient({ assessmentId }: { assessmentId: string }) {
+export function StudentAssessmentClient({ assessmentId, preview = false }: { assessmentId: string; preview?: boolean }) {
+  const previewMode = Boolean(preview);
   const [assessment, setAssessment] = useState<Assessment | null>(null);
   const [latest, setLatest] = useState<Submission | null>(null);
   const [loading, setLoading] = useState(true);
@@ -124,28 +131,37 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
   const [recording, setRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [recordingError, setRecordingError] = useState<string | null>(null);
+  const [restartPrompt, setRestartPrompt] = useState<{ reason: "slow_start" | "off_topic"; questionId: string } | null>(null);
+  const [restartWorking, setRestartWorking] = useState(false);
+  const [restartError, setRestartError] = useState<string | null>(null);
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
   const autoRecordQuestionId = useRef<string | null>(null);
   const autoSubmitAttemptedRef = useRef(false);
   const recordingStartedAtRef = useRef<number | null>(null);
   const hiddenAtRef = useRef<number | null>(null);
   const hiddenQuestionIdRef = useRef<string | null>(null);
+  const slowStartEligibleRef = useRef(false);
   // Recording chunks are kept in a local buffer during capture.
   const evidenceInputRef = useRef<HTMLInputElement | null>(null);
 
   const activeQuestion = assessment?.current_question ?? null;
+  const isPracticeMode = Boolean(assessment?.is_practice_mode);
   const pledgeRequired = useMemo(() => {
+    if (previewMode) return false;
     if (!assessment?.pledge || assessment.pledge.enabled !== true) return false;
     if (!latest || latest.status !== "started") return false;
     return !assessment.pledge.accepted_at;
-  }, [assessment?.pledge, latest]);
+  }, [assessment?.pledge, latest, previewMode]);
 
-  const accessRestricted = Boolean(studentAccess?.disabled);
+  const accessRestricted = Boolean(studentAccess?.disabled) && !previewMode;
   const consentRequired = useMemo(() => {
+    if (previewMode) return false;
     if (!studentAccess) return false;
     if (studentAccess.disabled) return false;
     return !studentAccess.consent_audio || Boolean(studentAccess.consent_revoked_at);
-  }, [studentAccess]);
+  }, [studentAccess, previewMode]);
+  const canGraceRestart =
+    !previewMode && Boolean(assessment?.integrity?.allow_grace_restart) && !Boolean(assessment?.grace_restart_used);
 
   useEffect(() => {
     if (pledgeRequired && !consentRequired) setPledgeOpen(true);
@@ -162,10 +178,26 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
     return evidenceByQuestion[activeQuestion.id] ?? null;
   }, [activeQuestion, evidenceByQuestion]);
 
-  const activeResponse = useMemo(() => {
-    if (!activeQuestion) return null;
-    return responses.find((r) => r.question_id === activeQuestion.id) ?? null;
+  const isAudioFollowupQuestion = useMemo(() => isAudioFollowup(activeQuestion?.question_type), [activeQuestion?.question_type]);
+
+  const activeResponses = useMemo(() => {
+    if (!activeQuestion) return [];
+    return responses.filter((r) => r.question_id === activeQuestion.id);
   }, [activeQuestion, responses]);
+
+  const activePrimaryResponse = useMemo(
+    () => activeResponses.find((r) => r.response_stage !== "followup") ?? null,
+    [activeResponses],
+  );
+  const activeFollowupResponse = useMemo(
+    () => activeResponses.find((r) => r.response_stage === "followup") ?? null,
+    [activeResponses],
+  );
+  const followupPrompt = useMemo(
+    () => (typeof activePrimaryResponse?.ai_followup_question === "string" ? activePrimaryResponse.ai_followup_question.trim() : ""),
+    [activePrimaryResponse?.ai_followup_question],
+  );
+  const followupNeeded = Boolean(isAudioFollowupQuestion && activePrimaryResponse && !activeFollowupResponse);
 
   const isEvidenceFollowupQuestion = useMemo(() => isEvidenceFollowup(activeQuestion?.question_type), [activeQuestion?.question_type]);
 
@@ -176,7 +208,12 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
 
   const evidenceAnalysis = useMemo(() => parseEvidenceAnalysis(activeEvidence?.ai_description ?? null), [activeEvidence?.ai_description]);
 
-  const completedCount = useMemo(() => responses.length, [responses.length]);
+  const completedCount = useMemo(() => {
+    if (followupNeeded) {
+      return Math.max(0, responses.length - 1);
+    }
+    return responses.length;
+  }, [followupNeeded, responses.length]);
 
   const canSubmitAttempt = useMemo(() => {
     if (!assessment?.question_count) return false;
@@ -234,7 +271,8 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
   }
 
   const refreshAssessment = useCallback(async () => {
-    const res = await fetch(`/api/student/assessments/${assessmentId}`, { cache: "no-store" });
+    const previewQuery = previewMode ? "?preview=1" : "";
+    const res = await fetch(`/api/student/assessments/${assessmentId}${previewQuery}`, { cache: "no-store" });
     const data = (await res.json().catch(() => null)) as
       | {
           assessment?: Assessment;
@@ -254,9 +292,13 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
       setResponses([]);
       setEvidenceByQuestion({});
     }
-  }, [assessmentId]);
+  }, [assessmentId, previewMode]);
 
   async function acceptPledge() {
+    if (previewMode) {
+      setPledgeError("Preview mode only.");
+      return;
+    }
     if (!latest || latest.status !== "started") return;
     setPledgeWorking(true);
     setPledgeError(null);
@@ -278,6 +320,10 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
   }
 
   async function acceptConsent() {
+    if (previewMode) {
+      setConsentError("Preview mode only.");
+      return;
+    }
     setConsentWorking(true);
     setConsentError(null);
     try {
@@ -295,6 +341,32 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
     } finally {
       setConsentWorking(false);
     }
+  }
+
+  async function confirmRestart() {
+    if (!restartPrompt || !latest) return;
+    setRestartWorking(true);
+    setRestartError(null);
+    try {
+      const res = await fetch(`/api/student/submissions/${latest.id}/restart`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ reason: restartPrompt.reason, question_id: restartPrompt.questionId }),
+      });
+      const data = (await res.json().catch(() => null)) as { error?: string } | null;
+      if (!res.ok) throw new Error(data?.error ?? "Unable to restart.");
+      setRestartPrompt(null);
+      await refreshAssessment();
+    } catch (e) {
+      setRestartError(e instanceof Error ? e.message : "Unable to restart.");
+    } finally {
+      setRestartWorking(false);
+    }
+  }
+
+  function dismissRestart() {
+    setRestartPrompt(null);
+    setRestartError(null);
   }
 
   useEffect(() => {
@@ -319,6 +391,10 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
   }, [latest?.id, latest?.status, activeQuestion?.id]);
 
   async function startOrResume() {
+    if (previewMode) {
+      setError("Preview mode only.");
+      return;
+    }
     setWorking(true);
     setError(null);
     try {
@@ -341,6 +417,10 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
   }
 
   async function submit() {
+    if (previewMode) {
+      setError("Preview mode only.");
+      return;
+    }
     if (!latest) return;
     setWorking(true);
     setError(null);
@@ -367,12 +447,13 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
       autoSubmitAttemptedRef.current = false;
       return;
     }
+    if (restartPrompt) return;
     if (accessRestricted || consentRequired) return;
     if (!canSubmitAttempt || working) return;
     if (autoSubmitAttemptedRef.current) return;
     autoSubmitAttemptedRef.current = true;
     void submit();
-  }, [accessRestricted, canSubmitAttempt, consentRequired, latest?.status, working]);
+  }, [accessRestricted, canSubmitAttempt, consentRequired, latest?.status, restartPrompt, working]);
 
   useEffect(() => {
     if (!recording) return;
@@ -452,8 +533,19 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
       setRecordingError("No question selected.");
       return;
     }
-    if (activeResponse) {
+
+    slowStartEligibleRef.current = false;
+    const recordedQuestionId = activeQuestion.id;
+    if (!isAudioFollowupQuestion && activePrimaryResponse) {
       setRecordingError("This question has already been answered.");
+      return;
+    }
+    if (isAudioFollowupQuestion && activeFollowupResponse) {
+      setRecordingError("This follow-up has already been answered.");
+      return;
+    }
+    if (isAudioFollowupQuestion && activePrimaryResponse && !followupPrompt) {
+      setRecordingError("Generating a follow-up question. Try again shortly.");
       return;
     }
 
@@ -496,12 +588,20 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
         if (firstSoundAt == null && rms > AUDIO_ACTIVITY_THRESHOLD) {
           firstSoundAt = Date.now();
         }
+        if (
+          canGraceRestart &&
+          !slowStartEligibleRef.current &&
+          firstSoundAt == null &&
+          Date.now() - audioMonitorStartedAt >= GRACE_RESTART_THRESHOLD_MS
+        ) {
+          slowStartEligibleRef.current = true;
+        }
         if (!slowStartLogged && firstSoundAt == null && Date.now() - audioMonitorStartedAt >= SLOW_START_THRESHOLD_MS) {
           slowStartLogged = true;
           void logIntegrityEvent(latest.id, {
             event_type: "slow_start",
             duration_ms: Date.now() - audioMonitorStartedAt,
-            question_id: activeQuestion.id,
+            question_id: recordedQuestionId,
             metadata: { threshold_ms: SLOW_START_THRESHOLD_MS },
           });
         }
@@ -530,14 +630,25 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
 
           setWorking(true);
           const res = await fetch(`/api/student/submissions/${latest.id}/responses`, { method: "POST", body: form });
-          const data = (await res.json().catch(() => null)) as { error?: string } | null;
+          const data = (await res.json().catch(() => null)) as
+            | { error?: string; restart_hint?: { reason?: "off_topic"; confidence?: number | null } | null }
+            | null;
           if (!res.ok) throw new Error(data?.error ?? "Upload failed.");
+          const slowStartEligible = slowStartEligibleRef.current;
           await refreshAssessment();
+          if (canGraceRestart) {
+            if (data?.restart_hint?.reason === "off_topic") {
+              setRestartPrompt({ reason: "off_topic", questionId: recordedQuestionId });
+            } else if (slowStartEligible) {
+              setRestartPrompt({ reason: "slow_start", questionId: recordedQuestionId });
+            }
+            slowStartEligibleRef.current = false;
+          }
           if (durationMs > 0 && durationMs < FAST_START_THRESHOLD_MS) {
             void logIntegrityEvent(latest.id, {
               event_type: "fast_start",
               duration_ms: durationMs,
-              question_id: activeQuestion.id,
+              question_id: recordedQuestionId,
               metadata: { threshold_ms: FAST_START_THRESHOLD_MS },
             });
           }
@@ -574,7 +685,11 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
     if (autoRecordQuestionId.current === activeQuestion.id) return;
     if (recording || working) return;
     if (!latest || latest.status !== "started") return;
-    if (accessRestricted || consentRequired || pledgeRequired || activeResponse) return;
+    if (accessRestricted || consentRequired || pledgeRequired) return;
+    const readyForRecording = isAudioFollowupQuestion
+      ? !activePrimaryResponse || (followupNeeded && Boolean(followupPrompt))
+      : !activePrimaryResponse;
+    if (!readyForRecording) return;
     const nextEvidenceSetting = isEvidenceFollowup(activeQuestion.question_type) ? "required" : normalizeEvidenceSetting(activeQuestion.evidence_upload);
     if (nextEvidenceSetting === "required" && !activeEvidence) return;
 
@@ -583,8 +698,12 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
   }, [
     activeEvidence?.id,
     activeQuestion?.id,
-    activeResponse?.id,
+    activePrimaryResponse?.id,
+    activeFollowupResponse?.id,
+    followupPrompt,
+    followupNeeded,
     latest?.status,
+    isAudioFollowupQuestion,
     pledgeRequired,
     consentRequired,
     accessRestricted,
@@ -715,11 +834,34 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
           </div>
         ) : null}
 
+        {restartPrompt ? (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6">
+            <div className="w-full max-w-xl rounded-xl border border-zinc-800 bg-zinc-950 p-6 text-zinc-100 shadow-2xl">
+              <div className="text-lg font-semibold">Need a restart?</div>
+              <div className="mt-1 text-sm text-zinc-300">
+                {restartPrompt.reason === "slow_start"
+                  ? "It looks like you needed extra time before speaking. You can restart once if you want a fresh attempt."
+                  : "Your response seems off-topic. You can restart once to try again, or continue with this attempt."}
+              </div>
+              {restartError ? <div className="mt-3 text-sm text-red-300">{restartError}</div> : null}
+              <div className="mt-5 flex items-center justify-end gap-2">
+                <Button type="button" variant="secondary" disabled={restartWorking} onClick={dismissRestart}>
+                  {restartPrompt.reason === "off_topic" ? "Submit anyway" : "Continue"}
+                </Button>
+                <Button type="button" disabled={restartWorking} onClick={confirmRestart}>
+                  {restartWorking ? "Restarting…" : "Restart assessment"}
+                </Button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
         <div className="flex items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold text-zinc-900">{assessment?.title ?? "Assessment"}</h1>
             <p className="mt-1 text-sm text-zinc-600">
               {latest ? `Attempt: ${latest.status}` : "Start when you’re ready."}
+              {isPracticeMode ? " • Practice mode" : ""}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -728,12 +870,17 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
                 Back
               </Button>
             </Link>
-            <Button type="button" disabled={working || latest?.status === "submitted" || accessRestricted || consentRequired} onClick={startOrResume}>
+            <Button
+              type="button"
+              disabled={previewMode || working || (latest?.status === "submitted" && !isPracticeMode) || accessRestricted || consentRequired}
+              onClick={startOrResume}
+            >
               {working ? "Working…" : latest?.status === "started" ? "Resume" : "Start"}
             </Button>
           </div>
         </div>
 
+        {previewMode ? <div className="text-sm text-[var(--muted)]">Preview mode: student actions are disabled.</div> : null}
         {error ? <div className="text-sm text-red-600">{error}</div> : null}
         {accessRestricted ? (
           <div className="text-sm text-red-600">
@@ -771,7 +918,11 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
                   </CardHeader>
                   <CardContent className="flex items-center justify-between gap-3">
                     <div className="text-sm text-[var(--muted)]">When you click Start, you should be ready to answer immediately.</div>
-                    <Button type="button" disabled={working || latest?.status === "submitted" || accessRestricted || consentRequired} onClick={startOrResume}>
+                    <Button
+                      type="button"
+                      disabled={previewMode || working || (latest?.status === "submitted" && !isPracticeMode) || accessRestricted || consentRequired}
+                      onClick={startOrResume}
+                    >
                       {working ? "Starting…" : "Start Assessment"}
                     </Button>
                   </CardContent>
@@ -779,19 +930,34 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
               ) : latest?.status === "submitted" ? (
                 <Card>
                   <CardHeader>
-                    <CardTitle>Submitted</CardTitle>
-                    <CardDescription>Your responses have been submitted.</CardDescription>
+                    <CardTitle>{isPracticeMode ? "Practice Complete" : "Submitted"}</CardTitle>
+                    <CardDescription>
+                      {isPracticeMode
+                        ? "This was a practice attempt. You can try again whenever you're ready."
+                        : "Your responses have been submitted."}
+                    </CardDescription>
                   </CardHeader>
                   <CardContent className="flex flex-wrap items-center justify-between gap-3">
                     <div className="text-sm text-[var(--muted)]">
-                      {latest.review_status === "published"
-                        ? "Your teacher has released verified feedback."
-                        : "Your teacher will review and release feedback soon."}
+                      {isPracticeMode
+                        ? "Practice attempts are not scored."
+                        : latest.review_status === "published"
+                          ? "Your teacher has released verified feedback."
+                          : "Your teacher will review and release feedback soon."}
                     </div>
-                    {latest.review_status === "published" ? (
+                    {latest.review_status === "published" && !isPracticeMode ? (
                       <Link href={`/student/assessments/${assessmentId}/feedback`}>
                         <Button type="button">View Feedback</Button>
                       </Link>
+                    ) : null}
+                    {isPracticeMode ? (
+                      <Button
+                        type="button"
+                        disabled={previewMode || working || accessRestricted || consentRequired}
+                        onClick={startOrResume}
+                      >
+                        {working ? "Starting…" : "Start Another Attempt"}
+                      </Button>
                     ) : null}
                   </CardContent>
                 </Card>
@@ -805,8 +971,24 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div className="rounded-md border border-zinc-200 bg-white p-4">
-                      <div className="text-sm text-zinc-900">{activeQuestion.question_text}</div>
+                      <div className="text-xs font-semibold uppercase text-zinc-500">
+                        {followupNeeded ? "Follow-up question" : "Question"}
+                      </div>
+                      <div className="mt-2 text-sm text-zinc-900">
+                        {followupNeeded && followupPrompt ? followupPrompt : activeQuestion.question_text}
+                      </div>
                     </div>
+
+                    {isAudioFollowupQuestion && followupNeeded ? (
+                      <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
+                        <div className="text-xs font-semibold uppercase text-emerald-700">AI follow-up prompt</div>
+                        {followupPrompt ? (
+                          <div className="mt-2 text-sm text-emerald-900">{followupPrompt}</div>
+                        ) : (
+                          <div className="mt-2 text-xs text-emerald-800">Generating follow-up question…</div>
+                        )}
+                      </div>
+                    ) : null}
 
                     {evidenceSetting !== "disabled" ? (
                       <div className="rounded-md border border-zinc-200 bg-white p-4">
@@ -897,7 +1079,9 @@ export function StudentAssessmentClient({ assessmentId }: { assessmentId: string
 
                     <div className="rounded-md border border-zinc-200 bg-zinc-50 p-4">
                       <div className="flex items-center justify-between gap-3">
-                        <div className="text-sm font-medium text-zinc-900">Record your response</div>
+                        <div className="text-sm font-medium text-zinc-900">
+                          {followupNeeded ? "Record your follow-up response" : "Record your response"}
+                        </div>
                         <div className="text-xs text-zinc-600">
                           {recording ? `Recording: ${recordingSeconds}s / ${recordingLimitSeconds}s` : `Limit: ${recordingLimitSeconds}s`}
                         </div>

@@ -17,12 +17,22 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
   // Ensure the teacher can see this submission (RLS scope check).
   const { data: submission, error: subError } = await supabase
     .from("submissions")
-    .select("id")
+    .select("id, assessment_id")
     .eq("id", submissionId)
     .maybeSingle();
 
   if (subError) return NextResponse.json({ error: subError.message }, { status: 500 });
   if (!submission) return NextResponse.json({ error: "Not found." }, { status: 404 });
+
+  const { data: assessment, error: aError } = await supabase
+    .from("assessments")
+    .select("id, is_practice_mode")
+    .eq("id", submission.assessment_id)
+    .maybeSingle();
+  if (aError) return NextResponse.json({ error: aError.message }, { status: 500 });
+  if (assessment?.is_practice_mode) {
+    return NextResponse.json({ error: "Practice assessments are not scored." }, { status: 409 });
+  }
 
   const force = request.nextUrl.searchParams.get("force") === "1";
   if (force) {

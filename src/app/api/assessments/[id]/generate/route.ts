@@ -86,6 +86,7 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
           assessment_id: assessmentId,
           question_text: q.question_text,
           question_type: q.question_type ?? "open_response",
+          blooms_level: "understand",
           order_index: idx + 1,
         })),
       );

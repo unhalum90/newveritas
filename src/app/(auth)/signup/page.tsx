@@ -10,36 +10,47 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
+type SignupRole = "teacher" | "school_admin";
+
 export default function SignupPage() {
   const router = useRouter();
+  const [role, setRole] = useState<SignupRole>("teacher");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [magicLoading, setMagicLoading] = useState(false);
+
+  const redirectPath = role === "school_admin" ? "/schools/register?resume=1" : "/onboarding";
+  const redirectUrl = typeof window !== "undefined" ? `${window.location.origin}/auth/callback?redirect=${encodeURIComponent(redirectPath)}` : null;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    setInfo(null);
 
     try {
       const supabase = createSupabaseBrowserClient();
       const { data, error: signUpError } = await supabase.auth.signUp({
         email,
         password,
-        options: { data: { role: "teacher" } },
+        options: { data: { role }, emailRedirectTo: redirectUrl ?? undefined },
       });
       if (signUpError) return setError(signUpError.message || "Unable to create account.");
 
       if (!data.session) {
-        setError("Account created. Check your email to confirm, then sign in.");
+        setInfo("Account created. Check your email to confirm, then finish setup.");
         return;
       }
 
-      // Ensure teacher row exists for onboarding.
-      await fetch("/api/teacher", { cache: "no-store" });
+      if (role === "teacher") {
+        // Ensure teacher row exists for onboarding.
+        await fetch("/api/teacher", { cache: "no-store" });
+      }
 
-      router.push("/onboarding");
+      router.push(redirectPath);
       router.refresh();
     } catch {
       setError("An error occurred. Please try again.");
@@ -48,15 +59,109 @@ export default function SignupPage() {
     }
   }
 
+  async function handleMagicLink() {
+    if (!email.trim()) {
+      setError("Enter your email to receive a magic link.");
+      return;
+    }
+    setMagicLoading(true);
+    setError(null);
+    setInfo(null);
+    try {
+      const supabase = createSupabaseBrowserClient();
+      const { error: otpError } = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          shouldCreateUser: true,
+          data: { role },
+          emailRedirectTo: redirectUrl ?? undefined,
+        },
+      });
+      if (otpError) return setError(otpError.message || "Unable to send magic link.");
+      setInfo("Magic link sent. Check your email to finish setup.");
+    } catch {
+      setError("Unable to send magic link. Please try again.");
+    } finally {
+      setMagicLoading(false);
+    }
+  }
+
   return (
-    <div className="veritas-wizard min-h-screen bg-[var(--background)] flex items-center justify-center px-6">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle>Create Account</CardTitle>
-          <CardDescription>Email + password only for v1.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
+    <div className="veritas-wizard min-h-screen bg-[var(--background)] text-[var(--text)] px-6 py-12">
+      <div className="mx-auto w-full max-w-3xl space-y-8">
+        <div>
+          <div className="text-xs uppercase tracking-[0.35em] text-[var(--muted)]">Create Account</div>
+          <h1 className="mt-3 text-3xl font-semibold">Who are you creating this account for?</h1>
+          <p className="mt-2 text-sm text-[var(--muted)]">
+            This helps us set up the right workspace. Students are added by teachers.
+          </p>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => setRole("teacher")}
+            className={`rounded-2xl border p-5 text-left transition ${
+              role === "teacher"
+                ? "border-[rgba(20,184,166,0.6)] bg-[rgba(20,184,166,0.08)] shadow-[0_0_0_1px_rgba(20,184,166,0.35)]"
+                : "border-[rgba(148,163,184,0.2)] bg-[rgba(15,23,42,0.45)] hover:border-[rgba(148,163,184,0.4)]"
+            }`}
+          >
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[rgba(15,23,42,0.6)] text-[var(--text)]">
+                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.6">
+                  <path d="M5 20h14" />
+                  <path d="M7 20v-3a4 4 0 014-4h2a4 4 0 014 4v3" />
+                  <circle cx="12" cy="7" r="3" />
+                </svg>
+              </div>
+              <div>
+                <div className="text-base font-semibold">Classroom Teacher</div>
+                <div className="mt-1 text-sm text-[var(--muted)]">
+                  I&apos;m setting up assessments for my own classes.
+                </div>
+              </div>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setRole("school_admin")}
+            className={`rounded-2xl border p-5 text-left transition ${
+              role === "school_admin"
+                ? "border-[rgba(20,184,166,0.6)] bg-[rgba(20,184,166,0.08)] shadow-[0_0_0_1px_rgba(20,184,166,0.35)]"
+                : "border-[rgba(148,163,184,0.2)] bg-[rgba(15,23,42,0.45)] hover:border-[rgba(148,163,184,0.4)]"
+            }`}
+          >
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[rgba(15,23,42,0.6)] text-[var(--text)]">
+                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.6">
+                  <path d="M4 19h16" />
+                  <path d="M6 19V9l6-4 6 4v10" />
+                  <path d="M9 19v-5h6v5" />
+                </svg>
+              </div>
+              <div>
+                <div className="text-base font-semibold">School Admin</div>
+                <div className="mt-1 text-sm text-[var(--muted)]">
+                  I&apos;m setting up accounts and onboarding for a school.
+                </div>
+              </div>
+            </div>
+          </button>
+        </div>
+
+        <Card className="border-[rgba(148,163,184,0.2)] bg-[rgba(15,23,42,0.4)]">
+          <CardHeader>
+            <CardTitle>{role === "school_admin" ? "School admin details" : "Teacher account details"}</CardTitle>
+            <CardDescription>
+              {role === "school_admin"
+                ? "Create your admin login. You’ll finish school setup after sign-in."
+                : "Create your classroom account to start onboarding."}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input
@@ -81,9 +186,15 @@ export default function SignupPage() {
               <p className="text-xs text-zinc-500">Minimum 8 characters.</p>
             </div>
             {error ? <p className="text-sm text-red-600">{error}</p> : null}
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "Creating..." : "Create Account"}
-            </Button>
+            {info ? <p className="text-sm text-emerald-600">{info}</p> : null}
+            <div className="space-y-2">
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading ? "Creating..." : role === "school_admin" ? "Create admin account" : "Create teacher account"}
+              </Button>
+              <Button type="button" variant="secondary" className="w-full" onClick={handleMagicLink} disabled={magicLoading}>
+                {magicLoading ? "Sending magic link..." : "Send magic link"}
+              </Button>
+            </div>
           </form>
           <div className="mt-4 text-center text-sm text-[var(--muted)]">
             Already have an account?{" "}
@@ -91,15 +202,9 @@ export default function SignupPage() {
               Sign in
             </Link>
           </div>
-          <div className="mt-2 text-center text-sm text-[var(--muted)]">
-            Student?{" "}
-            <Link href="/student/login" className="text-[var(--text)] hover:underline">
-              Use student login
-            </Link>
-            .
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

@@ -297,7 +297,7 @@ export default async function PlatformAdminPage() {
               <CardDescription>Active integrity and billing alerts.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              {resolvedFlags.map((flag) => {
+              {resolvedFlags.map((flag, index) => {
                 const iconTone =
                   flag.tone === "negative"
                     ? "text-[#f87171] bg-[rgba(248,113,113,0.15)]"
@@ -306,7 +306,7 @@ export default async function PlatformAdminPage() {
                       : "text-[#94a3b8] bg-[rgba(148,163,184,0.2)]";
                 return (
                   <div
-                    key={flag.title}
+                    key={`${flag.title}-${flag.meta ?? "flag"}-${index}`}
                     className="flex items-center gap-3 rounded-xl border border-[rgba(148,163,184,0.15)] bg-[rgba(15,23,42,0.55)] p-3"
                   >
                     <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${iconTone}`}>

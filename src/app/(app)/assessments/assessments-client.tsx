@@ -15,6 +15,7 @@ type AssessmentRow = {
   title: string;
   status: "draft" | "live" | "closed";
   authoring_mode: string;
+  is_practice_mode?: boolean | null;
   created_at: string;
   class_id: string;
 };
@@ -195,6 +196,12 @@ export function AssessmentsClient({
                     <span className="text-[var(--text)]">{nameFor.get(a.class_id) ?? "Class"}</span>
                     <span className="mx-2 text-[var(--muted)]">-</span>
                     <span className="uppercase text-[var(--muted)]">{a.status}</span>
+                    {a.is_practice_mode ? (
+                      <>
+                        <span className="mx-2 text-[var(--muted)]">-</span>
+                        <span className="text-xs font-semibold uppercase text-[var(--primary)]">Practice</span>
+                      </>
+                    ) : null}
                   </CardDescription>
                   <div className="mt-2 text-xs text-[var(--muted)]">
                     {stats.completed} complete / {stats.needsReview} new

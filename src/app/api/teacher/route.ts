@@ -90,10 +90,16 @@ export async function PATCH(request: NextRequest) {
 
     // Sprint 2: create School + Workspace during onboarding (v1: 1 school per teacher).
     let teacher = updatedTeacher;
+    let admin: ReturnType<typeof createSupabaseAdminClient> | null = null;
+    const getAdmin = () => {
+      if (!admin) admin = createSupabaseAdminClient();
+      return admin;
+    };
+
     if (school_name && !existingTeacher.school_id) {
       // Use service role for provisioning to avoid RLS friction (still scoped to the signed-in user).
-      const admin = createSupabaseAdminClient();
-      const { data: school, error: schoolError } = await admin
+      const adminClient = getAdmin();
+      const { data: school, error: schoolError } = await adminClient
         .from("schools")
         .insert({
           name: school_name,
@@ -105,7 +111,7 @@ export async function PATCH(request: NextRequest) {
 
       if (schoolError) throw schoolError;
 
-      const { data: workspace, error: workspaceError } = await admin
+      const { data: workspace, error: workspaceError } = await adminClient
         .from("workspaces")
         .insert({ school_id: school.id, name: "Main Workspace" })
         .select("id")
@@ -113,9 +119,44 @@ export async function PATCH(request: NextRequest) {
 
       if (workspaceError) throw workspaceError;
 
-      const { data: finalTeacher, error: finalTeacherError } = await admin
+      const { data: finalTeacher, error: finalTeacherError } = await adminClient
         .from("teachers")
         .update({ school_id: school.id, workspace_id: workspace.id })
+        .eq("user_id", data.user.id)
+        .select("*")
+        .single();
+
+      if (finalTeacherError) throw finalTeacherError;
+      teacher = finalTeacher;
+    }
+
+    const schoolId = teacher.school_id ?? existingTeacher.school_id;
+    if (schoolId && !teacher.workspace_id) {
+      const adminClient = getAdmin();
+      const { data: existingWorkspace, error: existingWorkspaceError } = await adminClient
+        .from("workspaces")
+        .select("id")
+        .eq("school_id", schoolId)
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      if (existingWorkspaceError) throw existingWorkspaceError;
+
+      let workspaceId = existingWorkspace?.id ?? null;
+      if (!workspaceId) {
+        const { data: workspace, error: workspaceError } = await adminClient
+          .from("workspaces")
+          .insert({ school_id: schoolId, name: "Main Workspace" })
+          .select("id")
+          .single();
+        if (workspaceError) throw workspaceError;
+        workspaceId = workspace.id;
+      }
+
+      const { data: finalTeacher, error: finalTeacherError } = await adminClient
+        .from("teachers")
+        .update({ school_id: schoolId, workspace_id: workspaceId })
         .eq("user_id", data.user.id)
         .select("*")
         .single();

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
+import { WaitlistForm } from "@/components/waitlist-form";
 
 export default function Home() {
   const featureItems: Array<{ title: string; body: string }> = [
@@ -22,6 +23,9 @@ export default function Home() {
             SayVeritas
           </Link>
           <nav className="hidden items-center gap-6 text-sm text-[var(--muted)] md:flex">
+            <Link href="/about" className="hover:text-[var(--text)]">
+              About
+            </Link>
             <a href="#how" className="hover:text-[var(--text)]">
               How it works
             </a>
@@ -42,12 +46,12 @@ export default function Home() {
             >
               Sign in
             </Link>
-            <Link
-              href="/signup"
+            <a
+              href="#waitlist"
               className="rounded-md bg-[var(--primary)] px-3 py-2 text-sm text-white hover:opacity-90"
             >
-              Create account
-            </Link>
+              Join waitlist
+            </a>
           </div>
         </div>
       </header>
@@ -95,10 +99,10 @@ export default function Home() {
                     See how it works
                   </a>
                   <a
-                    href="mailto:hello@edusynapse.org?subject=SayVeritas%20Early%20Access"
+                    href="#waitlist"
                     className="inline-flex h-12 items-center justify-center rounded-md border-2 border-[var(--border)] bg-transparent px-6 text-base hover:bg-[var(--surface)]"
                   >
-                    Request early access
+                    Join waitlist
                   </a>
                 </div>
                 <p className="mt-4 text-sm text-[var(--muted)]">
@@ -407,12 +411,12 @@ export default function Home() {
               >
                 Request Demo
               </a>
-              <Link
-                href="/signup"
+              <a
+                href="#waitlist"
                 className="inline-flex h-12 items-center justify-center rounded-md border-2 border-white bg-transparent px-8 text-base font-medium text-white hover:bg-white/10"
               >
-                Create Teacher Account
-              </Link>
+                Join waitlist
+              </a>
             </div>
           </div>
         </section>
@@ -583,20 +587,15 @@ export default function Home() {
         </section>
 
         {/* Final CTA - DARK BACKGROUND */}
-        <section className="border-b border-[var(--border)]">
+        <section id="waitlist" className="border-b border-[var(--border)]">
           <div className="mx-auto max-w-4xl px-6 py-16">
             <div className="rounded-2xl border-2 border-[var(--primary)] bg-[var(--surface)] p-10 text-center">
-              <h3 className="text-3xl font-bold tracking-tight md:text-4xl">Join the beta program</h3>
+              <h3 className="text-3xl font-bold tracking-tight md:text-4xl">Join the waitlist</h3>
               <p className="mx-auto mt-4 max-w-2xl text-lg text-[var(--muted)]">
                 Early access partners get priority onboarding, direct input on features, and founder pricing locked for 3 years.
               </p>
-              <div className="mt-8 flex flex-col justify-center gap-4 sm:flex-row">
-                <Link
-                  href="/signup"
-                  className="inline-flex h-12 items-center justify-center rounded-md bg-[var(--primary)] px-8 text-base font-medium text-white shadow-lg hover:opacity-90"
-                >
-                  Create Teacher Account
-                </Link>
+              <WaitlistForm />
+              <div className="mt-6 flex flex-col justify-center gap-4 sm:flex-row">
                 <a
                   href="mailto:hello@edusynapse.org?subject=SayVeritas%20Demo%20Request"
                   className="inline-flex h-12 items-center justify-center rounded-md border-2 border-[var(--border)] bg-transparent px-8 text-base hover:bg-[var(--surface)]"

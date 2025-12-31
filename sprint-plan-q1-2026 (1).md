@@ -725,6 +725,43 @@
 
 ---
 
+#### AUTH-608: Google OAuth Login
+**As a** teacher or school admin  
+**I want** to sign in with Google  
+**So that** onboarding is faster and password friction is reduced
+
+**Acceptance Criteria:**
+- [ ] Supabase Google provider configured (client ID/secret).
+- [ ] Login page shows “Continue with Google” for non-student users.
+- [ ] Signup flow routes Google users through role selection (teacher vs school admin).
+- [ ] New Google users are assigned the selected role and redirected to the correct setup flow.
+- [ ] Students cannot create accounts via Google OAuth.
+- [ ] OAuth scopes limited to `openid email profile`.
+- [ ] Redirect URLs added for local + production environments.
+
+**Story Points:** 5
+
+---
+
+#### AI-609: AI Question Bank Expansion
+**As a** teacher  
+**I want** AI-suggested questions aligned to my prompts and Bloom's level  
+**So that** I can build a larger question bank for randomized delivery
+
+**Acceptance Criteria:**
+- [ ] Teacher can request AI suggestions based on assessment theme + existing questions.
+- [ ] Suggestions maintain the same Bloom’s level and question type as the originating question.
+- [ ] Suggestions are shown in a review queue (approve/edit/reject).
+- [ ] Approved questions are added to a question bank for the assessment.
+- [ ] Assessment can randomize from the approved pool at delivery time.
+- [ ] Submissions store which question IDs were served per student.
+- [ ] Deduplication prevents near-duplicate suggestions.
+- [ ] Students never see unapproved suggestions.
+
+**Story Points:** 8
+
+---
+
 #### GEN-607: Performance Optimization
 **As a** user  
 **I want** fast page loads  
@@ -741,7 +778,7 @@
 
 **Story Points:** 8
 
-**Total Sprint 6 Points:** 60
+**Total Sprint 6 Points:** 65
 
 ---
 

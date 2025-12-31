@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { isEvidenceFollowup } from "@/lib/assessments/question-types";
+import { isAudioFollowup, isEvidenceFollowup } from "@/lib/assessments/question-types";
+import { generateAudioFollowup, transcribeAudioForFollowup } from "@/lib/ai/audio-followup";
+import { detectOffTopic } from "@/lib/ai/off-topic";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createRouteSupabaseClient } from "@/lib/supabase/route";
 
@@ -49,7 +51,9 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
 
   const { data: responses, error: rError } = await admin
     .from("submission_responses")
-    .select("id, submission_id, question_id, storage_bucket, storage_path, mime_type, duration_seconds, created_at")
+    .select(
+      "id, submission_id, question_id, storage_bucket, storage_path, mime_type, duration_seconds, created_at, response_stage, ai_followup_question",
+    )
     .eq("submission_id", submissionId)
     .order("created_at", { ascending: false });
 
@@ -119,7 +123,7 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
 
   const { data: integrity, error: iError } = await admin
     .from("assessment_integrity")
-    .select("pledge_enabled")
+    .select("pledge_enabled, allow_grace_restart")
     .eq("assessment_id", submission.assessment_id)
     .maybeSingle();
   if (iError) return NextResponse.json({ error: iError.message }, { status: 500 });
@@ -127,10 +131,23 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
     return NextResponse.json({ error: "Accept the academic integrity pledge before answering." }, { status: 409 });
   }
 
+  const allowGraceRestart = Boolean(integrity?.allow_grace_restart);
+  let restartUsed = false;
+  if (allowGraceRestart) {
+    const { data: restartEvent, error: restartError } = await admin
+      .from("assessment_restart_events")
+      .select("id")
+      .eq("assessment_id", submission.assessment_id)
+      .eq("student_id", student.id)
+      .maybeSingle();
+    if (restartError) return NextResponse.json({ error: restartError.message }, { status: 500 });
+    restartUsed = Boolean(restartEvent);
+  }
+
   // Validate question belongs to the assessment.
   const { data: q, error: qError } = await admin
     .from("assessment_questions")
-    .select("id, evidence_upload, question_type")
+    .select("id, question_text, evidence_upload, question_type")
     .eq("id", questionId)
     .eq("assessment_id", submission.assessment_id)
     .maybeSingle();
@@ -141,19 +158,46 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
   // Enforce sequential answering: only allow upload for the next unanswered question.
   const { data: ordered, error: orderedError } = await admin
     .from("assessment_questions")
-    .select("id, order_index")
+    .select("id, order_index, question_type")
     .eq("assessment_id", submission.assessment_id)
     .order("order_index", { ascending: true });
   if (orderedError) return NextResponse.json({ error: orderedError.message }, { status: 500 });
 
   const { data: answered, error: answeredError } = await admin
     .from("submission_responses")
-    .select("question_id")
+    .select("question_id, response_stage")
     .eq("submission_id", submissionId);
   if (answeredError) return NextResponse.json({ error: answeredError.message }, { status: 500 });
-  const answeredSet = new Set((answered ?? []).map((r) => r.question_id));
+  const stagesByQuestion = new Map<string, Set<string>>();
+  for (const row of answered ?? []) {
+    if (!row.question_id) continue;
+    const stage = typeof row.response_stage === "string" && row.response_stage ? row.response_stage : "primary";
+    const existing = stagesByQuestion.get(row.question_id) ?? new Set<string>();
+    existing.add(stage);
+    stagesByQuestion.set(row.question_id, existing);
+  }
 
-  if (answeredSet.has(questionId)) {
+  const answeredSet = new Set<string>();
+  for (const row of ordered ?? []) {
+    const stages = stagesByQuestion.get(row.id) ?? new Set<string>();
+    if (isAudioFollowup(row.question_type)) {
+      if (stages.has("followup")) answeredSet.add(row.id);
+    } else if (stages.size > 0) {
+      answeredSet.add(row.id);
+    }
+  }
+
+  const stagesForQuestion = stagesByQuestion.get(questionId) ?? new Set<string>();
+  const isAudioFollowupQuestion = isAudioFollowup(q.question_type);
+  let responseStage: "primary" | "followup" = "primary";
+  if (isAudioFollowupQuestion) {
+    if (stagesForQuestion.has("followup")) {
+      return NextResponse.json({ error: "Follow-up already recorded for this question." }, { status: 409 });
+    }
+    if (stagesForQuestion.has("primary")) {
+      responseStage = "followup";
+    }
+  } else if (stagesForQuestion.size > 0) {
     return NextResponse.json({ error: "This question has already been answered. Re-recording is not allowed." }, { status: 409 });
   }
 
@@ -188,6 +232,71 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
   });
   if (uploadError) return NextResponse.json({ error: uploadError.message }, { status: 500 });
 
+  let transcript: string | null = null;
+  let followupQuestion: string | null = null;
+  let restartHint: { reason: "off_topic"; confidence: number | null } | null = null;
+  const shouldGenerateFollowup = isAudioFollowupQuestion && responseStage === "primary";
+  if (shouldGenerateFollowup && process.env.OPENAI_API_KEY) {
+    transcript = await transcribeAudioForFollowup({
+      audio: bytes,
+      mimeType: file.type || "audio/webm",
+      context: {
+        assessmentId: submission.assessment_id,
+        studentId: student.id,
+        submissionId,
+        questionId,
+      },
+    });
+    if (transcript) {
+      followupQuestion = await generateAudioFollowup({
+        questionText: q.question_text,
+        transcript,
+        context: {
+          assessmentId: submission.assessment_id,
+          studentId: student.id,
+          submissionId,
+          questionId,
+        },
+      });
+    }
+  }
+  const canEvaluateRestart = allowGraceRestart && !restartUsed && responseStage === "primary";
+  if (canEvaluateRestart && process.env.OPENAI_API_KEY) {
+    const transcriptForRestart =
+      transcript ??
+      (await transcribeAudioForFollowup({
+        audio: bytes,
+        mimeType: file.type || "audio/webm",
+        context: {
+          assessmentId: submission.assessment_id,
+          studentId: student.id,
+          submissionId,
+          questionId,
+        },
+      }));
+    if (transcriptForRestart && !transcript) {
+      transcript = transcriptForRestart;
+    }
+    if (transcriptForRestart) {
+      const offTopic = await detectOffTopic({
+        questionText: q.question_text,
+        transcript: transcriptForRestart,
+        context: {
+          assessmentId: submission.assessment_id,
+          studentId: student.id,
+          submissionId,
+          questionId,
+        },
+      });
+      if (offTopic?.offTopic && (offTopic.confidence ?? 0) >= 0.85) {
+        restartHint = { reason: "off_topic", confidence: offTopic.confidence ?? null };
+      }
+    }
+  }
+  if (shouldGenerateFollowup && !followupQuestion) {
+    followupQuestion = "Tell me one more detail about your reasoning.";
+  }
+
   const insertPayload = {
     submission_id: submissionId,
     question_id: questionId,
@@ -195,12 +304,16 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
     storage_path: path,
     mime_type: file.type || null,
     duration_seconds: Number.isFinite(durationSeconds) ? Math.max(0, Math.round(durationSeconds as number)) : null,
+    transcript: transcript ?? null,
+    response_stage: responseStage,
   };
 
   const { data: row, error: insertError } = await admin
     .from("submission_responses")
     .insert(insertPayload)
-    .select("id, submission_id, question_id, storage_bucket, storage_path, mime_type, duration_seconds, created_at")
+    .select(
+      "id, submission_id, question_id, storage_bucket, storage_path, mime_type, duration_seconds, created_at, response_stage, ai_followup_question",
+    )
     .single();
 
   if (insertError) {
@@ -209,6 +322,17 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
       return NextResponse.json({ error: "This question has already been answered. Re-recording is not allowed." }, { status: 409 });
     }
     return NextResponse.json({ error: insertError.message }, { status: 500 });
+  }
+
+  if (followupQuestion) {
+    try {
+      await admin
+        .from("submission_responses")
+        .update({ ai_followup_question: followupQuestion, ai_followup_created_at: new Date().toISOString() })
+        .eq("id", row.id);
+    } catch {
+      // Best-effort: follow-up prompts are optional.
+    }
   }
 
   // If the student uploaded evidence before recording, link it to this response row.
@@ -226,7 +350,11 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
   const { data: signedUrl, error: signedError } = await admin.storage.from(bucket).createSignedUrl(path, 60 * 60);
   if (signedError) return NextResponse.json({ error: signedError.message }, { status: 500 });
 
-  const res = NextResponse.json({ ok: true, response: { ...row, signed_url: signedUrl.signedUrl } });
+  const res = NextResponse.json({
+    ok: true,
+    response: { ...row, signed_url: signedUrl.signedUrl },
+    restart_hint: restartHint,
+  });
   pendingCookies.forEach(({ name, value, options }) => res.cookies.set(name, value, options));
   return res;
 }

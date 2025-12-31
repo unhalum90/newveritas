@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
+import { getUserRole } from "@/lib/auth/roles";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createRouteSupabaseClient } from "@/lib/supabase/route";
 
@@ -8,9 +9,7 @@ export async function GET(request: NextRequest) {
   const { data, error } = await supabase.auth.getUser();
   if (error || !data.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const role = (data.user.user_metadata as { role?: string } | undefined)?.role;
-  if (role !== "student") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-
+  const role = getUserRole(data.user);
   const admin = createSupabaseAdminClient();
   const { data: student, error: sError } = await admin
     .from("students")
@@ -19,12 +18,15 @@ export async function GET(request: NextRequest) {
     .maybeSingle();
 
   if (sError) return NextResponse.json({ error: sError.message }, { status: 500 });
-  if (!student) return NextResponse.json({ error: "Student record not found." }, { status: 404 });
+  if (!student) {
+    if (role !== "student") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return NextResponse.json({ error: "Student record not found." }, { status: 404 });
+  }
   if (student.disabled) return NextResponse.json({ error: "Student access restricted." }, { status: 403 });
 
   const { data: assessments, error: aError } = await admin
     .from("assessments")
-    .select("id, title, status, published_at, created_at, selected_asset_id")
+    .select("id, title, status, published_at, created_at, selected_asset_id, is_practice_mode")
     .eq("class_id", student.class_id)
     .eq("status", "live")
     .order("published_at", { ascending: false });

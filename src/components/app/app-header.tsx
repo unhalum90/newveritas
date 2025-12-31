@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useRouter } from "next/navigation";
 
@@ -27,6 +28,31 @@ function NavLink({ href, label, dataTour }: { href: string; label: string; dataT
 
 export function AppHeader() {
   const router = useRouter();
+  const [teacherLabel, setTeacherLabel] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const res = await fetch("/api/teacher", { cache: "no-store" });
+        const data = (await res.json().catch(() => null)) as
+          | { teacher?: { first_name?: string | null; last_name?: string | null; email?: string | null } }
+          | null;
+        if (!active) return;
+        const first = typeof data?.teacher?.first_name === "string" ? data.teacher.first_name.trim() : "";
+        const last = typeof data?.teacher?.last_name === "string" ? data.teacher.last_name.trim() : "";
+        const name = [first, last].filter(Boolean).join(" ");
+        const fallbackEmail = typeof data?.teacher?.email === "string" ? data.teacher.email.trim() : "";
+        setTeacherLabel(name || fallbackEmail || null);
+      } catch {
+        if (active) setTeacherLabel(null);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
+
   return (
     <header className="border-b border-[var(--border)] bg-[var(--background)]">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
@@ -39,6 +65,7 @@ export function AppHeader() {
           <NavLink href="/assessments" label="Assessments" dataTour="nav-assessments" />
           <NavLink href="/help" label="Help" dataTour="nav-help" />
           <NavLink href="/settings" label="Settings" />
+          {teacherLabel ? <span className="text-sm text-[var(--muted)]">{teacherLabel}</span> : null}
           <Button
             variant="ghost"
             onClick={async () => {

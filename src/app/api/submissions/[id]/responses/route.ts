@@ -43,7 +43,7 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
 
   const { data: questions, error: qError } = await supabase
     .from("assessment_questions")
-    .select("id, order_index, question_text, question_type")
+    .select("id, order_index, question_text, question_type, blooms_level")
     .eq("assessment_id", submission.assessment_id)
     .order("order_index", { ascending: true });
 

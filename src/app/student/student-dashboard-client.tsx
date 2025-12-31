@@ -18,10 +18,11 @@ type AssessmentListItem = {
   title: string;
   published_at: string | null;
   asset_url: string | null;
+  is_practice_mode?: boolean | null;
   latest_submission:
     | {
         id: string;
-        status: "started" | "submitted";
+        status: "started" | "submitted" | "restarted";
         started_at: string;
         submitted_at: string | null;
         review_status?: string | null;
@@ -128,6 +129,7 @@ export function StudentDashboardClient() {
                   <CardTitle>{a.title}</CardTitle>
                   <CardDescription>
                     {formatDate(a.published_at) ? `Published ${formatDate(a.published_at)}` : "Published"}
+                    {a.is_practice_mode ? " • Practice" : ""}
                     {a.latest_submission
                       ? ` • ${a.latest_submission.review_status === "published" ? "Feedback ready" : `Last: ${a.latest_submission.status}`}`
                       : ""}

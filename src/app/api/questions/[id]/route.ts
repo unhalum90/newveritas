@@ -7,6 +7,7 @@ import { createRouteSupabaseClient } from "@/lib/supabase/route";
 const patchSchema = z.object({
   question_text: z.string().min(1).max(500).optional(),
   question_type: z.string().optional().nullable(),
+  blooms_level: z.enum(["remember", "understand", "apply", "analyze", "evaluate", "create"]).optional().nullable(),
   order_index: z.number().int().positive().optional(),
   evidence_upload: z.enum(["disabled", "optional", "required"]).optional(),
 });

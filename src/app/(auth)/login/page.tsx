@@ -15,12 +15,15 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [magicLoading, setMagicLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    setInfo(null);
 
     try {
       const supabase = createSupabaseBrowserClient();
@@ -32,6 +35,30 @@ export default function LoginPage() {
       setError("An error occurred. Please try again.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleMagicLink() {
+    if (!email.trim()) {
+      setError("Enter your email to receive a magic link.");
+      return;
+    }
+    setMagicLoading(true);
+    setError(null);
+    setInfo(null);
+    try {
+      const supabase = createSupabaseBrowserClient();
+      const redirectTo = `${window.location.origin}/auth/callback`;
+      const { error: otpError } = await supabase.auth.signInWithOtp({
+        email,
+        options: { emailRedirectTo: redirectTo, shouldCreateUser: false },
+      });
+      if (otpError) return setError(otpError.message || "Unable to send magic link.");
+      setInfo("Magic link sent. Check your email to finish signing in.");
+    } catch {
+      setError("Unable to send magic link. Please try again.");
+    } finally {
+      setMagicLoading(false);
     }
   }
 
@@ -66,9 +93,15 @@ export default function LoginPage() {
               />
             </div>
             {error ? <p className="text-sm text-red-600">{error}</p> : null}
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "Signing in..." : "Sign In"}
-            </Button>
+            {info ? <p className="text-sm text-emerald-600">{info}</p> : null}
+            <div className="space-y-2">
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading ? "Signing in..." : "Sign In"}
+              </Button>
+              <Button type="button" variant="secondary" className="w-full" onClick={handleMagicLink} disabled={magicLoading}>
+                {magicLoading ? "Sending magic link..." : "Send magic link"}
+              </Button>
+            </div>
           </form>
           <div className="mt-4 text-center text-sm text-[var(--muted)]">
             Don&apos;t have an account?{" "}
