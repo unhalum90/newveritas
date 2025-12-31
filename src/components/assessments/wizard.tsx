@@ -3,11 +3,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
+import { AssessmentReviewDialog } from "@/components/assessments/assessment-review-dialog";
+import { ValidationDialog } from "@/components/assessments/validation-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { validateAssessmentPhase1, type ValidationError, type ValidationResult } from "@/lib/validation/assessment-validator";
 
 type ClassRow = { id: string; name: string };
 type AuthoringMode = "manual" | "upload" | "ai" | "template";
@@ -182,11 +185,15 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
   });
   const [rubricTouched, setRubricTouched] = useState<Record<RubricType, boolean>>({ reasoning: false, evidence: false });
   const [saving, setSaving] = useState(false);
+  const [generationWorking, setGenerationWorking] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
   const [titleTouched, setTitleTouched] = useState(false);
   const [classTouched, setClassTouched] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [validationOpen, setValidationOpen] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
+  const [reviewOpen, setReviewOpen] = useState(false);
 
   const readonly = assessment?.status !== "draft";
 
@@ -345,11 +352,47 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
     await persistDraft(false);
   }
 
-  async function publish() {
-    setSaving(true);
+  function openValidation(errors: ValidationError[]) {
+    setValidationErrors(errors);
+    setValidationOpen(true);
+  }
+
+  async function publishAssessment() {
     setError(null);
+    const clientRubrics = (["reasoning", "evidence"] as const).flatMap((type) => {
+      const saved = rubrics[type];
+      if (!saved) return [];
+      const draft = rubricDrafts[type];
+      return [
+        {
+          id: saved.id,
+          rubric_type: type,
+          instructions: draft.instructions,
+          scale_min: draft.scale_min,
+          scale_max: draft.scale_max,
+        },
+      ];
+    });
+    const validation = validateAssessmentPhase1({ questions, rubrics: clientRubrics });
+    if (!validation.can_publish) {
+      openValidation(validation.critical_errors);
+      return;
+    }
+
+    setSaving(true);
     try {
-      await jsonFetch(`/api/assessments/${assessmentId}/publish`, { method: "POST" });
+      const res = await fetch(`/api/assessments/${assessmentId}/publish`, { method: "POST" });
+      const payload: unknown = await res.json().catch(() => null);
+      if (!res.ok) {
+        if (payload && typeof payload === "object" && "critical_errors" in payload) {
+          const result = payload as ValidationResult;
+          const errors = Array.isArray(result.critical_errors) ? result.critical_errors : [];
+          openValidation(errors);
+          return;
+        }
+        throw new Error(getErrorMessage(payload));
+      }
+      setValidationOpen(false);
       router.push(`/assessments/${assessmentId}/results`);
       router.refresh();
     } catch (e) {
@@ -405,6 +448,89 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
   const canPublish =
     !readonly && step === 5 && startComplete && questionsComplete && rubricsComplete && !saving;
   const className = assessment.classes?.name?.trim() || null;
+  const reviewStages = useMemo(() => {
+    if (!assessment) return [];
+    const title = assessment.title.trim() || "Untitled";
+    const mode =
+      assessment.authoring_mode === "ai"
+        ? "AI generated"
+        : assessment.authoring_mode === "upload"
+          ? "Uploaded source"
+          : assessment.authoring_mode === "template"
+            ? "Template"
+            : "Manual";
+    const subject = assessment.subject?.trim();
+    const language = assessment.target_language?.trim();
+    const instructions = (assessment.instructions ?? "").trim();
+    const instructionsPreview = instructions.length > 0 ? `${instructions.slice(0, 160)}${instructions.length > 160 ? "..." : ""}` : "None";
+
+    const assetSummary = assetUrl.trim()
+      ? "Visual selected"
+      : assetPrompt.trim()
+        ? "Visual prompt provided"
+        : "No visual selected";
+    const assetDetails: string[] = [];
+    if (assetUrl.trim()) assetDetails.push(`Image URL: ${assetUrl.trim().slice(0, 80)}${assetUrl.trim().length > 80 ? "..." : ""}`);
+    if (assetPrompt.trim()) assetDetails.push(`Prompt: ${assetPrompt.trim().slice(0, 120)}${assetPrompt.trim().length > 120 ? "..." : ""}`);
+
+    const questionDetails = questions
+      .slice(0, 3)
+      .map((q, index) => `Q${index + 1}: ${q.question_text.trim().slice(0, 120)}${q.question_text.trim().length > 120 ? "..." : ""}`);
+
+    const rubricDetails: string[] = (["reasoning", "evidence"] as const).map((type) => {
+      const label = type === "reasoning" ? "Reasoning" : "Evidence";
+      const draft = rubricDrafts[type];
+      const scale = `${draft.scale_min}-${draft.scale_max}`;
+      const hasInstructions = Boolean(draft.instructions.trim());
+      const preview = draft.instructions.trim().slice(0, 120);
+      const suffix = draft.instructions.trim().length > 120 ? "..." : "";
+      return `${label} rubric: scale ${scale} • ${hasInstructions ? `Instructions: ${preview}${suffix}` : "Instructions missing"}`;
+    });
+
+    return [
+      {
+        step: 1,
+        title: "Start",
+        summary: `Title: ${title} • Class: ${className ?? "Unassigned"} • Mode: ${mode}`,
+        details: [subject ? `Subject: ${subject}` : null, language ? `Target language: ${language}` : null].filter(
+          (item): item is string => Boolean(item),
+        ),
+      },
+      {
+        step: 2,
+        title: "General Info",
+        summary: `Instructions: ${instructions ? "Provided" : "Missing"} • Practice mode: ${assessment.is_practice_mode ? "On" : "Off"}`,
+        details: instructions ? [`Instructions preview: ${instructionsPreview}`] : [],
+      },
+      {
+        step: 3,
+        title: "Visual Assets",
+        summary: assetSummary,
+        details: assetDetails,
+      },
+      {
+        step: 4,
+        title: "Questions",
+        summary: `${questions.length} question${questions.length === 1 ? "" : "s"}`,
+        details: questionDetails.length ? questionDetails : ["No questions added."],
+      },
+      {
+        step: 5,
+        title: "Rubrics",
+        summary: `${rubrics.reasoning ? "Reasoning" : "Reasoning missing"} • ${rubrics.evidence ? "Evidence" : "Evidence missing"}`,
+        details: rubricDetails,
+      },
+    ];
+  }, [
+    assessment,
+    assetPrompt,
+    assetUrl,
+    className,
+    questions,
+    rubrics.evidence,
+    rubrics.reasoning,
+    rubricDrafts,
+  ]);
 
   async function saveAssetAndContinue() {
     if (readonly) return;
@@ -574,6 +700,21 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
 
   return (
     <div className="min-h-[calc(100vh-120px)]">
+      <AssessmentReviewDialog
+        open={reviewOpen}
+        stages={reviewStages}
+        loading={saving}
+        onClose={() => setReviewOpen(false)}
+        onConfirm={() => {
+          setReviewOpen(false);
+          void publishAssessment();
+        }}
+        onEditStep={(stepToEdit) => {
+          setReviewOpen(false);
+          goToStep(stepToEdit as StepNumber);
+        }}
+      />
+      <ValidationDialog open={validationOpen} errors={validationErrors} onClose={() => setValidationOpen(false)} />
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold text-[var(--text)]">Veritas Assess Builder</h1>
@@ -597,7 +738,7 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
           <Button type="button" variant="secondary" disabled={saving || readonly} onClick={saveDraft}>
             {saving ? "Saving…" : "Save Draft"}
           </Button>
-          <Button type="button" disabled={!canPublish} onClick={publish}>
+          <Button type="button" disabled={!canPublish} onClick={() => setReviewOpen(true)}>
             Publish to Class
           </Button>
         </div>
@@ -868,17 +1009,19 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
                   </div>
                 ) : null}
 
-                <div className="flex justify-end">
+                <div className="flex flex-col items-end gap-2">
                   <Button
                     type="button"
-                    disabled={readonly || !canContinue}
+                    disabled={readonly || !canContinue || generationWorking}
                     onClick={() => {
                       setTitleTouched(true);
                       setClassTouched(true);
+                      if (generationWorking) return;
                       if (!assessment.title.trim() || !assessment.class_id) return;
                       if (assessment.authoring_mode === "upload") {
                         if (!startPdfFile) return;
                         void (async () => {
+                          setGenerationWorking(true);
                           setSaving(true);
                           setError(null);
                           try {
@@ -896,6 +1039,7 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
                             setError(e instanceof Error ? e.message : "Upload generation failed.");
                           } finally {
                             setSaving(false);
+                            setGenerationWorking(false);
                           }
                         })();
                         return;
@@ -905,6 +1049,7 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
                         const prompt = startAiPrompt.trim();
                         if (prompt.length < 20) return;
                         void (async () => {
+                          setGenerationWorking(true);
                           setSaving(true);
                           setError(null);
                           try {
@@ -920,6 +1065,7 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
                             setError(e instanceof Error ? e.message : "AI generation failed.");
                           } finally {
                             setSaving(false);
+                            setGenerationWorking(false);
                           }
                         })();
                         return;
@@ -928,6 +1074,7 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
                       if (assessment.authoring_mode === "template") {
                         if (!selectedTemplateId) return;
                         void (async () => {
+                          setGenerationWorking(true);
                           setSaving(true);
                           setError(null);
                           try {
@@ -943,6 +1090,7 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
                             setError(e instanceof Error ? e.message : "Template apply failed.");
                           } finally {
                             setSaving(false);
+                            setGenerationWorking(false);
                           }
                         })();
                         return;
@@ -953,13 +1101,21 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
                     }}
                   >
                     {assessment.authoring_mode === "ai" || assessment.authoring_mode === "upload" || assessment.authoring_mode === "template"
-                      ? saving
-                        ? "Generating…"
+                      ? generationWorking
+                        ? assessment.authoring_mode === "template"
+                          ? "Applying…"
+                          : "Generating…"
                         : assessment.authoring_mode === "template"
                           ? "Apply Template"
                           : "Generate Draft"
                       : "Continue →"}
                   </Button>
+                  {generationWorking ? (
+                    <div className="flex items-center gap-2 text-xs text-[var(--muted)]">
+                      <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-[var(--primary)] border-t-transparent" />
+                      <span>{assessment.authoring_mode === "template" ? "Applying template…" : "Generating draft…"}</span>
+                    </div>
+                  ) : null}
                 </div>
               </CardContent>
             </Card>

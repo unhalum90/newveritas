@@ -118,6 +118,7 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
     {
       fast_start: number;
       slow_start: number;
+      long_pause: number;
       screenshot_attempt: number;
       tab_switch_count: number;
       tab_switch_total_ms: number;
@@ -129,6 +130,7 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
       integrityBySubmission.get(row.submission_id) ?? {
         fast_start: 0,
         slow_start: 0,
+        long_pause: 0,
         screenshot_attempt: 0,
         tab_switch_count: 0,
         tab_switch_total_ms: 0,
@@ -140,6 +142,8 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
       curr.fast_start += 1;
     } else if (row.event_type === "slow_start") {
       curr.slow_start += 1;
+    } else if (row.event_type === "long_pause") {
+      curr.long_pause += 1;
     } else if (row.event_type === "screenshot_attempt") {
       curr.screenshot_attempt += 1;
     }
@@ -209,7 +213,7 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
           summary.tab_switch_total_ms > TAB_SWITCH_DURATION_THRESHOLD_MS
             ? 1
             : 0;
-        return summary.fast_start + summary.slow_start + summary.screenshot_attempt + tabSwitchFlag;
+        return summary.fast_start + summary.slow_start + summary.long_pause + summary.screenshot_attempt + tabSwitchFlag;
       })(),
     })),
   });

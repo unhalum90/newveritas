@@ -119,7 +119,7 @@ export default function AboutPage() {
               </p>
               <a
                 className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-[var(--primary)] hover:opacity-80"
-                href="mailto:hello@edusynapse.org?subject=PhonemeLab%20Info"
+                href="mailto:hello@sayveritas.com?subject=PhonemeLab%20Info"
               >
                 Learn more about PhonemeLab →
               </a>
@@ -132,7 +132,7 @@ export default function AboutPage() {
         <div className="mx-auto flex max-w-6xl flex-col gap-4 px-6 py-10 text-sm text-[var(--muted)] md:flex-row md:items-center md:justify-between">
           <div>
             <p className="font-semibold text-[var(--text)]">SayVeritas</p>
-            <p className="mt-1">© 2025 EduSynapse Group. All rights reserved.</p>
+            <p className="mt-1">@chamberlininnovations</p>
           </div>
           <div className="flex gap-6">
             <Link className="hover:text-[var(--text)]" href="/login">
@@ -144,7 +144,7 @@ export default function AboutPage() {
             <Link className="hover:text-[var(--text)]" href="/privacy">
               Privacy
             </Link>
-            <a className="hover:text-[var(--text)]" href="mailto:hello@edusynapse.org">
+            <a className="hover:text-[var(--text)]" href="mailto:hello@sayveritas.com">
               Contact
             </a>
           </div>

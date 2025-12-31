@@ -5,7 +5,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createRouteSupabaseClient } from "@/lib/supabase/route";
 
 const eventSchema = z.object({
-  event_type: z.enum(["tab_switch", "fast_start", "slow_start", "screenshot_attempt"]),
+  event_type: z.enum(["tab_switch", "fast_start", "slow_start", "long_pause", "screenshot_attempt"]),
   duration_ms: z.number().int().min(0).optional().nullable(),
   question_id: z.string().uuid().optional().nullable(),
   metadata: z.record(z.string(), z.unknown()).optional().nullable(),

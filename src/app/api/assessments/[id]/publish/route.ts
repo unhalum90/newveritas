@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { createRouteSupabaseClient } from "@/lib/supabase/route";
+import { validateAssessmentPhase1 } from "@/lib/validation/assessment-validator";
 
 export async function POST(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
@@ -23,26 +24,23 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
     return NextResponse.json({ error: "Assessment title is required." }, { status: 400 });
   }
 
-  const { count: qCount, error: qError } = await supabase
+  const { data: questions, error: qError } = await supabase
     .from("assessment_questions")
-    .select("id", { count: "exact", head: true })
+    .select("id, question_text")
     .eq("assessment_id", id);
 
   if (qError) return NextResponse.json({ error: "Question lookup failed." }, { status: 500 });
-  if (!qCount || qCount < 1) return NextResponse.json({ error: "Add at least one question." }, { status: 400 });
+  if (!questions || questions.length < 1) return NextResponse.json({ error: "Add at least one question." }, { status: 400 });
 
   const { data: rubrics, error: rError } = await supabase
     .from("rubrics")
-    .select("rubric_type")
+    .select("id, rubric_type, instructions, scale_min, scale_max")
     .eq("assessment_id", id);
 
   if (rError) return NextResponse.json({ error: "Rubric validation failed." }, { status: 500 });
-  const types = new Set((rubrics ?? []).map((r) => r.rubric_type));
-  if (!types.has("reasoning") || !types.has("evidence")) {
-    return NextResponse.json(
-      { error: "Both rubrics are required: reasoning and evidence." },
-      { status: 400 },
-    );
+  const validation = validateAssessmentPhase1({ questions, rubrics: rubrics ?? [] });
+  if (!validation.can_publish) {
+    return NextResponse.json(validation, { status: 400 });
   }
 
   const now = new Date().toISOString();

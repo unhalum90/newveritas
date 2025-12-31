@@ -127,6 +127,7 @@ function formatDurationMs(ms: number | null | undefined) {
 function formatIntegrityLabel(eventType: string) {
   if (eventType === "fast_start") return "Started fast";
   if (eventType === "slow_start") return "Paused too long";
+  if (eventType === "long_pause") return "Long pause";
   if (eventType === "tab_switch") return "Left tab";
   if (eventType === "screenshot_attempt") return "Screenshot attempt";
   return eventType;
@@ -392,9 +393,11 @@ export function AssessmentResultsClient({ assessmentId }: { assessmentId: string
             ? "Left tab"
             : event.event_type === "slow_start"
               ? "Paused too long"
-              : event.event_type === "screenshot_attempt"
-                ? "Screenshot attempt"
-                : event.event_type;
+              : event.event_type === "long_pause"
+                ? "Long pause"
+                : event.event_type === "screenshot_attempt"
+                  ? "Screenshot attempt"
+                  : event.event_type;
 
       return {
         id: event.id,

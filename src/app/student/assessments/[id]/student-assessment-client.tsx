@@ -87,6 +87,7 @@ type StudentAccess = {
 const FAST_START_THRESHOLD_MS = 3000;
 const SLOW_START_THRESHOLD_MS = 6000;
 const GRACE_RESTART_THRESHOLD_MS = 10000;
+const LONG_PAUSE_THRESHOLD_MS = 10000;
 const AUDIO_ACTIVITY_THRESHOLD = 0.03;
 
 function normalizeEvidenceSetting(v: unknown): EvidenceUploadSetting {
@@ -234,7 +235,7 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
     async (
       submissionId: string,
       payload: {
-        event_type: "tab_switch" | "fast_start" | "slow_start" | "screenshot_attempt";
+        event_type: "tab_switch" | "fast_start" | "slow_start" | "long_pause" | "screenshot_attempt";
         duration_ms?: number | null;
         question_id?: string | null;
         metadata?: Record<string, unknown> | null;
@@ -567,6 +568,8 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
       const audioMonitorStartedAt = Date.now();
       let slowStartLogged = false;
       let firstSoundAt: number | null = null;
+      let lastSoundAt: number | null = null;
+      let pauseActive = false;
       let audioMonitorId: number | null = null;
 
       const stopAudioMonitor = () => {
@@ -585,25 +588,41 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
           sumSquares += v * v;
         }
         const rms = Math.sqrt(sumSquares / audioSamples.length);
-        if (firstSoundAt == null && rms > AUDIO_ACTIVITY_THRESHOLD) {
-          firstSoundAt = Date.now();
+        const now = Date.now();
+        if (rms > AUDIO_ACTIVITY_THRESHOLD) {
+          if (firstSoundAt == null) firstSoundAt = now;
+          lastSoundAt = now;
+          pauseActive = false;
         }
         if (
           canGraceRestart &&
           !slowStartEligibleRef.current &&
           firstSoundAt == null &&
-          Date.now() - audioMonitorStartedAt >= GRACE_RESTART_THRESHOLD_MS
+          now - audioMonitorStartedAt >= GRACE_RESTART_THRESHOLD_MS
         ) {
           slowStartEligibleRef.current = true;
         }
-        if (!slowStartLogged && firstSoundAt == null && Date.now() - audioMonitorStartedAt >= SLOW_START_THRESHOLD_MS) {
+        if (!slowStartLogged && firstSoundAt == null && now - audioMonitorStartedAt >= SLOW_START_THRESHOLD_MS) {
           slowStartLogged = true;
           void logIntegrityEvent(latest.id, {
             event_type: "slow_start",
-            duration_ms: Date.now() - audioMonitorStartedAt,
+            duration_ms: now - audioMonitorStartedAt,
             question_id: recordedQuestionId,
             metadata: { threshold_ms: SLOW_START_THRESHOLD_MS },
           });
+        }
+        if (firstSoundAt != null) {
+          const lastAudioAt = lastSoundAt ?? firstSoundAt;
+          const silentMs = now - lastAudioAt;
+          if (!pauseActive && silentMs >= LONG_PAUSE_THRESHOLD_MS) {
+            pauseActive = true;
+            void logIntegrityEvent(latest.id, {
+              event_type: "long_pause",
+              duration_ms: silentMs,
+              question_id: recordedQuestionId,
+              metadata: { threshold_ms: LONG_PAUSE_THRESHOLD_MS },
+            });
+          }
         }
         audioMonitorId = requestAnimationFrame(monitorAudio);
       };

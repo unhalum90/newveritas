@@ -1,6 +1,8 @@
 import Link from "next/link";
-import Image from "next/image";
 import { WaitlistForm } from "@/components/waitlist-form";
+import { FeatureGallery } from "@/components/home/feature-gallery";
+import { ContactModal } from "@/components/home/contact-modal";
+import { HeroImage } from "@/components/home/hero-image";
 
 export default function Home() {
   const featureItems: Array<{ title: string; body: string }> = [
@@ -114,76 +116,13 @@ export default function Home() {
                 </p>
               </div>
 
-              {/* Right Column - Screenshot Placeholder */}
+              {/* Right Column - Hero Image */}
               <div className="relative">
-                {/* IMAGE PLACEHOLDER: Large annotated screenshot of teacher dashboard */}
-                {/* Recommended: 1200x800px screenshot showing:
-                    - AI score (88/100) with override button
-                    - Reasoning analysis panel
-                    - Integrity flags section
-                    Add callout annotations pointing to these features */}
-                <div className="relative overflow-hidden rounded-xl border-2 border-[var(--primary)] bg-[var(--surface)] shadow-2xl">
-                  <div className="flex h-[500px] items-center justify-center bg-gradient-to-br from-[var(--surface)] to-[color-mix(in_oklab,var(--surface),black_20%)]">
-                    <div className="text-center">
-                      <div className="mx-auto mb-4 h-24 w-24 rounded-full bg-[var(--primary)] opacity-20" />
-                      <p className="text-sm font-medium text-[var(--muted)]">
-                        📸 Teacher Dashboard Screenshot
-                      </p>
-                      <p className="mt-2 text-xs text-[var(--muted)]">
-                        Show: AI score, reasoning analysis, integrity flags
-                      </p>
-                    </div>
-                  </div>
-                  {/* Add actual screenshot here: */}
-                  {/* <Image 
-                    src="/screenshots/teacher-dashboard.png" 
-                    alt="Teacher reviewing student assessment with AI-generated scores and reasoning analysis"
-                    width={1200}
-                    height={800}
-                    className="w-full"
-                  /> */}
-                </div>
-                
-                {/* Optional: Floating callout annotations */}
-                <div className="absolute left-4 top-1/4 hidden rounded-lg border border-[var(--primary)] bg-[var(--background)] px-3 py-2 text-xs font-medium shadow-lg md:block">
-                  <span className="text-[var(--primary)]">→</span> Override AI score
-                </div>
-                <div className="absolute bottom-1/4 right-4 hidden rounded-lg border border-[var(--primary)] bg-[var(--background)] px-3 py-2 text-xs font-medium shadow-lg md:block">
-                  Integrity flags <span className="text-[var(--primary)]">←</span>
-                </div>
+                <HeroImage
+                  src="/hero_image.png"
+                  alt="Teacher dashboard showing AI-assisted oral assessment results"
+                />
               </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Social Proof Bar - LIGHT BACKGROUND (NEW) */}
-        <section className="border-b border-[var(--border)] bg-[#F8FAFC]">
-          <div className="mx-auto max-w-6xl px-6 py-8">
-            <div className="text-center">
-              <p className="text-sm font-medium text-[#64748B]">Trusted by innovative educators</p>
-              <div className="mt-6 flex flex-wrap items-center justify-center gap-8">
-                {/* IMAGE PLACEHOLDERS: School/University Logos */}
-                {/* Recommended: 150x60px logos, grayscale or subtle color */}
-                {["CVA", "Endicott College", "Beta School 3"].map((school, idx) => (
-                  <div
-                    key={school}
-                    className="flex h-16 w-32 items-center justify-center rounded-lg border border-[#E2E8F0] bg-white px-4 shadow-sm"
-                  >
-                    <p className="text-xs font-medium text-[#94A3B8]">{school} Logo</p>
-                    {/* Replace with actual logo: */}
-                    {/* <Image 
-                      src={`/logos/${school.toLowerCase().replace(/\s+/g, '-')}.png`}
-                      alt={school}
-                      width={150}
-                      height={60}
-                      className="grayscale opacity-60 hover:opacity-100"
-                    /> */}
-                  </div>
-                ))}
-              </div>
-              <p className="mt-6 text-sm text-[#64748B]">
-                Join <span className="font-semibold text-[#1E293B]">50+ educators</span> transforming assessment
-              </p>
             </div>
           </div>
         </section>
@@ -219,22 +158,22 @@ export default function Home() {
                 The grading treadmill is killing good teaching
               </h2>
               <div className="mt-8 grid gap-6 md:grid-cols-3">
-                <div className="rounded-xl border border-[var(--border)] bg-[color-mix(in_oklab,var(--surface),black_6%)] p-6">
-                  <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-[var(--primary)] text-xl">⏱️</div>
+                <div className="rounded-xl border border-[var(--border)] bg-[color-mix(in_oklab,var(--surface),black_6%)] p-6 text-center">
+                  <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-lg bg-[var(--primary)] text-2xl">⏱️</div>
                   <p className="text-base font-semibold">The time trap</p>
                   <p className="mt-3 text-sm leading-relaxed text-[var(--muted)]">
                     Teachers spend hours grading. By the time scores are back, the moment for intervention has passed.
                   </p>
                 </div>
-                <div className="rounded-xl border border-[var(--border)] bg-[color-mix(in_oklab,var(--surface),black_6%)] p-6">
-                  <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-[#60a5fa] text-xl">📊</div>
+                <div className="rounded-xl border border-[var(--border)] bg-[color-mix(in_oklab,var(--surface),black_6%)] p-6 text-center">
+                  <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-lg bg-[#60a5fa] text-2xl">📊</div>
                   <p className="text-base font-semibold">The scale problem</p>
                   <p className="mt-3 text-sm leading-relaxed text-[var(--muted)]">
                     Oral assessments reveal deep understanding—but 5 minutes per student doesn't scale.
                   </p>
                 </div>
-                <div className="rounded-xl border border-[var(--border)] bg-[color-mix(in_oklab,var(--surface),black_6%)] p-6">
-                  <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-[#f59e0b] text-xl">🔒</div>
+                <div className="rounded-xl border border-[var(--border)] bg-[color-mix(in_oklab,var(--surface),black_6%)] p-6 text-center">
+                  <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-lg bg-[#f59e0b] text-2xl">🔒</div>
                   <p className="text-base font-semibold">The integrity crisis</p>
                   <p className="mt-3 text-sm leading-relaxed text-[var(--muted)]">
                     Answers spread quickly. Traditional assessment formats struggle to keep up.
@@ -258,71 +197,7 @@ export default function Home() {
               From assessment creation to student responses to teacher review—here's how SayVeritas works in real classrooms.
             </p>
             
-            {/* IMAGE PLACEHOLDER: 3 Screenshots Side-by-Side */}
-            <div className="mt-12 grid gap-6 md:grid-cols-3">
-              {/* Screenshot 1: Assessment Creation */}
-              <div className="rounded-xl border border-[#E2E8F0] bg-white p-4 shadow-lg">
-                <div className="flex aspect-[4/3] items-center justify-center rounded-lg bg-gradient-to-br from-[#F1F5F9] to-[#E2E8F0]">
-                  <div className="text-center">
-                    <div className="mx-auto mb-3 h-16 w-16 rounded-full bg-[var(--primary)] opacity-20" />
-                    <p className="text-xs font-medium text-[#64748B]">📝 Assessment Creation</p>
-                  </div>
-                </div>
-                {/* <Image 
-                  src="/screenshots/assessment-creation.png"
-                  alt="Teacher creating assessment with rubric and question builder"
-                  width={400}
-                  height={300}
-                  className="w-full rounded-lg"
-                /> */}
-                <p className="mt-4 text-center text-sm font-medium text-[#1E293B]">1. Teacher Creates</p>
-                <p className="mt-2 text-center text-xs text-[#64748B]">
-                  Upload materials, set rubric, generate questions
-                </p>
-              </div>
-
-              {/* Screenshot 2: Student Recording */}
-              <div className="rounded-xl border border-[#E2E8F0] bg-white p-4 shadow-lg">
-                <div className="flex aspect-[4/3] items-center justify-center rounded-lg bg-gradient-to-br from-[#F1F5F9] to-[#E2E8F0]">
-                  <div className="text-center">
-                    <div className="mx-auto mb-3 h-16 w-16 rounded-full bg-[#60a5fa] opacity-20" />
-                    <p className="text-xs font-medium text-[#64748B]">🎤 Student Recording</p>
-                  </div>
-                </div>
-                {/* <Image 
-                  src="/screenshots/student-recording-mobile.png"
-                  alt="Student recording oral response on mobile phone"
-                  width={400}
-                  height={300}
-                  className="w-full rounded-lg"
-                /> */}
-                <p className="mt-4 text-center text-sm font-medium text-[#1E293B]">2. Student Responds</p>
-                <p className="mt-2 text-center text-xs text-[#64748B]">
-                  Record by voice, any device, anywhere
-                </p>
-              </div>
-
-              {/* Screenshot 3: Teacher Review */}
-              <div className="rounded-xl border border-[#E2E8F0] bg-white p-4 shadow-lg">
-                <div className="flex aspect-[4/3] items-center justify-center rounded-lg bg-gradient-to-br from-[#F1F5F9] to-[#E2E8F0]">
-                  <div className="text-center">
-                    <div className="mx-auto mb-3 h-16 w-16 rounded-full bg-[#34d399] opacity-20" />
-                    <p className="text-xs font-medium text-[#64748B]">✅ Teacher Review</p>
-                  </div>
-                </div>
-                {/* <Image 
-                  src="/screenshots/teacher-review-dashboard.png"
-                  alt="Teacher reviewing AI-scored submissions with reasoning analysis"
-                  width={400}
-                  height={300}
-                  className="w-full rounded-lg"
-                /> */}
-                <p className="mt-4 text-center text-sm font-medium text-[#1E293B]">3. Teacher Reviews</p>
-                <p className="mt-2 text-center text-xs text-[#64748B]">
-                  AI scores, teacher verifies, intervene where needed
-                </p>
-              </div>
-            </div>
+            <FeatureGallery />
           </div>
         </section>
 
@@ -406,7 +281,7 @@ export default function Home() {
             </p>
             <div className="mt-8 flex flex-col justify-center gap-4 sm:flex-row">
               <a
-                href="mailto:hello@edusynapse.org?subject=SayVeritas%20Demo%20Request"
+                href="mailto:hello@sayveritas.com?subject=SayVeritas%20Demo%20Request"
                 className="inline-flex h-12 items-center justify-center rounded-md bg-white px-8 text-base font-medium text-[var(--primary)] shadow-lg hover:bg-white/90"
               >
                 Request Demo
@@ -534,7 +409,7 @@ export default function Home() {
                   </p>
                   <div className="mt-6">
                     <p className="font-semibold text-[#0F172A]">Sarah M.</p>
-                    <p className="text-sm text-[#64748B]">Biology Teacher, [School Name]</p>
+                    <p className="text-sm text-[#64748B]">Biology Teacher</p>
                   </div>
                 </div>
               </div>
@@ -573,9 +448,9 @@ export default function Home() {
               ].map((item) => (
                 <div
                   key={item.title}
-                  className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6"
+                  className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6 text-center"
                 >
-                  <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-lg bg-[var(--primary)] text-2xl">
+                  <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-lg bg-[var(--primary)] text-3xl">
                     {item.icon}
                   </div>
                   <p className="text-base font-semibold">{item.title}</p>
@@ -597,14 +472,14 @@ export default function Home() {
               <WaitlistForm />
               <div className="mt-6 flex flex-col justify-center gap-4 sm:flex-row">
                 <a
-                  href="mailto:hello@edusynapse.org?subject=SayVeritas%20Demo%20Request"
+                  href="mailto:hello@sayveritas.com?subject=SayVeritas%20Demo%20Request"
                   className="inline-flex h-12 items-center justify-center rounded-md border-2 border-[var(--border)] bg-transparent px-8 text-base hover:bg-[var(--surface)]"
                 >
                   Request a Demo
                 </a>
               </div>
               <p className="mt-6 text-sm text-[var(--muted)]">
-                Questions? <a href="mailto:hello@edusynapse.org" className="underline hover:text-[var(--text)]">Schedule a call</a>
+                Questions? <a href="mailto:hello@sayveritas.com" className="underline hover:text-[var(--text)]">Schedule a call</a>
               </p>
             </div>
           </div>
@@ -615,7 +490,7 @@ export default function Home() {
         <div className="mx-auto flex max-w-6xl flex-col gap-4 px-6 py-10 text-sm text-[var(--muted)] md:flex-row md:items-center md:justify-between">
           <div>
             <p className="font-semibold text-[var(--text)]">SayVeritas</p>
-            <p className="mt-1">© 2025 EduSynapse Group. All rights reserved.</p>
+            <p className="mt-1">@chamberlininnovations</p>
           </div>
           <div className="flex gap-6">
             <Link className="hover:text-[var(--text)]" href="/login">
@@ -627,9 +502,7 @@ export default function Home() {
             <Link className="hover:text-[var(--text)]" href="/privacy">
               Privacy
             </Link>
-            <a className="hover:text-[var(--text)]" href="mailto:hello@edusynapse.org">
-              Contact
-            </a>
+            <ContactModal className="hover:text-[var(--text)]" />
           </div>
         </div>
       </footer>
