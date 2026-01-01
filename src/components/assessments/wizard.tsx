@@ -471,31 +471,7 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
     router.push(`/assessments/${assessmentId}?step=${n}`);
   }
 
-  if (!assessment) {
-    return <div className="text-sm text-[var(--muted)]">{error ?? "Loading…"}</div>;
-  }
-
-  const integrity = assessment.assessment_integrity ?? {
-    pause_threshold_seconds: 2.5,
-    tab_switch_monitor: true,
-    shuffle_questions: true,
-    allow_grace_restart: false,
-    pledge_enabled: false,
-    pledge_version: 1,
-    pledge_text: null,
-    recording_limit_seconds: 60,
-    viewing_timer_seconds: 20,
-  };
-
-  const titleError = titleTouched && !assessment.title.trim() ? "Assessment title is required." : null;
-  const classError = classTouched && !assessment.class_id ? "Class is required." : null;
-  const pausingEnabled = integrity.pause_threshold_seconds !== null;
-  const questionRequiredError =
-    step >= 5 && startComplete && !questionsComplete ? "Add at least one question to continue." : null;
-  const rubricsComplete = Boolean(rubrics.reasoning && rubrics.evidence);
-  const canPublish =
-    !readonly && step === 5 && startComplete && questionsComplete && rubricsComplete && !saving;
-  const className = assessment.classes?.name?.trim() || null;
+  const className = assessment?.classes?.name?.trim() || null;
   const reviewStages = useMemo(() => {
     if (!assessment) return [];
     const title = assessment.title.trim() || "Untitled";
@@ -510,7 +486,8 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
     const subject = assessment.subject?.trim();
     const language = assessment.target_language?.trim();
     const instructions = (assessment.instructions ?? "").trim();
-    const instructionsPreview = instructions.length > 0 ? `${instructions.slice(0, 160)}${instructions.length > 160 ? "..." : ""}` : "None";
+    const instructionsPreview =
+      instructions.length > 0 ? `${instructions.slice(0, 160)}${instructions.length > 160 ? "..." : ""}` : "None";
 
     const assetSummary = assetUrl.trim()
       ? "Image selected"
@@ -520,8 +497,14 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
     const audioSummary = audioIntro ? "Audio intro attached" : "No audio intro";
     const documentSummary = documentAsset ? "PDF attached" : "No PDF";
     const assetDetails: string[] = [];
-    if (assetUrl.trim()) assetDetails.push(`Image URL: ${assetUrl.trim().slice(0, 80)}${assetUrl.trim().length > 80 ? "..." : ""}`);
-    if (assetPrompt.trim()) assetDetails.push(`Prompt: ${assetPrompt.trim().slice(0, 120)}${assetPrompt.trim().length > 120 ? "..." : ""}`);
+    if (assetUrl.trim())
+      assetDetails.push(
+        `Image URL: ${assetUrl.trim().slice(0, 80)}${assetUrl.trim().length > 80 ? "..." : ""}`,
+      );
+    if (assetPrompt.trim())
+      assetDetails.push(
+        `Prompt: ${assetPrompt.trim().slice(0, 120)}${assetPrompt.trim().length > 120 ? "..." : ""}`,
+      );
     if (audioIntro) {
       const durationLabel = formatSeconds(audioIntro.duration_seconds);
       const audioLabel = audioIntro.original_filename ? audioIntro.original_filename.trim() : "Audio intro";
@@ -534,7 +517,10 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
 
     const questionDetails = questions
       .slice(0, 3)
-      .map((q, index) => `Q${index + 1}: ${q.question_text.trim().slice(0, 120)}${q.question_text.trim().length > 120 ? "..." : ""}`);
+      .map(
+        (q, index) =>
+          `Q${index + 1}: ${q.question_text.trim().slice(0, 120)}${q.question_text.trim().length > 120 ? "..." : ""}`,
+      );
 
     const rubricDetails: string[] = (["reasoning", "evidence"] as const).map((type) => {
       const label = type === "reasoning" ? "Reasoning" : "Evidence";
@@ -558,7 +544,9 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
       {
         step: 2,
         title: "General Info",
-        summary: `Instructions: ${instructions ? "Provided" : "Missing"} • Practice mode: ${assessment.is_practice_mode ? "On" : "Off"}`,
+        summary: `Instructions: ${instructions ? "Provided" : "Missing"} • Practice mode: ${
+          assessment.is_practice_mode ? "On" : "Off"
+        }`,
         details: instructions ? [`Instructions preview: ${instructionsPreview}`] : [],
       },
       {
@@ -593,6 +581,30 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
     rubricDrafts,
   ]);
 
+  if (!assessment) {
+    return <div className="text-sm text-[var(--muted)]">{error ?? "Loading…"}</div>;
+  }
+
+  const integrity = assessment.assessment_integrity ?? {
+    pause_threshold_seconds: 2.5,
+    tab_switch_monitor: true,
+    shuffle_questions: true,
+    allow_grace_restart: false,
+    pledge_enabled: false,
+    pledge_version: 1,
+    pledge_text: null,
+    recording_limit_seconds: 60,
+    viewing_timer_seconds: 20,
+  };
+
+  const titleError = titleTouched && !assessment.title.trim() ? "Assessment title is required." : null;
+  const classError = classTouched && !assessment.class_id ? "Class is required." : null;
+  const pausingEnabled = integrity.pause_threshold_seconds !== null;
+  const questionRequiredError =
+    step >= 5 && startComplete && !questionsComplete ? "Add at least one question to continue." : null;
+  const rubricsComplete = Boolean(rubrics.reasoning && rubrics.evidence);
+  const canPublish =
+    !readonly && step === 5 && startComplete && questionsComplete && rubricsComplete && !saving;
   async function saveAssetAndContinue() {
     if (readonly) return;
     setSaving(true);
