@@ -448,7 +448,7 @@ with check (
 create table if not exists public.assessment_assets (
   id uuid primary key default gen_random_uuid(),
   assessment_id uuid references public.assessments(id) on delete cascade,
-  asset_type text not null, -- image | audio_intro
+  asset_type text not null, -- image | audio_intro | document_pdf
   asset_url text not null,
   generation_prompt text,
   original_filename text,

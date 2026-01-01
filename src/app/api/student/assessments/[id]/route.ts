@@ -6,6 +6,8 @@ import { DEFAULT_PLEDGE_TEXT } from "@/lib/integrity/pledge";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createRouteSupabaseClient } from "@/lib/supabase/route";
 
+const DOCUMENT_ASSET_TYPE = "document_pdf";
+
 export async function GET(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id: assessmentId } = await ctx.params;
   const { supabase, pendingCookies } = createRouteSupabaseClient(request);
@@ -65,6 +67,17 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
 
     if (audioError) return NextResponse.json({ error: audioError.message }, { status: 500 });
 
+    const { data: documentAsset, error: documentError } = await admin
+      .from("assessment_assets")
+      .select("asset_url, original_filename, created_at")
+      .eq("assessment_id", assessmentId)
+      .eq("asset_type", DOCUMENT_ASSET_TYPE)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (documentError) return NextResponse.json({ error: documentError.message }, { status: 500 });
+
     const { data: questionIds, error: qIdError } = await admin
       .from("assessment_questions")
       .select("id, order_index")
@@ -91,6 +104,12 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
               duration_seconds: audioIntro.duration_seconds ?? null,
               max_duration_seconds: audioIntro.max_duration_seconds ?? null,
               require_full_listen: audioIntro.require_full_listen ?? true,
+            }
+          : null,
+        document_pdf: documentAsset
+          ? {
+              asset_url: documentAsset.asset_url,
+              original_filename: documentAsset.original_filename ?? null,
             }
           : null,
         question_count: totalCount,
@@ -165,6 +184,17 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
     .maybeSingle();
 
   if (audioError) return NextResponse.json({ error: audioError.message }, { status: 500 });
+
+  const { data: documentAsset, error: documentError } = await admin
+    .from("assessment_assets")
+    .select("asset_url, original_filename, created_at")
+    .eq("assessment_id", assessmentId)
+    .eq("asset_type", DOCUMENT_ASSET_TYPE)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (documentError) return NextResponse.json({ error: documentError.message }, { status: 500 });
 
   const { data: questionRows, error: qIdError } = await admin
     .from("assessment_questions")
@@ -271,6 +301,12 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
             duration_seconds: audioIntro.duration_seconds ?? null,
             max_duration_seconds: audioIntro.max_duration_seconds ?? null,
             require_full_listen: audioIntro.require_full_listen ?? true,
+          }
+        : null,
+      document_pdf: documentAsset
+        ? {
+            asset_url: documentAsset.asset_url,
+            original_filename: documentAsset.original_filename ?? null,
           }
         : null,
       question_count: totalCount,

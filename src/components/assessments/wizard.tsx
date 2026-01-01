@@ -69,6 +69,15 @@ type AudioAsset = {
   created_at: string;
 };
 
+type DocumentAsset = {
+  id: string;
+  assessment_id: string;
+  asset_type: string;
+  asset_url: string;
+  original_filename: string | null;
+  created_at: string;
+};
+
 type RubricType = "reasoning" | "evidence";
 type Rubric = {
   id: string;
@@ -108,7 +117,7 @@ async function jsonFetch<T>(input: RequestInfo | URL, init?: RequestInit): Promi
 const steps = [
   { n: 1, label: "Start" },
   { n: 2, label: "General Info" },
-  { n: 3, label: "Visual Assets" },
+  { n: 3, label: "Assets" },
   { n: 4, label: "Questions" },
   { n: 5, label: "Rubrics" },
 ] as const;
@@ -133,6 +142,7 @@ const BLOOMS_OPTIONS = [
 ] as const;
 
 const MAX_AUDIO_SECONDS = 180;
+const MAX_PDF_BYTES = 20 * 1024 * 1024;
 
 function formatSeconds(value?: number | null) {
   if (!value || !Number.isFinite(value)) return "Unknown length";
@@ -182,6 +192,9 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
   const [audioIntro, setAudioIntro] = useState<AudioAsset | null>(null);
   const [audioUploading, setAudioUploading] = useState(false);
   const [audioError, setAudioError] = useState<string | null>(null);
+  const [documentAsset, setDocumentAsset] = useState<DocumentAsset | null>(null);
+  const [documentUploading, setDocumentUploading] = useState(false);
+  const [documentError, setDocumentError] = useState<string | null>(null);
   const [templates, setTemplates] = useState<TemplateSummary[]>([]);
   const [templatesLoading, setTemplatesLoading] = useState(false);
   const [templateError, setTemplateError] = useState<string | null>(null);
@@ -219,9 +232,10 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
   const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
   const [reviewOpen, setReviewOpen] = useState(false);
   const audioInputRef = useRef<HTMLInputElement | null>(null);
+  const documentInputRef = useRef<HTMLInputElement | null>(null);
 
   const readonly = assessment?.status !== "draft";
-  const assetBusy = saving || audioUploading;
+  const assetBusy = saving || audioUploading || documentUploading;
 
   useEffect(() => {
     if (!dirty) return;
@@ -271,7 +285,7 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
 
   const load = useCallback(async () => {
     setError(null);
-    const [data, q, assetResult, audioResult, rubricsResult] = await Promise.all([
+    const [data, q, assetResult, audioResult, documentResult, rubricsResult] = await Promise.all([
       jsonFetch<{ assessment: Assessment }>(`/api/assessments/${assessmentId}`, { cache: "no-store" }),
       jsonFetch<{ questions: Question[] }>(`/api/assessments/${assessmentId}/questions`, { cache: "no-store" }),
       jsonFetch<{ asset: AssessmentAsset | null }>(`/api/assessments/${assessmentId}/asset`, { cache: "no-store" }).catch(
@@ -280,6 +294,9 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
       jsonFetch<{ asset: AudioAsset | null }>(`/api/assessments/${assessmentId}/audio`, { cache: "no-store" }).catch(() => ({
         asset: null,
       })),
+      jsonFetch<{ asset: DocumentAsset | null }>(`/api/assessments/${assessmentId}/document`, { cache: "no-store" }).catch(
+        () => ({ asset: null }),
+      ),
       jsonFetch<{ rubrics: Rubric[] }>(`/api/assessments/${assessmentId}/rubrics`, { cache: "no-store" }).catch(() => ({ rubrics: [] })),
     ]);
 
@@ -291,6 +308,7 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
     setAssetUrl(assetResult.asset?.asset_url ?? "");
     setAssetPrompt(assetResult.asset?.generation_prompt ?? "");
     setAudioIntro(audioResult.asset ?? null);
+    setDocumentAsset(documentResult.asset ?? null);
 
     const next: Record<RubricType, Rubric | null> = { reasoning: null, evidence: null };
     for (const item of rubricsResult.rubrics) {
@@ -495,11 +513,12 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
     const instructionsPreview = instructions.length > 0 ? `${instructions.slice(0, 160)}${instructions.length > 160 ? "..." : ""}` : "None";
 
     const assetSummary = assetUrl.trim()
-      ? "Visual selected"
+      ? "Image selected"
       : assetPrompt.trim()
-        ? "Visual prompt provided"
-        : "No visual selected";
+        ? "Image prompt provided"
+        : "No image selected";
     const audioSummary = audioIntro ? "Audio intro attached" : "No audio intro";
+    const documentSummary = documentAsset ? "PDF attached" : "No PDF";
     const assetDetails: string[] = [];
     if (assetUrl.trim()) assetDetails.push(`Image URL: ${assetUrl.trim().slice(0, 80)}${assetUrl.trim().length > 80 ? "..." : ""}`);
     if (assetPrompt.trim()) assetDetails.push(`Prompt: ${assetPrompt.trim().slice(0, 120)}${assetPrompt.trim().length > 120 ? "..." : ""}`);
@@ -507,6 +526,10 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
       const durationLabel = formatSeconds(audioIntro.duration_seconds);
       const audioLabel = audioIntro.original_filename ? audioIntro.original_filename.trim() : "Audio intro";
       assetDetails.push(`Audio: ${audioLabel} (${durationLabel})`);
+    }
+    if (documentAsset) {
+      const docLabel = documentAsset.original_filename ? documentAsset.original_filename.trim() : "PDF document";
+      assetDetails.push(`PDF: ${docLabel}`);
     }
 
     const questionDetails = questions
@@ -540,8 +563,8 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
       },
       {
         step: 3,
-        title: "Visual Assets",
-        summary: `${assetSummary} • ${audioSummary}`,
+        title: "Assets",
+        summary: `${assetSummary} • ${audioSummary} • ${documentSummary}`,
         details: assetDetails,
       },
       {
@@ -563,6 +586,7 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
     assetPrompt,
     assetUrl,
     className,
+    documentAsset,
     questions,
     rubrics.evidence,
     rubrics.reasoning,
@@ -683,6 +707,53 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
       setAudioError(e instanceof Error ? e.message : "Unable to remove audio.");
     } finally {
       setAudioUploading(false);
+    }
+  }
+
+  async function handleDocumentSelected(file: File) {
+    if (readonly) return;
+    setDocumentError(null);
+    setDocumentUploading(true);
+    try {
+      const name = (file.name || "").toLowerCase();
+      const type = (file.type || "").toLowerCase();
+      const allowed = type === "application/pdf" || type === "application/x-pdf" || name.endsWith(".pdf");
+      if (!allowed) {
+        throw new Error("Document must be a PDF.");
+      }
+      if (file.size > MAX_PDF_BYTES) {
+        throw new Error("PDF must be 20MB or less.");
+      }
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch(`/api/assessments/${assessmentId}/document`, {
+        method: "POST",
+        body: form,
+      });
+      const data = (await res.json().catch(() => null)) as { asset?: DocumentAsset | null; error?: string } | null;
+      if (!res.ok) throw new Error(data?.error ?? "PDF upload failed.");
+      setDocumentAsset(data?.asset ?? null);
+    } catch (e) {
+      setDocumentError(e instanceof Error ? e.message : "PDF upload failed.");
+    } finally {
+      setDocumentUploading(false);
+      if (documentInputRef.current) documentInputRef.current.value = "";
+    }
+  }
+
+  async function removeDocument() {
+    if (readonly) return;
+    setDocumentError(null);
+    setDocumentUploading(true);
+    try {
+      const res = await fetch(`/api/assessments/${assessmentId}/document`, { method: "DELETE" });
+      const data = (await res.json().catch(() => null)) as { error?: string } | null;
+      if (!res.ok) throw new Error(data?.error ?? "Unable to remove PDF.");
+      setDocumentAsset(null);
+    } catch (e) {
+      setDocumentError(e instanceof Error ? e.message : "Unable to remove PDF.");
+    } finally {
+      setDocumentUploading(false);
     }
   }
 
@@ -1335,8 +1406,10 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
           ) : step === 3 ? (
             <Card>
               <CardHeader>
-                <CardTitle>Visual Assets</CardTitle>
-                <CardDescription>Generate options or paste a URL. Add an optional audio intro for students to listen to.</CardDescription>
+                <CardTitle>Assets</CardTitle>
+                <CardDescription>
+                  Generate options or paste a URL. Add an optional audio intro and PDF reference for students.
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
@@ -1470,8 +1543,64 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
                   {audioError ? <div className="text-xs text-red-500">{audioError}</div> : null}
                 </div>
 
+                <div className="space-y-3 rounded-md border border-[var(--border)] bg-[var(--surface)] p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-medium text-[var(--text)]">PDF reference (optional)</div>
+                      <div className="text-xs text-[var(--muted)]">PDF only. Max size 20MB. Students can open it in a new tab.</div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        ref={documentInputRef}
+                        type="file"
+                        accept="application/pdf,.pdf"
+                        className="hidden"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (f) void handleDocumentSelected(f);
+                        }}
+                        disabled={readonly}
+                      />
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        disabled={assetBusy || readonly}
+                        onClick={() => documentInputRef.current?.click()}
+                      >
+                        {documentUploading ? "Uploading…" : documentAsset ? "Replace PDF" : "Upload PDF"}
+                      </Button>
+                    </div>
+                  </div>
+
+                  {documentAsset ? (
+                    <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="text-sm text-[var(--text)]">
+                          {documentAsset.original_filename?.trim() || "PDF document"}
+                        </div>
+                        <a
+                          href={documentAsset.asset_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-xs text-[var(--primary)] hover:underline"
+                        >
+                          Open PDF
+                        </a>
+                      </div>
+                      <div className="mt-3 flex items-center justify-end">
+                        <Button type="button" variant="secondary" disabled={assetBusy || readonly} onClick={removeDocument}>
+                          Remove PDF
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-xs text-[var(--muted)]">No PDF uploaded yet.</div>
+                  )}
+                  {documentError ? <div className="text-xs text-red-500">{documentError}</div> : null}
+                </div>
+
                 <div className="text-xs text-[var(--muted)]">
-                  Visuals are optional for publishing. Add one if you want an image-based anchor prompt.
+                  Assets are optional for publishing. Add an image, audio intro, or PDF if they help frame the questions.
                 </div>
 
                 <div className="flex items-center justify-between gap-3">
@@ -1497,7 +1626,7 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
                       }
                     }}
                   >
-                    Clear
+                    Clear image
                   </Button>
                   <div className="flex items-center gap-2">
                     <Button type="button" variant="secondary" disabled={assetBusy} onClick={() => goToStep(2)}>

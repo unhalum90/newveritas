@@ -46,6 +46,10 @@ type Assessment = {
     max_duration_seconds: number | null;
     require_full_listen: boolean;
   } | null;
+  document_pdf?: {
+    asset_url: string;
+    original_filename: string | null;
+  } | null;
   question_count: number;
   current_question: Question | null;
   pledge?: Pledge;
@@ -162,6 +166,7 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
 
   const activeQuestion = assessment?.current_question ?? null;
   const audioIntro = assessment?.audio_intro ?? null;
+  const documentPdf = assessment?.document_pdf ?? null;
   const requireAudioIntro = Boolean(audioIntro && (audioIntro.require_full_listen ?? true));
   const isPracticeMode = Boolean(assessment?.is_practice_mode);
   const pledgeRequired = useMemo(() => {
@@ -942,6 +947,27 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
                 <Card className="overflow-hidden">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={assessment.asset_url} alt="" className="h-72 w-full object-cover" />
+                </Card>
+              ) : null}
+
+              {documentPdf ? (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Reference PDF</CardTitle>
+                    <CardDescription>Open the document in a new tab before you begin.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="text-sm text-[var(--muted)]">
+                      {documentPdf.original_filename?.trim() || "Attached PDF"}
+                    </div>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => window.open(documentPdf.asset_url, "_blank", "noopener,noreferrer")}
+                    >
+                      Open PDF
+                    </Button>
+                  </CardContent>
                 </Card>
               ) : null}
 
