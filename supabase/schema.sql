@@ -839,6 +839,246 @@ on public.assessment_templates
 for select
 using (is_public = true);
 
+-- =========================
+-- Assessment Analysis Reports (AAR)
+-- =========================
+
+create table if not exists public.assessment_analysis_reports (
+  id uuid primary key default gen_random_uuid(),
+  assessment_id uuid references public.assessments(id) on delete cascade,
+  class_id uuid references public.classes(id) on delete cascade,
+  teacher_id uuid references public.teachers(id) on delete set null,
+  generated_at timestamptz not null default now(),
+  status text not null default 'processing', -- processing | complete | failed
+  report_version int not null default 1,
+  supersedes_report_id uuid references public.assessment_analysis_reports(id) on delete set null,
+  student_count int,
+  completion_rate numeric,
+  avg_reasoning_score float,
+  avg_evidence_score float,
+  avg_response_length_words int,
+  data_quality jsonb,
+  rubric_distributions jsonb,
+  misconceptions jsonb,
+  reasoning_patterns jsonb,
+  evidence_patterns jsonb,
+  engagement_indicators jsonb,
+  question_effectiveness jsonb,
+  suggested_actions jsonb,
+  evidence_index jsonb,
+  raw_ai_analysis text,
+  processing_time_seconds numeric,
+  ai_model_version text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists assessment_analysis_reports_assessment_id_idx
+on public.assessment_analysis_reports(assessment_id);
+
+create index if not exists assessment_analysis_reports_status_idx
+on public.assessment_analysis_reports(status);
+
+create unique index if not exists assessment_analysis_reports_version_uq
+on public.assessment_analysis_reports(assessment_id, report_version);
+
+alter table public.assessment_analysis_reports enable row level security;
+
+drop policy if exists "Assessment analysis reports scoped to teacher" on public.assessment_analysis_reports;
+create policy "Assessment analysis reports scoped to teacher"
+on public.assessment_analysis_reports
+for select
+using (
+  exists (
+    select 1
+    from public.assessments a
+    join public.classes c on c.id = a.class_id
+    join public.teachers t on t.workspace_id = c.workspace_id
+    where a.id = assessment_id and t.user_id = auth.uid()
+  )
+);
+
+drop policy if exists "Teachers can manage assessment analysis reports" on public.assessment_analysis_reports;
+create policy "Teachers can manage assessment analysis reports"
+on public.assessment_analysis_reports
+for all
+using (
+  exists (
+    select 1
+    from public.assessments a
+    join public.classes c on c.id = a.class_id
+    join public.teachers t on t.workspace_id = c.workspace_id
+    where a.id = assessment_id and t.user_id = auth.uid()
+  )
+)
+with check (
+  exists (
+    select 1
+    from public.assessments a
+    join public.classes c on c.id = a.class_id
+    join public.teachers t on t.workspace_id = c.workspace_id
+    where a.id = assessment_id and t.user_id = auth.uid()
+  )
+);
+
+create table if not exists public.assessment_report_excerpts (
+  id uuid primary key default gen_random_uuid(),
+  assessment_id uuid references public.assessments(id) on delete cascade,
+  submission_id uuid references public.submissions(id) on delete cascade,
+  question_id uuid references public.assessment_questions(id) on delete set null,
+  transcript_text text,
+  start_ms int,
+  end_ms int,
+  asr_confidence numeric,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists assessment_report_excerpts_assessment_id_idx
+on public.assessment_report_excerpts(assessment_id);
+
+create index if not exists assessment_report_excerpts_submission_id_idx
+on public.assessment_report_excerpts(submission_id);
+
+alter table public.assessment_report_excerpts enable row level security;
+
+drop policy if exists "Assessment report excerpts scoped to teacher" on public.assessment_report_excerpts;
+create policy "Assessment report excerpts scoped to teacher"
+on public.assessment_report_excerpts
+for select
+using (
+  exists (
+    select 1
+    from public.assessments a
+    join public.classes c on c.id = a.class_id
+    join public.teachers t on t.workspace_id = c.workspace_id
+    where a.id = assessment_id and t.user_id = auth.uid()
+  )
+);
+
+drop policy if exists "Teachers can manage assessment report excerpts" on public.assessment_report_excerpts;
+create policy "Teachers can manage assessment report excerpts"
+on public.assessment_report_excerpts
+for all
+using (
+  exists (
+    select 1
+    from public.assessments a
+    join public.classes c on c.id = a.class_id
+    join public.teachers t on t.workspace_id = c.workspace_id
+    where a.id = assessment_id and t.user_id = auth.uid()
+  )
+)
+with check (
+  exists (
+    select 1
+    from public.assessments a
+    join public.classes c on c.id = a.class_id
+    join public.teachers t on t.workspace_id = c.workspace_id
+    where a.id = assessment_id and t.user_id = auth.uid()
+  )
+);
+
+create table if not exists public.report_evidence_refs (
+  id uuid primary key default gen_random_uuid(),
+  report_id uuid references public.assessment_analysis_reports(id) on delete cascade,
+  claim_id text not null,
+  excerpt_id uuid references public.assessment_report_excerpts(id) on delete cascade,
+  submission_id uuid references public.submissions(id) on delete set null,
+  question_id uuid references public.assessment_questions(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
+create unique index if not exists report_evidence_refs_uq
+on public.report_evidence_refs(report_id, claim_id, excerpt_id);
+
+create index if not exists report_evidence_refs_report_id_idx
+on public.report_evidence_refs(report_id);
+
+alter table public.report_evidence_refs enable row level security;
+
+drop policy if exists "Report evidence refs scoped to teacher" on public.report_evidence_refs;
+create policy "Report evidence refs scoped to teacher"
+on public.report_evidence_refs
+for select
+using (
+  exists (
+    select 1
+    from public.assessment_analysis_reports r
+    join public.assessments a on a.id = r.assessment_id
+    join public.classes c on c.id = a.class_id
+    join public.teachers t on t.workspace_id = c.workspace_id
+    where r.id = report_id and t.user_id = auth.uid()
+  )
+);
+
+drop policy if exists "Teachers can manage report evidence refs" on public.report_evidence_refs;
+create policy "Teachers can manage report evidence refs"
+on public.report_evidence_refs
+for all
+using (
+  exists (
+    select 1
+    from public.assessment_analysis_reports r
+    join public.assessments a on a.id = r.assessment_id
+    join public.classes c on c.id = a.class_id
+    join public.teachers t on t.workspace_id = c.workspace_id
+    where r.id = report_id and t.user_id = auth.uid()
+  )
+)
+with check (
+  exists (
+    select 1
+    from public.assessment_analysis_reports r
+    join public.assessments a on a.id = r.assessment_id
+    join public.classes c on c.id = a.class_id
+    join public.teachers t on t.workspace_id = c.workspace_id
+    where r.id = report_id and t.user_id = auth.uid()
+  )
+);
+
+create table if not exists public.report_claim_feedback (
+  id uuid primary key default gen_random_uuid(),
+  report_id uuid references public.assessment_analysis_reports(id) on delete cascade,
+  claim_id text not null,
+  rating text not null, -- accurate | inaccurate | partial
+  note text,
+  teacher_id uuid references public.teachers(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
+create unique index if not exists report_claim_feedback_uq
+on public.report_claim_feedback(report_id, claim_id, teacher_id);
+
+alter table public.report_claim_feedback enable row level security;
+
+drop policy if exists "Report claim feedback scoped to teacher" on public.report_claim_feedback;
+create policy "Report claim feedback scoped to teacher"
+on public.report_claim_feedback
+for all
+using (
+  exists (
+    select 1
+    from public.assessment_analysis_reports r
+    join public.assessments a on a.id = r.assessment_id
+    join public.classes c on c.id = a.class_id
+    join public.teachers t on t.workspace_id = c.workspace_id
+    where r.id = report_id and t.user_id = auth.uid()
+  )
+)
+with check (
+  exists (
+    select 1
+    from public.assessment_analysis_reports r
+    join public.assessments a on a.id = r.assessment_id
+    join public.classes c on c.id = a.class_id
+    join public.teachers t on t.workspace_id = c.workspace_id
+    where r.id = report_id and t.user_id = auth.uid()
+  )
+);
+
+alter table public.assessments add column if not exists has_class_report boolean not null default false;
+alter table public.assessments add column if not exists latest_report_id uuid references public.assessment_analysis_reports(id) on delete set null;
+alter table public.assessments add column if not exists scores_last_modified_at timestamptz;
+
 -- Students can insert events only for their own submissions.
 drop policy if exists "Students can insert integrity events" on public.integrity_events;
 create policy "Students can insert integrity events"
@@ -1189,6 +1429,10 @@ alter table public.integrity_events add column if not exists data_classification
 alter table public.submission_responses add column if not exists data_classification text not null default 'audio';
 alter table public.evidence_images add column if not exists data_classification text not null default 'educational';
 alter table public.question_scores add column if not exists data_classification text not null default 'educational';
+alter table public.assessment_analysis_reports add column if not exists data_classification text not null default 'educational';
+alter table public.assessment_report_excerpts add column if not exists data_classification text not null default 'audio';
+alter table public.report_evidence_refs add column if not exists data_classification text not null default 'educational';
+alter table public.report_claim_feedback add column if not exists data_classification text not null default 'educational';
 alter table public.api_logs add column if not exists data_classification text not null default 'anonymous';
 alter table public.system_logs add column if not exists data_classification text not null default 'anonymous';
 alter table public.support_tickets add column if not exists data_classification text not null default 'personal';

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
+import { AssessmentReportPanel } from "@/components/assessments/assessment-report-panel";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -599,6 +600,8 @@ export function AssessmentResultsClient({ assessmentId }: { assessmentId: string
           </Card>
         </div>
       ) : null}
+
+      <AssessmentReportPanel assessmentId={assessmentId} />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[380px_1fr]">
         <Card>

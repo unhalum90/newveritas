@@ -793,6 +793,10 @@ Rules:
       .from("submissions")
       .update({ scoring_status: "complete", scored_at: new Date().toISOString(), scoring_error: null })
       .eq("id", submissionId);
+    await admin
+      .from("assessments")
+      .update({ scores_last_modified_at: new Date().toISOString() })
+      .eq("id", submission.assessment_id);
   } catch (e) {
     await admin
       .from("submissions")
