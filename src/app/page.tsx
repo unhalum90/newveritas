@@ -15,6 +15,64 @@ export default function Home() {
   ];
 
   const featureAccents = ["#14b8a6", "#60a5fa", "#a78bfa", "#34d399", "#f59e0b", "#fb7185"] as const;
+  const pricingTiers = [
+    {
+      name: "Starter Pack",
+      price: "$15",
+      cadence: "one-time",
+      credits: "250 assessment credits",
+      minutes: "~60 mins of AI review",
+      features: [
+        "AI transcription + scoring",
+        "Socratic follow-up questions",
+        "Teacher review workflow",
+        "Credits never expire",
+      ],
+      isPopular: false,
+      ctaLabel: "Get Starter",
+      ctaHref: "#waitlist",
+      accent: "text-[#f59e0b]",
+      buttonClass:
+        "border border-[color-mix(in_oklab,#f59e0b,white_20%)] text-[#f59e0b] hover:bg-[color-mix(in_oklab,#f59e0b,black_85%)]",
+    },
+    {
+      name: "Classroom Pack",
+      price: "$29",
+      cadence: "one-time",
+      credits: "600 assessment credits",
+      minutes: "~150 mins of AI review",
+      features: [
+        "Question rotation + integrity controls",
+        "Class report with misconceptions",
+        "Evidence snippets for review",
+        "Enough for a full-class assessment",
+      ],
+      ctaLabel: "Get Classroom",
+      ctaHref: "#waitlist",
+      accent: "text-[#34d399]",
+      buttonClass: "bg-[color-mix(in_oklab,#34d399,black_25%)] text-[#0b0f14] hover:opacity-90",
+      isPopular: true,
+    },
+    {
+      name: "School License",
+      price: "Custom",
+      cadence: "/ year",
+      credits: "Unlimited* credits",
+      minutes: "Subject to fair use policy",
+      features: [
+        "Unlimited teacher accounts",
+        "Admin dashboard + analytics",
+        "SSO / rostering support",
+        "Purchase order + invoice support",
+      ],
+      isPopular: false,
+      ctaLabel: "Contact Sales",
+      ctaHref: "mailto:hello@sayveritas.com?subject=SayVeritas%20Pricing%20Request",
+      accent: "text-white",
+      buttonClass:
+        "border border-[color-mix(in_oklab,var(--border),white_35%)] text-white hover:bg-[color-mix(in_oklab,var(--surface),black_35%)]",
+    },
+  ] as const;
 
   return (
     <div className="veritas-wizard min-h-screen bg-[var(--background)] text-[var(--text)]">
@@ -34,6 +92,9 @@ export default function Home() {
             <a href="#features" className="hover:text-[var(--text)]">
               Features
             </a>
+            <Link href="/pricing" className="hover:text-[var(--text)]">
+              Pricing
+            </Link>
             <a href="#use-cases" className="hover:text-[var(--text)]">
               Use cases
             </a>
@@ -107,13 +168,6 @@ export default function Home() {
                     Join waitlist
                   </a>
                 </div>
-                <p className="mt-4 text-sm text-[var(--muted)]">
-                  Students: use{" "}
-                  <Link className="underline hover:opacity-90" href="/student/login">
-                    student login
-                  </Link>
-                  .
-                </p>
               </div>
 
               {/* Right Column - Hero Image */}
@@ -457,6 +511,73 @@ export default function Home() {
                   <p className="mt-3 text-sm leading-relaxed text-[var(--muted)]">{item.description}</p>
                 </div>
               ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Pricing - DARK BACKGROUND */}
+        <section id="pricing" className="border-b border-[var(--border)] bg-[color-mix(in_oklab,var(--background),black_10%)]">
+          <div className="mx-auto max-w-6xl px-6 py-16">
+            <div className="text-center">
+              <p className="text-xs uppercase tracking-[0.3em] text-[var(--muted)]">Pricing</p>
+              <h2 className="mt-4 text-3xl font-semibold tracking-tight md:text-4xl">
+                Choose the plan that fits your assessment cycle
+              </h2>
+              <p className="mx-auto mt-3 max-w-2xl text-base text-[var(--muted)]">
+                Credit bundles for pilots and classroom runs, plus school licenses for teams that want full coverage.
+              </p>
+            </div>
+
+            <div className="mt-12 grid gap-6 md:grid-cols-3">
+              {pricingTiers.map((tier) => (
+                <div
+                  key={tier.name}
+                  className={`relative flex h-full flex-col rounded-3xl border p-8 shadow-[0_30px_80px_-60px_rgba(20,184,166,0.35)] ${
+                    tier.isPopular
+                      ? "border-[color-mix(in_oklab,#34d399,white_30%)] bg-[linear-gradient(160deg,rgba(16,55,48,0.96),rgba(10,22,24,0.96))]"
+                      : "border-[var(--border)] bg-[linear-gradient(160deg,rgba(18,24,34,0.96),rgba(11,15,20,0.96))]"
+                  }`}
+                >
+                  {tier.isPopular ? (
+                    <span className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-1/2 rounded-full border border-[color-mix(in_oklab,#34d399,white_25%)] bg-[color-mix(in_oklab,#34d399,black_10%)] px-4 py-1 text-xs font-semibold uppercase tracking-widest text-white">
+                      Popular
+                    </span>
+                  ) : null}
+
+                  <div>
+                    <p className={`text-lg font-semibold ${tier.accent}`}>{tier.name}</p>
+                    <div className="mt-4 flex items-end gap-2">
+                      <span className="text-4xl font-semibold text-white">{tier.price}</span>
+                      <span className="pb-1 text-sm text-[var(--muted)]">{tier.cadence}</span>
+                    </div>
+                    <p className="mt-4 text-sm text-[var(--muted)]">{tier.credits}</p>
+                    <p className="text-xs text-[var(--muted)]">{tier.minutes}</p>
+                  </div>
+
+                  <ul className="mt-6 flex flex-col gap-3 text-sm text-[color-mix(in_oklab,white,black_10%)]">
+                    {tier.features.map((feature) => (
+                      <li key={feature} className="flex items-start gap-2">
+                        <span className="text-base text-[color-mix(in_oklab,white,black_8%)]">✓</span>
+                        <span>{feature}</span>
+                      </li>
+                    ))}
+                  </ul>
+
+                  <a
+                    href={tier.ctaHref}
+                    className={`mt-8 inline-flex h-11 items-center justify-center rounded-full px-6 text-sm font-semibold transition ${tier.buttonClass}`}
+                  >
+                    {tier.ctaLabel}
+                  </a>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-8 text-center text-sm text-[var(--muted)]">
+              Want the full breakdown?{" "}
+              <Link className="font-semibold text-[var(--primary)] hover:opacity-90" href="/pricing">
+                See detailed pricing →
+              </Link>
             </div>
           </div>
         </section>
