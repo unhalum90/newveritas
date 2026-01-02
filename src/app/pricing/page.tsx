@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ContactModal } from "@/components/home/contact-modal";
+import { MarketingFooter } from "@/components/marketing/marketing-footer";
 
 const pricingTiers = [
   {
@@ -229,26 +229,7 @@ export default function PricingPage() {
         </section>
       </main>
 
-      <footer className="border-t border-[var(--border)] bg-[color-mix(in_oklab,var(--background),black_10%)]">
-        <div className="mx-auto flex max-w-6xl flex-col gap-4 px-6 py-10 text-sm text-[var(--muted)] md:flex-row md:items-center md:justify-between">
-          <div>
-            <p className="font-semibold text-[var(--text)]">SayVeritas</p>
-            <p className="mt-1">@chamberlininnovations</p>
-          </div>
-          <div className="flex gap-6">
-            <Link className="hover:text-[var(--text)]" href="/login">
-              Teacher sign in
-            </Link>
-            <Link className="hover:text-[var(--text)]" href="/student/login">
-              Student login
-            </Link>
-            <Link className="hover:text-[var(--text)]" href="/privacy">
-              Privacy
-            </Link>
-            <ContactModal className="hover:text-[var(--text)]" />
-          </div>
-        </div>
-      </footer>
+      <MarketingFooter />
     </div>
   );
 }

@@ -29,6 +29,7 @@ export async function GET(request: NextRequest) {
     .select("id, title, status, published_at, created_at, selected_asset_id, is_practice_mode")
     .eq("class_id", student.class_id)
     .eq("status", "live")
+    .or("is_practice_mode.is.null,is_practice_mode.eq.false")
     .order("published_at", { ascending: false });
 
   if (aError) return NextResponse.json({ error: aError.message }, { status: 500 });

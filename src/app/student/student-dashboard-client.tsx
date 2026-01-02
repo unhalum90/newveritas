@@ -101,11 +101,23 @@ export function StudentDashboardClient() {
               <CardTitle>New feedback available</CardTitle>
               <CardDescription>Your teacher released verified feedback.</CardDescription>
             </CardHeader>
-            <CardContent className="text-sm text-zinc-600">
+            <CardContent className="text-sm text-[var(--muted)]">
               Open any assessment marked “Feedback ready” to see your notes.
             </CardContent>
           </Card>
         ) : null}
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Practice Space</CardTitle>
+            <CardDescription>Get comfortable with the flow before your first graded assessment.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Link href="/student/practice">
+              <Button type="button">Start practice walkthrough</Button>
+            </Link>
+          </CardContent>
+        </Card>
 
         {!loading && !assessments.length ? (
           <Card>
@@ -113,7 +125,7 @@ export function StudentDashboardClient() {
               <CardTitle>No published assessments yet</CardTitle>
               <CardDescription>Your teacher will publish assessments to your class.</CardDescription>
             </CardHeader>
-            <CardContent className="text-sm text-zinc-600">
+            <CardContent className="text-sm text-[var(--muted)]">
               If you think this is wrong, confirm you logged in with the correct student code.
             </CardContent>
           </Card>

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import fs from "fs";
 import path from "path";
+import { MarketingFooter } from "@/components/marketing/marketing-footer";
 
 export default function PrivacyPage() {
   const privacyHtml = fs.readFileSync(path.join(process.cwd(), "src/app/privacy/privacy-policy.html"), "utf8");
@@ -27,25 +28,7 @@ export default function PrivacyPage() {
         <div dangerouslySetInnerHTML={{ __html: privacyHtml }} />
       </main>
 
-      <footer className="border-t border-[var(--border)] bg-[color-mix(in_oklab,var(--background),black_10%)]">
-        <div className="mx-auto flex max-w-6xl flex-col gap-4 px-6 py-10 text-sm text-[var(--muted)] md:flex-row md:items-center md:justify-between">
-          <div>
-            <p className="font-semibold text-[var(--text)]">SayVeritas</p>
-            <p className="mt-1">@chamberlininnovations</p>
-          </div>
-          <div className="flex gap-6">
-            <Link className="hover:text-[var(--text)]" href="/">
-              Home
-            </Link>
-            <Link className="hover:text-[var(--text)]" href="/about">
-              About
-            </Link>
-            <a className="hover:text-[var(--text)]" href="mailto:hello@sayveritas.com">
-              Contact
-            </a>
-          </div>
-        </div>
-      </footer>
+      <MarketingFooter />
     </div>
   );
 }

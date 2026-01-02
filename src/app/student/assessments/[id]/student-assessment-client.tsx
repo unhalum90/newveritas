@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -130,6 +131,7 @@ function parseEvidenceAnalysis(raw?: string | null) {
 
 export function StudentAssessmentClient({ assessmentId, preview = false }: { assessmentId: string; preview?: boolean }) {
   const previewMode = Boolean(preview);
+  const router = useRouter();
   const [assessment, setAssessment] = useState<Assessment | null>(null);
   const [latest, setLatest] = useState<Submission | null>(null);
   const [loading, setLoading] = useState(true);
@@ -158,6 +160,7 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
   const autoRecordQuestionId = useRef<string | null>(null);
   const autoSubmitAttemptedRef = useRef(false);
+  const practiceRedirectedRef = useRef(false);
   const recordingStartedAtRef = useRef<number | null>(null);
   const hiddenAtRef = useRef<number | null>(null);
   const hiddenQuestionIdRef = useRef<string | null>(null);
@@ -179,6 +182,7 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
   }, [documentPdf?.asset_url]);
   const requireAudioIntro = Boolean(audioIntro && (audioIntro.require_full_listen ?? true));
   const isPracticeMode = Boolean(assessment?.is_practice_mode);
+  const feedbackReady = latest?.review_status === "published";
   const pledgeRequired = useMemo(() => {
     if (previewMode) return false;
     if (!assessment?.pledge || assessment.pledge.enabled !== true) return false;
@@ -514,6 +518,9 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
       const data = (await res.json().catch(() => null)) as { error?: string } | null;
       if (!res.ok) throw new Error(data?.error ?? "Unable to submit.");
       setLatest({ ...latest, status: "submitted", submitted_at: new Date().toISOString() });
+      if (isPracticeMode) {
+        await refreshAssessment();
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unable to submit.");
     } finally {
@@ -533,6 +540,25 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
     autoSubmitAttemptedRef.current = true;
     void submit();
   }, [accessRestricted, canSubmitAttempt, consentRequired, latest?.status, restartPrompt, working]);
+
+  useEffect(() => {
+    if (previewMode || !isPracticeMode) return;
+    if (!latest || latest.status !== "submitted") return;
+    if (feedbackReady) return;
+    const interval = setInterval(() => {
+      refreshAssessment().catch(() => null);
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [feedbackReady, isPracticeMode, latest?.status, previewMode, refreshAssessment]);
+
+  useEffect(() => {
+    if (previewMode || !isPracticeMode) return;
+    if (!latest || latest.status !== "submitted") return;
+    if (!feedbackReady) return;
+    if (practiceRedirectedRef.current) return;
+    practiceRedirectedRef.current = true;
+    router.replace(`/student/assessments/${assessmentId}/feedback`);
+  }, [assessmentId, feedbackReady, isPracticeMode, latest?.status, previewMode, router]);
 
   useEffect(() => {
     if (!recording) return;
@@ -1107,12 +1133,14 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
                   <CardContent className="flex flex-wrap items-center justify-between gap-3">
                     <div className="text-sm text-[var(--muted)]">
                       {isPracticeMode
-                        ? "Practice attempts are not scored."
-                        : latest.review_status === "published"
+                        ? feedbackReady
+                          ? "Your practice feedback is ready."
+                          : "Scoring your practice attempt now. This usually takes under a minute."
+                        : feedbackReady
                           ? "Your teacher has released verified feedback."
                           : "Your teacher will review and release feedback soon."}
                     </div>
-                    {latest.review_status === "published" && !isPracticeMode ? (
+                    {feedbackReady ? (
                       <Link href={`/student/assessments/${assessmentId}/feedback`}>
                         <Button type="button">View Feedback</Button>
                       </Link>

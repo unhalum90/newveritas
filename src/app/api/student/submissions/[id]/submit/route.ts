@@ -62,16 +62,27 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
     .update({
       status: "submitted",
       submitted_at: now,
-      scoring_status: isPracticeMode ? "complete" : "pending",
+      scoring_status: "pending",
       scoring_started_at: null,
-      scored_at: isPracticeMode ? now : null,
+      scored_at: null,
       scoring_error: null,
     })
     .eq("id", submissionId);
 
   if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
 
-  if (!isPracticeMode) {
+  if (isPracticeMode) {
+    void scoreSubmission(submissionId)
+      .then(async () => {
+        await admin
+          .from("submissions")
+          .update({ review_status: "published", published_at: new Date().toISOString() })
+          .eq("id", submissionId);
+      })
+      .catch((e) => {
+        console.error("Practice scoring failed for submission", submissionId, e);
+      });
+  } else {
     void scoreSubmission(submissionId).catch((e) => {
       console.error("Scoring failed for submission", submissionId, e);
     });

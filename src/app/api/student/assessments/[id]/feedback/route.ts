@@ -38,7 +38,7 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
 
   const { data: assessment, error: aError } = await admin
     .from("assessments")
-    .select("id, class_id, title, instructions")
+    .select("id, class_id, title, instructions, is_practice_mode")
     .eq("id", assessmentId)
     .maybeSingle();
 
@@ -49,7 +49,7 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
   const { data: submission, error: subError } = await admin
     .from("submissions")
     .select(
-      "id, status, submitted_at, review_status, published_at, teacher_comment, final_score_override",
+      "id, status, submitted_at, review_status, published_at, teacher_comment, final_score_override, scoring_status",
     )
     .eq("assessment_id", assessmentId)
     .eq("student_id", student.id)
@@ -60,7 +60,12 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
 
   if (subError) return NextResponse.json({ error: subError.message }, { status: 500 });
   if (!submission) return NextResponse.json({ error: "Submission not found." }, { status: 404 });
-  if (submission.review_status !== "published") {
+  const isPracticeMode = Boolean(assessment.is_practice_mode);
+  if (isPracticeMode) {
+    if (submission.scoring_status !== "complete") {
+      return NextResponse.json({ error: "Practice feedback is still processing." }, { status: 403 });
+    }
+  } else if (submission.review_status !== "published") {
     return NextResponse.json({ error: "Feedback not released yet." }, { status: 403 });
   }
 
