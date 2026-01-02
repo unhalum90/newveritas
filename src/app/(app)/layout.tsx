@@ -38,11 +38,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     teacher = createdTeacher ?? null;
   }
 
-  const shouldProvisionWorkspace =
+  if (
     teacher &&
-    (!teacher.workspace_id || !teacher.school_id || teacher.onboarding_stage !== "COMPLETE");
-
-  if (shouldProvisionWorkspace) {
+    (!teacher.workspace_id || !teacher.school_id || teacher.onboarding_stage !== "COMPLETE")
+  ) {
     try {
       const admin = createSupabaseAdminClient();
       let schoolId = teacher.school_id ?? null;
