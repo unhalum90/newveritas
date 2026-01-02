@@ -151,6 +151,7 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
   const [recording, setRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [recordingError, setRecordingError] = useState<string | null>(null);
+  const [pdfOpen, setPdfOpen] = useState(false);
   const [restartPrompt, setRestartPrompt] = useState<{ reason: "slow_start" | "off_topic"; questionId: string } | null>(null);
   const [restartWorking, setRestartWorking] = useState(false);
   const [restartError, setRestartError] = useState<string | null>(null);
@@ -161,12 +162,21 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
   const hiddenAtRef = useRef<number | null>(null);
   const hiddenQuestionIdRef = useRef<string | null>(null);
   const slowStartEligibleRef = useRef(false);
+  const questionShownAtRef = useRef<number | null>(null);
+  const questionShownIdRef = useRef<string | null>(null);
+  const questionShownSubmissionIdRef = useRef<string | null>(null);
   // Recording chunks are kept in a local buffer during capture.
   const evidenceInputRef = useRef<HTMLInputElement | null>(null);
 
   const activeQuestion = assessment?.current_question ?? null;
   const audioIntro = assessment?.audio_intro ?? null;
   const documentPdf = assessment?.document_pdf ?? null;
+  const pdfInlineUrl = useMemo(() => {
+    if (!documentPdf?.asset_url) return "";
+    const url = documentPdf.asset_url;
+    const viewerFlags = "toolbar=0&navpanes=0&scrollbar=0&view=FitH";
+    return url.includes("#") ? `${url}&${viewerFlags}` : `${url}#${viewerFlags}`;
+  }, [documentPdf?.asset_url]);
   const requireAudioIntro = Boolean(audioIntro && (audioIntro.require_full_listen ?? true));
   const isPracticeMode = Boolean(assessment?.is_practice_mode);
   const pledgeRequired = useMemo(() => {
@@ -186,6 +196,43 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
   const canGraceRestart =
     !previewMode && Boolean(assessment?.integrity?.allow_grace_restart) && !Boolean(assessment?.grace_restart_used);
   const audioGateActive = Boolean(latest?.status === "started" && requireAudioIntro && !audioIntroCompleted);
+
+  useEffect(() => {
+    if (!activeQuestion) {
+      questionShownAtRef.current = null;
+      questionShownIdRef.current = null;
+      questionShownSubmissionIdRef.current = null;
+      return;
+    }
+    const canTrack =
+      !previewMode &&
+      latest?.status === "started" &&
+      !audioGateActive &&
+      !accessRestricted &&
+      !consentRequired &&
+      !pledgeRequired;
+    if (!canTrack) {
+      questionShownAtRef.current = null;
+      questionShownIdRef.current = null;
+      questionShownSubmissionIdRef.current = null;
+      return;
+    }
+    const submissionId = latest?.id ?? null;
+    if (questionShownIdRef.current !== activeQuestion.id || questionShownSubmissionIdRef.current !== submissionId) {
+      questionShownAtRef.current = Date.now();
+      questionShownIdRef.current = activeQuestion.id;
+      questionShownSubmissionIdRef.current = submissionId;
+    }
+  }, [
+    activeQuestion?.id,
+    accessRestricted,
+    audioGateActive,
+    consentRequired,
+    latest?.id,
+    latest?.status,
+    pledgeRequired,
+    previewMode,
+  ]);
 
   useEffect(() => {
     if (pledgeRequired && !consentRequired) setPledgeOpen(true);
@@ -621,7 +668,19 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
         const rms = Math.sqrt(sumSquares / audioSamples.length);
         const now = Date.now();
         if (rms > AUDIO_ACTIVITY_THRESHOLD) {
-          if (firstSoundAt == null) firstSoundAt = now;
+          if (firstSoundAt == null) {
+            firstSoundAt = now;
+            const questionShownAt = questionShownAtRef.current ?? audioMonitorStartedAt;
+            const startDeltaMs = now - questionShownAt;
+            if (startDeltaMs > 0 && startDeltaMs <= FAST_START_THRESHOLD_MS) {
+              void logIntegrityEvent(latest.id, {
+                event_type: "fast_start",
+                duration_ms: startDeltaMs,
+                question_id: recordedQuestionId,
+                metadata: { threshold_ms: FAST_START_THRESHOLD_MS },
+              });
+            }
+          }
           lastSoundAt = now;
           pauseActive = false;
         }
@@ -693,14 +752,6 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
               setRestartPrompt({ reason: "slow_start", questionId: recordedQuestionId });
             }
             slowStartEligibleRef.current = false;
-          }
-          if (durationMs > 0 && durationMs < FAST_START_THRESHOLD_MS) {
-            void logIntegrityEvent(latest.id, {
-              event_type: "fast_start",
-              duration_ms: durationMs,
-              question_id: recordedQuestionId,
-              metadata: { threshold_ms: FAST_START_THRESHOLD_MS },
-            });
           }
         } catch (e) {
           setRecordingError(e instanceof Error ? e.message : "Upload failed.");
@@ -951,24 +1002,67 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
               ) : null}
 
               {documentPdf ? (
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Reference PDF</CardTitle>
-                    <CardDescription>Open the document in a new tab before you begin.</CardDescription>
+                <Card className="overflow-hidden">
+                  <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <CardTitle>Reference PDF</CardTitle>
+                      <CardDescription>Review the document before you start.</CardDescription>
+                    </div>
+                    <Button type="button" variant="secondary" onClick={() => setPdfOpen(true)}>
+                      Full screen
+                    </Button>
                   </CardHeader>
-                  <CardContent className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="text-sm text-[var(--muted)]">
+                  <CardContent className="space-y-4">
+                    <div className="text-xs uppercase tracking-[0.2em] text-[var(--muted)]">
                       {documentPdf.original_filename?.trim() || "Attached PDF"}
                     </div>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      onClick={() => window.open(documentPdf.asset_url, "_blank", "noopener,noreferrer")}
-                    >
-                      Open PDF
-                    </Button>
+                    <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/30 shadow-[0_24px_60px_rgba(0,0,0,0.45)]">
+                      <iframe
+                        title="Reference PDF"
+                        src={pdfInlineUrl}
+                        className="h-[520px] w-full"
+                        loading="lazy"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between text-xs text-[var(--muted)]">
+                      <span>Scroll to zoom or open full screen for detail.</span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => window.open(documentPdf.asset_url, "_blank", "noopener,noreferrer")}
+                      >
+                        Open in new tab
+                      </Button>
+                    </div>
                   </CardContent>
                 </Card>
+              ) : null}
+
+              {documentPdf && pdfOpen ? (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4 py-6">
+                  <div className="flex h-full w-full max-w-6xl flex-col gap-4 overflow-hidden rounded-3xl border border-white/10 bg-[rgba(15,23,42,0.95)] p-4 shadow-[0_30px_80px_rgba(0,0,0,0.6)]">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="text-sm text-[var(--muted)]">
+                        {documentPdf.original_filename?.trim() || "Attached PDF"}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          onClick={() => window.open(documentPdf.asset_url, "_blank", "noopener,noreferrer")}
+                        >
+                          Open in new tab
+                        </Button>
+                        <Button type="button" variant="secondary" onClick={() => setPdfOpen(false)}>
+                          Close
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="flex-1 overflow-hidden rounded-2xl border border-white/10 bg-black/30">
+                      <iframe title="Reference PDF" src={pdfInlineUrl} className="h-full w-full" />
+                    </div>
+                  </div>
+                </div>
               ) : null}
 
               <Card>

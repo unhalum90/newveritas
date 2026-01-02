@@ -120,6 +120,7 @@ const steps = [
   { n: 3, label: "Assets" },
   { n: 4, label: "Questions" },
   { n: 5, label: "Rubrics" },
+  { n: 6, label: "Preview" },
 ] as const;
 
 type StepNumber = (typeof steps)[number]["n"];
@@ -331,7 +332,8 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
 
   const startComplete = Boolean(assessment?.title?.trim()) && Boolean(assessment?.class_id);
   const questionsComplete = questionsCount > 0;
-  const maxEnabledStep: StepNumber = !startComplete ? 1 : !questionsComplete ? 4 : 5;
+  const rubricsComplete = Boolean(rubrics.reasoning && rubrics.evidence);
+  const maxEnabledStep: StepNumber = !startComplete ? 1 : !questionsComplete ? 4 : !rubricsComplete ? 5 : 6;
 
   const persistDraft = useCallback(
     async (silent?: boolean) => {
@@ -339,18 +341,27 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
       setSaving(true);
       setError(null);
       try {
+        const payload: {
+          title?: string;
+          class_id?: string;
+          subject?: string | null;
+          target_language?: string | null;
+          instructions?: string | null;
+          authoring_mode?: AuthoringMode;
+          is_practice_mode?: boolean;
+        } = {
+          subject: assessment.subject ?? null,
+          target_language: assessment.target_language ?? null,
+          instructions: assessment.instructions ?? null,
+          authoring_mode: assessment.authoring_mode,
+          is_practice_mode: assessment.is_practice_mode ?? false,
+        };
+        if (assessment.title.trim()) payload.title = assessment.title;
+        if (assessment.class_id) payload.class_id = assessment.class_id;
         await jsonFetch(`/api/assessments/${assessmentId}`, {
           method: "PATCH",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            class_id: assessment.class_id,
-            title: assessment.title,
-            subject: assessment.subject,
-            target_language: assessment.target_language,
-            instructions: assessment.instructions,
-            authoring_mode: assessment.authoring_mode,
-            is_practice_mode: assessment.is_practice_mode ?? false,
-          }),
+          body: JSON.stringify(payload),
         });
         setDirty(false);
         setLastSavedAt(Date.now());
@@ -488,6 +499,17 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
     const instructions = (assessment.instructions ?? "").trim();
     const instructionsPreview =
       instructions.length > 0 ? `${instructions.slice(0, 160)}${instructions.length > 160 ? "..." : ""}` : "None";
+    const integritySettings = assessment.assessment_integrity ?? {
+      pause_threshold_seconds: 2.5,
+      tab_switch_monitor: true,
+      shuffle_questions: true,
+      allow_grace_restart: false,
+      pledge_enabled: false,
+      pledge_version: 1,
+      pledge_text: null,
+      recording_limit_seconds: 60,
+      viewing_timer_seconds: 20,
+    };
 
     const assetSummary = assetUrl.trim()
       ? "Image selected"
@@ -531,6 +553,17 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
       const suffix = draft.instructions.trim().length > 120 ? "..." : "";
       return `${label} rubric: scale ${scale} • ${hasInstructions ? `Instructions: ${preview}${suffix}` : "Instructions missing"}`;
     });
+    const integritySummary = [
+      `Pausing guardrail ${integritySettings.pause_threshold_seconds !== null ? "On" : "Off"}`,
+      `Focus monitor ${integritySettings.tab_switch_monitor ? "On" : "Off"}`,
+      `Shuffle ${integritySettings.shuffle_questions ? "On" : "Off"}`,
+      `Grace restart ${integritySettings.allow_grace_restart ? "On" : "Off"}`,
+    ].join(" • ");
+    const integrityDetails = [
+      `Recording limit: ${integritySettings.recording_limit_seconds}s`,
+      `Viewing timer: ${integritySettings.viewing_timer_seconds}s`,
+      `Pledge: ${integritySettings.pledge_enabled ? "Enabled" : "Off"}`,
+    ];
 
     return [
       {
@@ -567,6 +600,12 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
         summary: `${rubrics.reasoning ? "Reasoning" : "Reasoning missing"} • ${rubrics.evidence ? "Evidence" : "Evidence missing"}`,
         details: rubricDetails,
       },
+      {
+        step: 6,
+        title: "Integrity & Limits",
+        summary: integritySummary,
+        details: integrityDetails,
+      },
     ];
   }, [
     assessment,
@@ -602,9 +641,9 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
   const pausingEnabled = integrity.pause_threshold_seconds !== null;
   const questionRequiredError =
     step >= 5 && startComplete && !questionsComplete ? "Add at least one question to continue." : null;
-  const rubricsComplete = Boolean(rubrics.reasoning && rubrics.evidence);
   const canPublish =
-    !readonly && step === 5 && startComplete && questionsComplete && rubricsComplete && !saving;
+    !readonly && step === 6 && startComplete && questionsComplete && rubricsComplete && !saving;
+  const studentPreviewUrl = `/student/assessments/${assessmentId}?preview=1`;
   async function saveAssetAndContinue() {
     if (readonly) return;
     setSaving(true);
@@ -921,11 +960,7 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
           <Button type="button" variant="secondary" disabled={saving} onClick={() => router.push("/assessments")}>
             Back
           </Button>
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={() => window.open(`/student/assessments/${assessmentId}?preview=1`, "_blank")}
-          >
+          <Button type="button" variant="secondary" onClick={() => window.open(studentPreviewUrl, "_blank")}>
             Preview as Student
           </Button>
           <Button type="button" variant="secondary" disabled={saving || readonly} onClick={saveDraft}>
@@ -939,7 +974,7 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
 
       {error ? <div className="mb-4 text-sm text-[var(--danger)]">{error}</div> : null}
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[800px_350px]">
+      <div className={`grid grid-cols-1 gap-6 ${step === 6 ? "lg:grid-cols-[800px_350px]" : ""}`}>
         <div className="space-y-4">
           <div className="rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-3">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -1559,7 +1594,7 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <div className="text-sm font-medium text-[var(--text)]">PDF reference (optional)</div>
-                      <div className="text-xs text-[var(--muted)]">PDF only. Max size 20MB. Students can open it in a new tab.</div>
+                      <div className="text-xs text-[var(--muted)]">PDF only. Max size 20MB. Preview inline or open full size.</div>
                     </div>
                     <div className="flex items-center gap-2">
                       <input
@@ -1596,8 +1631,15 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
                           rel="noreferrer"
                           className="text-xs text-[var(--primary)] hover:underline"
                         >
-                          Open PDF
+                          Open full size
                         </a>
+                      </div>
+                      <div className="mt-3 h-[420px] overflow-hidden rounded-md border border-[var(--border)] bg-[var(--background)]">
+                        <iframe
+                          title={documentAsset.original_filename?.trim() || "PDF document"}
+                          src={documentAsset.asset_url}
+                          className="h-full w-full"
+                        />
                       </div>
                       <div className="mt-3 flex items-center justify-end">
                         <Button type="button" variant="secondary" disabled={assetBusy || readonly} onClick={removeDocument}>
@@ -2078,9 +2120,146 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
                   <Button type="button" variant="secondary" disabled={saving} onClick={() => goToStep(4)}>
                     ← Back
                   </Button>
-                  <div className="text-sm text-[var(--muted)]">
-                    {rubricsComplete ? "Ready to publish." : "Complete both rubrics to publish."}
+                  <div className="flex items-center gap-3">
+                    <div className="text-sm text-[var(--muted)]">
+                      {rubricsComplete ? "Review settings before publishing." : "Complete both rubrics to continue."}
+                    </div>
+                    <Button type="button" disabled={saving || readonly || !rubricsComplete} onClick={() => goToStep(6)}>
+                      Continue →
+                    </Button>
                   </div>
+                </div>
+              </CardContent>
+            </Card>
+          ) : step === 6 ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>Assessment Preview</CardTitle>
+                <CardDescription>Review the student experience, then confirm integrity settings.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-xs font-semibold text-[var(--muted)]">STUDENT PREVIEW</div>
+                    <a
+                      className="text-xs text-[var(--primary)] hover:underline"
+                      href={studentPreviewUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Open full size
+                    </a>
+                  </div>
+                  <div className="overflow-hidden rounded-md border border-[var(--border)] bg-[var(--surface)]">
+                    <iframe
+                      title="Student preview"
+                      src={studentPreviewUrl}
+                      className="h-[55vh] min-h-[360px] w-full sm:h-[70vh] sm:min-h-[520px]"
+                      loading="lazy"
+                    />
+                  </div>
+                  <div className="text-xs text-[var(--muted)]">
+                    This preview mirrors the student experience. Actions stay disabled for teachers.
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="text-xs font-semibold text-[var(--muted)]">STUDENT INSTRUCTIONS</div>
+                  <div className="rounded-md border border-[var(--border)] bg-[var(--background)] p-4 text-sm text-[var(--text)]">
+                    {assessment.instructions?.trim() || "No instructions provided."}
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="text-xs font-semibold text-[var(--muted)]">ASSETS</div>
+                  <div className="space-y-3">
+                    {assetUrl.trim() ? (
+                      <img
+                        src={assetUrl.trim()}
+                        alt="Assessment asset"
+                        className="w-full rounded-md border border-[var(--border)] object-cover"
+                      />
+                    ) : (
+                      <div className="text-sm text-[var(--muted)]">No image selected.</div>
+                    )}
+
+                    {audioIntro ? (
+                      <div className="rounded-md border border-[var(--border)] bg-[var(--background)] p-3">
+                        <div className="text-sm font-medium text-[var(--text)]">Audio intro</div>
+                        <div className="text-xs text-[var(--muted)]">
+                          {(audioIntro.original_filename || "Audio intro").trim()} • {formatSeconds(audioIntro.duration_seconds)}
+                        </div>
+                        <audio className="mt-2 w-full" controls src={audioIntro.asset_url} />
+                      </div>
+                    ) : null}
+
+                    {documentAsset ? (
+                      <div className="rounded-md border border-[var(--border)] bg-[var(--background)] p-3">
+                        <div className="text-sm font-medium text-[var(--text)]">PDF document</div>
+                        <div className="text-xs text-[var(--muted)]">
+                          {(documentAsset.original_filename || "Document").trim()}
+                        </div>
+                        <a
+                          className="mt-2 inline-flex text-sm text-[var(--primary)] hover:underline"
+                          href={documentAsset.asset_url}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Open full size
+                        </a>
+                        <div className="mt-3 h-[420px] overflow-hidden rounded-md border border-[var(--border)] bg-[var(--surface)]">
+                          <iframe
+                            title={(documentAsset.original_filename || "Document").trim()}
+                            src={documentAsset.asset_url}
+                            className="h-full w-full"
+                          />
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="text-xs font-semibold text-[var(--muted)]">QUESTIONS</div>
+                  {questions.length ? (
+                    <div className="space-y-2">
+                      {questions.map((q, idx) => (
+                        <div
+                          key={q.id}
+                          className="rounded-md border border-[var(--border)] bg-[var(--background)] p-3 text-sm text-[var(--text)]"
+                        >
+                          <span className="font-semibold">Q{idx + 1}.</span> {q.question_text}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-sm text-[var(--muted)]">No questions added yet.</div>
+                  )}
+                </div>
+
+                <div className="space-y-3">
+                  <div className="text-xs font-semibold text-[var(--muted)]">RUBRICS</div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-md border border-[var(--border)] bg-[var(--background)] p-3">
+                      <div className="text-sm font-medium text-[var(--text)]">Reasoning</div>
+                      <div className="mt-2 text-sm text-[var(--muted)]">
+                        {rubricDrafts.reasoning.instructions.trim() || "No rubric instructions."}
+                      </div>
+                    </div>
+                    <div className="rounded-md border border-[var(--border)] bg-[var(--background)] p-3">
+                      <div className="text-sm font-medium text-[var(--text)]">Evidence</div>
+                      <div className="mt-2 text-sm text-[var(--muted)]">
+                        {rubricDrafts.evidence.instructions.trim() || "No rubric instructions."}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between gap-3">
+                  <Button type="button" variant="secondary" disabled={saving} onClick={() => goToStep(5)}>
+                    ← Back
+                  </Button>
+                  <div className="text-sm text-[var(--muted)]">Finalize integrity settings on the right.</div>
                 </div>
               </CardContent>
             </Card>
@@ -2091,192 +2270,194 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
                 <CardDescription>Coming next as we implement Sprint 2/3.</CardDescription>
               </CardHeader>
               <CardContent className="text-sm text-[var(--muted)]">
-                Step {step} is scaffolded. Step 1 proves the wizard + autosave + global integrity panel.
+                Step {step} is scaffolded. Preview and settings live in Step 6.
               </CardContent>
             </Card>
           )}
         </div>
 
-        <div className="space-y-4">
-          <div className="sticky top-6 space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Integrity Shields</CardTitle>
-                <CardDescription>Global settings (save immediately).</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <div className="flex items-center gap-2 text-sm font-medium text-[var(--text)]">
-                      <span>Pausing Guardrail</span>
-                      <span
-                        className="cursor-help text-xs text-[var(--muted)]"
-                        title="Flags long pauses (silence) while the student is responding."
-                      >
-                        (?)
-                      </span>
-                    </div>
-                    <div className="text-xs text-[var(--muted)]">Flag silence &gt; 2.5s</div>
-                  </div>
-                  <Switch
-                    checked={pausingEnabled}
-                    onCheckedChange={(checked) =>
-                      updateIntegrity({ pause_threshold_seconds: checked ? 2.5 : null })
-                    }
-                    disabled={saving || readonly}
-                    aria-label="Pausing Guardrail"
-                  />
-                </div>
-
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <div className="flex items-center gap-2 text-sm font-medium text-[var(--text)]">
-                      <span>Focus Monitor</span>
-                      <span
-                        className="cursor-help text-xs text-[var(--muted)]"
-                        title="Tracks when students switch tabs or leave the assessment."
-                      >
-                        (?)
-                      </span>
-                    </div>
-                    <div className="text-xs text-[var(--muted)]">Track browser tab switching</div>
-                  </div>
-                  <Switch
-                    checked={integrity.tab_switch_monitor}
-                    onCheckedChange={(checked) => updateIntegrity({ tab_switch_monitor: checked })}
-                    disabled={saving || readonly}
-                    aria-label="Focus Monitor"
-                  />
-                </div>
-
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <div className="flex items-center gap-2 text-sm font-medium text-[var(--text)]">
-                      <span>Dynamic Shuffle</span>
-                      <span
-                        className="cursor-help text-xs text-[var(--muted)]"
-                        title="Randomizes question order per student to reduce sharing answers."
-                      >
-                        (?)
-                      </span>
-                    </div>
-                    <div className="text-xs text-[var(--muted)]">Randomize question order</div>
-                  </div>
-                  <Switch
-                    checked={integrity.shuffle_questions}
-                    onCheckedChange={(checked) => updateIntegrity({ shuffle_questions: checked })}
-                    disabled={saving || readonly}
-                    aria-label="Dynamic Shuffle"
-                  />
-                </div>
-
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <div className="flex items-center gap-2 text-sm font-medium text-[var(--text)]">
-                      <span>Grace Restart</span>
-                      <span
-                        className="cursor-help text-xs text-[var(--muted)]"
-                        title="Allows one restart if a student pauses too long before speaking or gives an off-topic response."
-                      >
-                        (?)
-                      </span>
-                    </div>
-                    <div className="text-xs text-[var(--muted)]">Allow a single restart per student</div>
-                  </div>
-                  <Switch
-                    checked={integrity.allow_grace_restart}
-                    onCheckedChange={(checked) => updateIntegrity({ allow_grace_restart: checked })}
-                    disabled={saving || readonly}
-                    aria-label="Grace Restart"
-                  />
-                </div>
-
-                <div className="border-t border-[var(--border)] pt-4">
+        {step === 6 ? (
+          <div className="space-y-4">
+            <div className="sticky top-6 space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Integrity Shields</CardTitle>
+                  <CardDescription>Review settings before publishing.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
                   <div className="flex items-start justify-between gap-4">
                     <div>
                       <div className="flex items-center gap-2 text-sm font-medium text-[var(--text)]">
-                        <span>Academic Integrity Pledge</span>
+                        <span>Pausing Guardrail</span>
                         <span
                           className="cursor-help text-xs text-[var(--muted)]"
-                          title="Shows a pledge modal before the student can start the assessment."
+                          title="Flags long pauses (silence) while the student is responding."
                         >
                           (?)
                         </span>
                       </div>
-                      <div className="text-xs text-[var(--muted)]">Require students to agree before seeing questions</div>
+                      <div className="text-xs text-[var(--muted)]">Flag silence &gt; 2.5s</div>
                     </div>
                     <Switch
-                      checked={integrity.pledge_enabled}
-                      onCheckedChange={(checked) => updateIntegrity({ pledge_enabled: checked })}
+                      checked={pausingEnabled}
+                      onCheckedChange={(checked) =>
+                        updateIntegrity({ pause_threshold_seconds: checked ? 2.5 : null })
+                      }
                       disabled={saving || readonly}
-                      aria-label="Academic Integrity Pledge"
+                      aria-label="Pausing Guardrail"
                     />
                   </div>
 
-                  {integrity.pledge_enabled ? (
-                    <div className="mt-3 space-y-2">
-                      <Label>Pledge text (optional)</Label>
-                      <textarea
-                        className="min-h-[120px] w-full resize-y rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--muted)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
-                        value={pledgeDraft}
-                        onChange={(e) => setPledgeDraft(e.target.value)}
-                        onBlur={() => updateIntegrity({ pledge_text: pledgeDraft.trim() ? pledgeDraft : null })}
-                        placeholder={[
-                          "I have studied the material and am ready to demonstrate my understanding.",
-                          "I will not use notes, websites, or other people during this assessment.",
-                          "I understand this assessment measures what I know, not what I can look up.",
-                          "My responses will be in my own words based on my learning.",
-                        ].join("\n")}
-                        disabled={saving || readonly}
-                      />
-                      <div className="text-xs text-[var(--muted)]">Leave blank to use the default pledge.</div>
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <div className="flex items-center gap-2 text-sm font-medium text-[var(--text)]">
+                        <span>Focus Monitor</span>
+                        <span
+                          className="cursor-help text-xs text-[var(--muted)]"
+                          title="Tracks when students switch tabs or leave the assessment."
+                        >
+                          (?)
+                        </span>
+                      </div>
+                      <div className="text-xs text-[var(--muted)]">Track browser tab switching</div>
                     </div>
-                  ) : null}
-                </div>
-              </CardContent>
-            </Card>
+                    <Switch
+                      checked={integrity.tab_switch_monitor}
+                      onCheckedChange={(checked) => updateIntegrity({ tab_switch_monitor: checked })}
+                      disabled={saving || readonly}
+                      aria-label="Focus Monitor"
+                    />
+                  </div>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Recording Limits</CardTitle>
-                <CardDescription>Global response timers.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="space-y-2">
-                  <Label>Recording limit</Label>
-                  <select
-                    className="h-10 w-full rounded-md border bg-[var(--surface)] px-3 text-sm text-[var(--text)] border-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
-                    value={integrity.recording_limit_seconds}
-                    onChange={(e) => updateIntegrity({ recording_limit_seconds: Number(e.target.value) })}
-                    disabled={saving || readonly}
-                  >
-                    {[30, 60, 90, 120, 180].map((v) => (
-                      <option key={v} value={v}>
-                        {v}s
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <div className="flex items-center gap-2 text-sm font-medium text-[var(--text)]">
+                        <span>Dynamic Shuffle</span>
+                        <span
+                          className="cursor-help text-xs text-[var(--muted)]"
+                          title="Randomizes question order per student to reduce sharing answers."
+                        >
+                          (?)
+                        </span>
+                      </div>
+                      <div className="text-xs text-[var(--muted)]">Randomize question order</div>
+                    </div>
+                    <Switch
+                      checked={integrity.shuffle_questions}
+                      onCheckedChange={(checked) => updateIntegrity({ shuffle_questions: checked })}
+                      disabled={saving || readonly}
+                      aria-label="Dynamic Shuffle"
+                    />
+                  </div>
 
-                <div className="space-y-2">
-                  <Label>Viewing timer (Retell)</Label>
-                  <select
-                    className="h-10 w-full rounded-md border bg-[var(--surface)] px-3 text-sm text-[var(--text)] border-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
-                    value={integrity.viewing_timer_seconds}
-                    onChange={(e) => updateIntegrity({ viewing_timer_seconds: Number(e.target.value) })}
-                    disabled={saving || readonly}
-                  >
-                    {[10, 15, 20, 30].map((v) => (
-                      <option key={v} value={v}>
-                        {v}s
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </CardContent>
-            </Card>
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <div className="flex items-center gap-2 text-sm font-medium text-[var(--text)]">
+                        <span>Grace Restart</span>
+                        <span
+                          className="cursor-help text-xs text-[var(--muted)]"
+                          title="Allows one restart if a student pauses too long before speaking or gives an off-topic response."
+                        >
+                          (?)
+                        </span>
+                      </div>
+                      <div className="text-xs text-[var(--muted)]">Allow a single restart per student</div>
+                    </div>
+                    <Switch
+                      checked={integrity.allow_grace_restart}
+                      onCheckedChange={(checked) => updateIntegrity({ allow_grace_restart: checked })}
+                      disabled={saving || readonly}
+                      aria-label="Grace Restart"
+                    />
+                  </div>
+
+                  <div className="border-t border-[var(--border)] pt-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <div className="flex items-center gap-2 text-sm font-medium text-[var(--text)]">
+                          <span>Academic Integrity Pledge</span>
+                          <span
+                            className="cursor-help text-xs text-[var(--muted)]"
+                            title="Shows a pledge modal before the student can start the assessment."
+                          >
+                            (?)
+                          </span>
+                        </div>
+                        <div className="text-xs text-[var(--muted)]">Require students to agree before seeing questions</div>
+                      </div>
+                      <Switch
+                        checked={integrity.pledge_enabled}
+                        onCheckedChange={(checked) => updateIntegrity({ pledge_enabled: checked })}
+                        disabled={saving || readonly}
+                        aria-label="Academic Integrity Pledge"
+                      />
+                    </div>
+
+                    {integrity.pledge_enabled ? (
+                      <div className="mt-3 space-y-2">
+                        <Label>Pledge text (optional)</Label>
+                        <textarea
+                          className="min-h-[120px] w-full resize-y rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--muted)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
+                          value={pledgeDraft}
+                          onChange={(e) => setPledgeDraft(e.target.value)}
+                          onBlur={() => updateIntegrity({ pledge_text: pledgeDraft.trim() ? pledgeDraft : null })}
+                          placeholder={[
+                            "I have studied the material and am ready to demonstrate my understanding.",
+                            "I will not use notes, websites, or other people during this assessment.",
+                            "I understand this assessment measures what I know, not what I can look up.",
+                            "My responses will be in my own words based on my learning.",
+                          ].join("\n")}
+                          disabled={saving || readonly}
+                        />
+                        <div className="text-xs text-[var(--muted)]">Leave blank to use the default pledge.</div>
+                      </div>
+                    ) : null}
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Recording Limits</CardTitle>
+                  <CardDescription>Global response timers.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="space-y-2">
+                    <Label>Recording limit</Label>
+                    <select
+                      className="h-10 w-full rounded-md border bg-[var(--surface)] px-3 text-sm text-[var(--text)] border-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
+                      value={integrity.recording_limit_seconds}
+                      onChange={(e) => updateIntegrity({ recording_limit_seconds: Number(e.target.value) })}
+                      disabled={saving || readonly}
+                    >
+                      {[30, 60, 90, 120, 180].map((v) => (
+                        <option key={v} value={v}>
+                          {v}s
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Viewing timer (Retell)</Label>
+                    <select
+                      className="h-10 w-full rounded-md border bg-[var(--surface)] px-3 text-sm text-[var(--text)] border-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
+                      value={integrity.viewing_timer_seconds}
+                      onChange={(e) => updateIntegrity({ viewing_timer_seconds: Number(e.target.value) })}
+                      disabled={saving || readonly}
+                    >
+                      {[10, 15, 20, 30].map((v) => (
+                        <option key={v} value={v}>
+                          {v}s
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           </div>
-        </div>
+        ) : null}
       </div>
     </div>
   );

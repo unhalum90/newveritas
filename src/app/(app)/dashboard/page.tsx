@@ -16,7 +16,13 @@ export default async function DashboardPage() {
     .eq("user_id", data.user.id)
     .maybeSingle();
 
-  if (!teacher?.workspace_id) redirect("/onboarding");
+  if (!teacher?.workspace_id) {
+    return (
+      <div className="rounded-2xl border border-white/10 bg-[rgba(15,23,42,0.5)] p-6 text-sm text-[var(--muted)]">
+        Your workspace is still provisioning. Refresh in a moment or contact support if it persists.
+      </div>
+    );
+  }
 
   const { data: classes, error: classesError } = await supabase
     .from("classes")
