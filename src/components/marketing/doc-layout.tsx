@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import Link from "next/link";
 import { Source_Serif_4, Space_Grotesk } from "next/font/google";
+import type { ReactNode } from "react";
 
 import { MarketingFooter } from "@/components/marketing/marketing-footer";
 
@@ -143,8 +144,8 @@ function parseDocContent(content: string): DocBlock[] {
   return blocks;
 }
 
-function renderInline(text: string) {
-  const output: Array<string | JSX.Element> = [];
+function renderInline(text: string): ReactNode[] {
+  const output: ReactNode[] = [];
   const boldRegex = /\*\*([^*]+)\*\*/g;
   let lastIndex = 0;
   let match: RegExpExecArray | null = null;
