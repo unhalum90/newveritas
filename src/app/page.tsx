@@ -167,6 +167,12 @@ export default function Home() {
                   >
                     Join waitlist
                   </a>
+                  <Link
+                    href="/webinars"
+                    className="inline-flex h-12 items-center justify-center rounded-md border-2 border-[var(--primary)] bg-transparent px-6 text-base text-[var(--primary)] hover:bg-[color-mix(in_oklab,var(--primary),white_85%)]"
+                  >
+                    Attend webinar
+                  </Link>
                 </div>
               </div>
 
@@ -346,6 +352,12 @@ export default function Home() {
               >
                 Join waitlist
               </a>
+              <Link
+                href="/webinars"
+                className="inline-flex h-12 items-center justify-center rounded-md border-2 border-white bg-transparent px-8 text-base font-medium text-white hover:bg-white/10"
+              >
+                Attend webinar
+              </Link>
             </div>
           </div>
         </section>
@@ -591,17 +603,6 @@ export default function Home() {
                 Early access partners get priority onboarding, direct input on features, and founder pricing locked for 3 years.
               </p>
               <WaitlistForm />
-              <div className="mt-6 flex flex-col justify-center gap-4 sm:flex-row">
-                <a
-                  href="mailto:hello@sayveritas.com?subject=SayVeritas%20Demo%20Request"
-                  className="inline-flex h-12 items-center justify-center rounded-md border-2 border-[var(--border)] bg-transparent px-8 text-base hover:bg-[var(--surface)]"
-                >
-                  Request a Demo
-                </a>
-              </div>
-              <p className="mt-6 text-sm text-[var(--muted)]">
-                Questions? <a href="mailto:hello@sayveritas.com" className="underline hover:text-[var(--text)]">Schedule a call</a>
-              </p>
             </div>
           </div>
         </section>

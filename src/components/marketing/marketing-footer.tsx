@@ -2,12 +2,12 @@ import Link from "next/link";
 import { ContactModal } from "@/components/home/contact-modal";
 
 const resourceLinks = [
+  { label: "Attend Webinar", href: "/webinars" },
   { label: "How It Works", href: "/how-it-works" },
   { label: "Assessment Types", href: "/assessment-types" },
   { label: "Class Analysis Report (evidence-linked)", href: "/class-analysis-report" },
   { label: "Use Cases (cross-subject)", href: "/use-cases" },
   { label: "Security & Privacy / DPA", href: "/security-privacy" },
-  { label: "Assessment Playbook (templates)", href: "/assessment-playbook" },
   { label: "Roadmap", href: "/roadmap" },
 ] as const;
 

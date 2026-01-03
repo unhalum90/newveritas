@@ -47,10 +47,6 @@ export default function WebinarsPage() {
               </div>
             </div>
             <WebinarCalendar />
-            <p className="text-xs text-[var(--muted)]">
-              Sessions alternate weekly: Thursday morning one week, Tuesday evening the next. The Zoom registration flow
-              confirms the exact date.
-            </p>
           </div>
 
           <WebinarRegistrationForm />
