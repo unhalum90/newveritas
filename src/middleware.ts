@@ -1,17 +1,36 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
-const publicPaths = ["/", "/about", "/privacy", "/login", "/signup", "/student/login", "/activate"];
+const marketingPaths = [
+  "/",
+  "/about",
+  "/pricing",
+  "/privacy",
+  "/how-it-works",
+  "/webinars",
+  "/assessment-types",
+  "/class-analysis-report",
+  "/use-cases",
+  "/security-privacy",
+  "/assessment-playbook",
+  "/roadmap",
+];
 
-function isPublicPath(pathname: string) {
-  return publicPaths.includes(pathname);
+const authPaths = ["/login", "/signup", "/student/login", "/activate"];
+
+function isMarketingPath(pathname: string) {
+  return marketingPaths.some((path) => (path === "/" ? pathname === "/" : pathname === path || pathname.startsWith(`${path}/`)));
+}
+
+function isAuthPath(pathname: string) {
+  return authPaths.includes(pathname);
 }
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Always allow public marketing pages to render, even if the user is signed in.
-  if (pathname === "/" || pathname === "/about") {
+  if (isMarketingPath(pathname)) {
     return NextResponse.next();
   }
 
@@ -40,17 +59,17 @@ export async function middleware(request: NextRequest) {
   const isStudent = role === "student";
 
   if (!signedIn) {
-    if (isPublicPath(pathname)) return response;
+    if (isAuthPath(pathname)) return response;
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
   if (isStudent) {
     if (pathname.startsWith("/student") || pathname === "/activate") return response;
-    if (isPublicPath(pathname)) return NextResponse.redirect(new URL("/student", request.url));
+    if (isAuthPath(pathname)) return NextResponse.redirect(new URL("/student", request.url));
     return NextResponse.redirect(new URL("/student", request.url));
   }
 
-  if (isPublicPath(pathname)) {
+  if (isAuthPath(pathname)) {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 
