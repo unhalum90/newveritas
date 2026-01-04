@@ -97,8 +97,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (teacher?.disabled) {
     return (
       <div className="veritas-wizard min-h-screen bg-[var(--background)] text-[var(--text)]">
+        <a
+          href="#main-content"
+          className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-[var(--surface)] focus:px-3 focus:py-2 focus:text-sm focus:text-[var(--text)]"
+        >
+          Skip to main content
+        </a>
         <AppHeader />
-        <main className="mx-auto max-w-6xl px-6 py-10">
+        <main id="main-content" className="mx-auto max-w-6xl px-6 py-10">
           <DisabledAccount />
         </main>
       </div>
@@ -108,8 +114,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (!teacher || !teacher.workspace_id) {
     return (
       <div className="veritas-wizard min-h-screen bg-[var(--background)] text-[var(--text)]">
+        <a
+          href="#main-content"
+          className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-[var(--surface)] focus:px-3 focus:py-2 focus:text-sm focus:text-[var(--text)]"
+        >
+          Skip to main content
+        </a>
         <AppHeader />
-        <main className="mx-auto max-w-4xl px-6 py-12">
+        <main id="main-content" className="mx-auto max-w-4xl px-6 py-12">
           <div className="rounded-2xl border border-white/10 bg-[rgba(15,23,42,0.5)] p-6 text-sm text-[var(--muted)]">
             We couldn&apos;t finalize your workspace. Refresh this page or contact support and we&apos;ll
             fix it quickly.
@@ -121,8 +133,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="veritas-wizard min-h-screen bg-[var(--background)] text-[var(--text)]">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-[var(--surface)] focus:px-3 focus:py-2 focus:text-sm focus:text-[var(--text)]"
+      >
+        Skip to main content
+      </a>
       <AppHeader />
-      <main className="mx-auto max-w-6xl px-6 py-10">{children}</main>
+      <main id="main-content" className="mx-auto max-w-6xl px-6 py-10">
+        {children}
+      </main>
     </div>
   );
 }

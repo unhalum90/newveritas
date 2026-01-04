@@ -166,7 +166,7 @@ export function WebinarRegistrationForm() {
         <button
           type="submit"
           disabled={status === "loading"}
-          className="mt-2 inline-flex h-11 items-center justify-center rounded-md bg-[var(--primary)] px-5 text-sm font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+          className="mt-2 inline-flex h-11 items-center justify-center rounded-md bg-[var(--primary-strong)] px-5 text-sm font-semibold text-white hover:bg-[color-mix(in_oklab,var(--primary-strong),black_12%)] disabled:cursor-not-allowed disabled:opacity-60"
         >
           {status === "loading" ? "Registering..." : "Reserve my seat"}
         </button>

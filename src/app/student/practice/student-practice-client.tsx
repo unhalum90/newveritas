@@ -165,7 +165,11 @@ export function StudentPracticeClient() {
             </p>
           </div>
 
-          {error ? <div className="text-sm text-red-600">{error}</div> : null}
+          {error ? (
+            <div className="text-sm text-red-600" role="alert">
+              {error}
+            </div>
+          ) : null}
           {loading ? <div className="text-sm text-zinc-600">Loading practice assessments...</div> : null}
 
           {!loading && !assessments.length ? (
@@ -181,7 +185,7 @@ export function StudentPracticeClient() {
                 <Card key={assessment.id} className="overflow-hidden">
                   {assessment.asset_url ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={assessment.asset_url} alt="" className="h-40 w-full object-cover" />
+                    <img src={assessment.asset_url} alt={`${assessment.title} cover`} className="h-40 w-full object-cover" />
                   ) : null}
                   <CardHeader>
                     <CardTitle>{assessment.title}</CardTitle>

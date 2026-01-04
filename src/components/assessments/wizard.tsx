@@ -13,6 +13,7 @@ import { Switch } from "@/components/ui/switch";
 import { validateAssessmentPhase1, type ValidationError, type ValidationResult } from "@/lib/validation/assessment-validator";
 
 type ClassRow = { id: string; name: string };
+type StudentRow = { id: string; first_name: string; last_name: string; email?: string | null };
 type AuthoringMode = "manual" | "upload" | "ai" | "template";
 
 type Assessment = {
@@ -184,6 +185,14 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
 
   const [assessment, setAssessment] = useState<Assessment | null>(null);
   const [classes, setClasses] = useState<ClassRow[]>([]);
+  const [classStudents, setClassStudents] = useState<StudentRow[]>([]);
+  const [studentsLoading, setStudentsLoading] = useState(false);
+  const [assignmentMode, setAssignmentMode] = useState<"all" | "selected">("all");
+  const [assignmentStudentIds, setAssignmentStudentIds] = useState<Set<string>>(new Set());
+  const [assignmentDirty, setAssignmentDirty] = useState(false);
+  const [assignmentSaving, setAssignmentSaving] = useState(false);
+  const [assignmentError, setAssignmentError] = useState<string | null>(null);
+  const [assignmentTouched, setAssignmentTouched] = useState(false);
   const [startAiPrompt, setStartAiPrompt] = useState("");
   const [startQuestionCount, setStartQuestionCount] = useState(3);
   const [startPdfFile, setStartPdfFile] = useState<File | null>(null);
@@ -239,14 +248,14 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
   const assetBusy = saving || audioUploading || documentUploading;
 
   useEffect(() => {
-    if (!dirty) return;
+    if (!dirty && !assignmentDirty) return;
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
       event.preventDefault();
       event.returnValue = "";
     };
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, [dirty]);
+  }, [assignmentDirty, dirty]);
 
   useEffect(() => {
     const next =
@@ -264,6 +273,37 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
       }
     })();
   }, []);
+
+  useEffect(() => {
+    const classId = assessment?.class_id ?? null;
+    if (!classId) {
+      setClassStudents([]);
+      setAssignmentMode("all");
+      setAssignmentStudentIds(new Set());
+      return;
+    }
+    let active = true;
+    setStudentsLoading(true);
+    setAssignmentError(null);
+    jsonFetch<{ students: StudentRow[] }>(`/api/classes/${classId}/students`, { cache: "no-store" })
+      .then((data) => {
+        if (!active) return;
+        const students = data.students ?? [];
+        setClassStudents(students);
+        const validIds = new Set(students.map((student) => student.id));
+        setAssignmentStudentIds((prev) => new Set(Array.from(prev).filter((id) => validIds.has(id))));
+      })
+      .catch((e) => {
+        if (!active) return;
+        setAssignmentError(e instanceof Error ? e.message : "Unable to load students.");
+      })
+      .finally(() => {
+        if (active) setStudentsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [assessment?.class_id]);
 
   useEffect(() => {
     if (assessment?.authoring_mode !== "template") return;
@@ -286,7 +326,7 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
 
   const load = useCallback(async () => {
     setError(null);
-    const [data, q, assetResult, audioResult, documentResult, rubricsResult] = await Promise.all([
+    const [data, q, assetResult, audioResult, documentResult, rubricsResult, assignmentsResult] = await Promise.all([
       jsonFetch<{ assessment: Assessment }>(`/api/assessments/${assessmentId}`, { cache: "no-store" }),
       jsonFetch<{ questions: Question[] }>(`/api/assessments/${assessmentId}/questions`, { cache: "no-store" }),
       jsonFetch<{ asset: AssessmentAsset | null }>(`/api/assessments/${assessmentId}/asset`, { cache: "no-store" }).catch(
@@ -299,6 +339,9 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
         () => ({ asset: null }),
       ),
       jsonFetch<{ rubrics: Rubric[] }>(`/api/assessments/${assessmentId}/rubrics`, { cache: "no-store" }).catch(() => ({ rubrics: [] })),
+      jsonFetch<{ student_ids: string[] }>(`/api/assessments/${assessmentId}/assignments`, { cache: "no-store" }).catch(
+        () => ({ student_ids: [] }),
+      ),
     ]);
 
     setAssessment(data.assessment);
@@ -324,13 +367,21 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
         ? { instructions: next.evidence.instructions, scale_min: next.evidence.scale_min, scale_max: next.evidence.scale_max }
         : { instructions: "", scale_min: 1, scale_max: 5 },
     });
+
+    const assignedIds = new Set(assignmentsResult.student_ids ?? []);
+    setAssignmentStudentIds(assignedIds);
+    setAssignmentMode(assignedIds.size > 0 ? "selected" : "all");
+    setAssignmentDirty(false);
+    setAssignmentTouched(false);
+    setAssignmentError(null);
   }, [assessmentId]);
 
   useEffect(() => {
     void load().catch((e) => setError(e instanceof Error ? e.message : "Load failed."));
   }, [load]);
 
-  const startComplete = Boolean(assessment?.title?.trim()) && Boolean(assessment?.class_id);
+  const assignmentComplete = assignmentMode === "all" || assignmentStudentIds.size > 0;
+  const startComplete = Boolean(assessment?.title?.trim()) && Boolean(assessment?.class_id) && assignmentComplete;
   const questionsComplete = questionsCount > 0;
   const rubricsComplete = Boolean(rubrics.reasoning && rubrics.evidence);
   const maxEnabledStep: StepNumber = !startComplete ? 1 : !questionsComplete ? 4 : !rubricsComplete ? 5 : 6;
@@ -375,6 +426,37 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
     [assessment, assessmentId, load, readonly],
   );
 
+  const persistAssignments = useCallback(
+    async (silent?: boolean) => {
+      if (!assessment || readonly) return;
+      if (assignmentMode === "selected" && assignmentStudentIds.size === 0) {
+        if (!silent) setAssignmentError("Select at least one student.");
+        return;
+      }
+      setAssignmentSaving(true);
+      setAssignmentError(null);
+      try {
+        const payload =
+          assignmentMode === "selected"
+            ? { mode: "selected", student_ids: Array.from(assignmentStudentIds) }
+            : { mode: "all" };
+        await jsonFetch(`/api/assessments/${assessmentId}/assignments`, {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        setAssignmentDirty(false);
+        setLastSavedAt(Date.now());
+        if (!silent) await load();
+      } catch (e) {
+        setAssignmentError(e instanceof Error ? e.message : "Save failed.");
+      } finally {
+        setAssignmentSaving(false);
+      }
+    },
+    [assessment, assessmentId, assignmentMode, assignmentStudentIds, load, readonly],
+  );
+
   useEffect(() => {
     if (!assessment) return;
     if (step > maxEnabledStep) {
@@ -386,29 +468,33 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
   useEffect(() => {
     if (!assessment || readonly) return;
     const t = setInterval(() => {
-      if (!dirty || saving) return;
-      void persistDraft(true);
+      if (saving || assignmentSaving) return;
+      if (dirty) void persistDraft(true);
+      if (assignmentDirty) void persistAssignments(true);
     }, 3000);
     return () => {
       clearInterval(t);
     };
-  }, [assessment, dirty, persistDraft, readonly, saving]);
+  }, [assessment, assignmentDirty, assignmentSaving, dirty, persistAssignments, persistDraft, readonly, saving]);
 
   const canContinue = useMemo(() => {
     if (!assessment) return false;
     if (step === 1) {
       if (!assessment.class_id) return false;
       if (!assessment.title.trim()) return false;
+      if (!assignmentComplete) return false;
       if (assessment.authoring_mode === "upload") return Boolean(startPdfFile);
       if (assessment.authoring_mode === "ai") return startAiPrompt.trim().length >= 20;
       if (assessment.authoring_mode === "template") return Boolean(selectedTemplateId);
       return true;
     }
     return true;
-  }, [assessment, selectedTemplateId, startAiPrompt, startPdfFile, step]);
+  }, [assessment, assignmentComplete, selectedTemplateId, startAiPrompt, startPdfFile, step]);
 
   async function saveDraft() {
-    await persistDraft(false);
+    await persistDraft(true);
+    await persistAssignments(true);
+    await load();
   }
 
   function openValidation(errors: ValidationError[]) {
@@ -564,12 +650,16 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
       `Viewing timer: ${integritySettings.viewing_timer_seconds}s`,
       `Pledge: ${integritySettings.pledge_enabled ? "Enabled" : "Off"}`,
     ];
+    const assignmentSummary =
+      assignmentMode === "selected"
+        ? `Assigned: ${assignmentStudentIds.size} student${assignmentStudentIds.size === 1 ? "" : "s"}`
+        : "Assigned: Entire class";
 
     return [
       {
         step: 1,
         title: "Start",
-        summary: `Title: ${title} • Class: ${className ?? "Unassigned"} • Mode: ${mode}`,
+        summary: `Title: ${title} • Class: ${className ?? "Unassigned"} • Mode: ${mode} • ${assignmentSummary}`,
         details: [subject ? `Subject: ${subject}` : null, language ? `Target language: ${language}` : null].filter(
           (item): item is string => Boolean(item),
         ),
@@ -609,6 +699,8 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
     ];
   }, [
     assessment,
+    assignmentMode,
+    assignmentStudentIds,
     audioIntro,
     assetPrompt,
     assetUrl,
@@ -638,12 +730,56 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
 
   const titleError = titleTouched && !assessment.title.trim() ? "Assessment title is required." : null;
   const classError = classTouched && !assessment.class_id ? "Class is required." : null;
+  const assignmentSelectionError =
+    assignmentTouched && assignmentMode === "selected" && assignmentStudentIds.size === 0
+      ? "Select at least one student."
+      : null;
   const pausingEnabled = integrity.pause_threshold_seconds !== null;
   const questionRequiredError =
     step >= 5 && startComplete && !questionsComplete ? "Add at least one question to continue." : null;
   const canPublish =
-    !readonly && step === 6 && startComplete && questionsComplete && rubricsComplete && !saving;
+    !readonly &&
+    step === 6 &&
+    startComplete &&
+    questionsComplete &&
+    rubricsComplete &&
+    !saving &&
+    !assignmentSaving &&
+    !assignmentDirty;
   const studentPreviewUrl = `/student/assessments/${assessmentId}?preview=1`;
+
+  const selectedCount = assignmentStudentIds.size;
+  const assignmentDisabled = readonly || !assessment.class_id || assignmentSaving;
+
+  function toggleAssignmentStudent(studentId: string) {
+    setAssignmentStudentIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(studentId)) {
+        next.delete(studentId);
+      } else {
+        next.add(studentId);
+      }
+      return next;
+    });
+    setAssignmentDirty(true);
+    setAssignmentTouched(true);
+    setAssignmentError(null);
+  }
+
+  function selectAllStudents() {
+    setAssignmentStudentIds(new Set(classStudents.map((student) => student.id)));
+    setAssignmentDirty(true);
+    setAssignmentTouched(true);
+    setAssignmentError(null);
+  }
+
+  function clearSelectedStudents() {
+    setAssignmentStudentIds(new Set());
+    setAssignmentDirty(true);
+    setAssignmentTouched(true);
+    setAssignmentError(null);
+  }
+
   async function saveAssetAndContinue() {
     if (readonly) return;
     setSaving(true);
@@ -963,8 +1099,8 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
           <Button type="button" variant="secondary" onClick={() => window.open(studentPreviewUrl, "_blank")}>
             Preview as Student
           </Button>
-          <Button type="button" variant="secondary" disabled={saving || readonly} onClick={saveDraft}>
-            {saving ? "Saving…" : "Save Draft"}
+          <Button type="button" variant="secondary" disabled={saving || assignmentSaving || readonly} onClick={saveDraft}>
+            {saving || assignmentSaving ? "Saving…" : "Save Draft"}
           </Button>
           <Button type="button" disabled={!canPublish} onClick={() => setReviewOpen(true)}>
             Publish to Class
@@ -972,7 +1108,11 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
         </div>
       </div>
 
-      {error ? <div className="mb-4 text-sm text-[var(--danger)]">{error}</div> : null}
+      {error ? (
+        <div className="mb-4 text-sm text-[var(--danger)]" role="alert">
+          {error}
+        </div>
+      ) : null}
 
       <div className={`grid grid-cols-1 gap-6 ${step === 6 ? "lg:grid-cols-[800px_350px]" : ""}`}>
         <div className="space-y-4">
@@ -999,7 +1139,9 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
                   >
                     <span
                       className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold ${
-                        active ? "bg-[var(--primary)] text-white" : "bg-[var(--surface)] text-[var(--muted)] border border-[var(--border)]"
+                        active
+                          ? "bg-[var(--primary-strong)] text-white"
+                          : "bg-[var(--surface)] text-[var(--muted)] border border-[var(--border)]"
                       }`}
                     >
                       {s.n}
@@ -1061,6 +1203,11 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
                     onChange={(e) => {
                       setAssessment({ ...assessment, class_id: e.target.value || null });
                       setDirty(true);
+                      setAssignmentMode("all");
+                      setAssignmentStudentIds(new Set());
+                      setAssignmentDirty(true);
+                      setAssignmentTouched(false);
+                      setAssignmentError(null);
                     }}
                     onBlur={() => setClassTouched(true)}
                     disabled={readonly}
@@ -1077,6 +1224,109 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
                     <div className="flex items-center gap-2 text-sm text-[var(--danger)]">
                       <span aria-hidden="true">⛔</span>
                       <span>{classError}</span>
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="space-y-3">
+                  <Label>Assign to</Label>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant={assignmentMode === "all" ? "primary" : "secondary"}
+                      disabled={assignmentDisabled}
+                      onClick={() => {
+                        if (assignmentDisabled) return;
+                        setAssignmentMode("all");
+                        setAssignmentStudentIds(new Set());
+                        setAssignmentDirty(true);
+                        setAssignmentTouched(true);
+                        setAssignmentError(null);
+                      }}
+                    >
+                      Entire class
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={assignmentMode === "selected" ? "primary" : "secondary"}
+                      disabled={assignmentDisabled}
+                      onClick={() => {
+                        if (assignmentDisabled) return;
+                        setAssignmentMode("selected");
+                        setAssignmentDirty(true);
+                        setAssignmentTouched(true);
+                        setAssignmentError(null);
+                      }}
+                    >
+                      Selected students
+                    </Button>
+                  </div>
+                  <p className="text-xs text-[var(--muted)]">Choose everyone or a subgroup within this class.</p>
+
+                  {assignmentMode === "selected" ? (
+                    <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--muted)]">
+                        <span>{selectedCount} selected</span>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            disabled={assignmentDisabled || !classStudents.length}
+                            onClick={selectAllStudents}
+                          >
+                            Select all
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            disabled={assignmentDisabled || selectedCount === 0}
+                            onClick={clearSelectedStudents}
+                          >
+                            Clear
+                          </Button>
+                        </div>
+                      </div>
+
+                      {studentsLoading ? (
+                        <div className="mt-3 text-xs text-[var(--muted)]">Loading students...</div>
+                      ) : classStudents.length ? (
+                        <div className="mt-3 max-h-56 space-y-2 overflow-y-auto pr-2 text-sm">
+                          {classStudents.map((student) => (
+                            <label key={student.id} className="flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                checked={assignmentStudentIds.has(student.id)}
+                                onChange={() => toggleAssignmentStudent(student.id)}
+                                disabled={assignmentDisabled}
+                                aria-label={`Select ${student.first_name} ${student.last_name}`}
+                              />
+                              <span>
+                                {student.first_name} {student.last_name}
+                              </span>
+                            </label>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="mt-3 text-xs text-[var(--muted)]">No students found. Add students first.</div>
+                      )}
+
+                      {assignmentSelectionError ? (
+                        <div className="mt-3 flex items-center gap-2 text-sm text-[var(--danger)]" role="alert">
+                          <span aria-hidden="true">⛔</span>
+                          <span>{assignmentSelectionError}</span>
+                        </div>
+                      ) : null}
+                      {assignmentError ? (
+                        <div className="mt-3 text-sm text-[var(--danger)]" role="alert">
+                          {assignmentError}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : assignmentError ? (
+                    <div className="text-sm text-[var(--danger)]" role="alert">
+                      {assignmentError}
                     </div>
                   ) : null}
                 </div>
@@ -1113,7 +1363,7 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
                         id="pdfUpload"
                         type="file"
                         accept="application/pdf"
-                        className="block w-full text-sm text-[var(--muted)] file:mr-4 file:rounded-md file:border-0 file:bg-[var(--border)] file:px-4 file:py-2 file:text-sm file:font-semibold file:text-[var(--text)] hover:file:bg-[var(--primary)] hover:file:text-white"
+                        className="block w-full text-sm text-[var(--muted)] file:mr-4 file:rounded-md file:border-0 file:bg-[var(--border)] file:px-4 file:py-2 file:text-sm file:font-semibold file:text-[var(--text)] hover:file:bg-[var(--primary-strong)] hover:file:text-white"
                         disabled={readonly || saving}
                         onChange={(e) => {
                           const f = e.target.files?.[0] ?? null;

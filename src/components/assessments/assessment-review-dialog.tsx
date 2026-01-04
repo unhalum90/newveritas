@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useId, useRef } from "react";
+
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -27,13 +29,29 @@ export function AssessmentReviewDialog({
   onClose,
   onConfirm,
 }: AssessmentReviewDialogProps) {
+  const titleId = useId();
+  const closeRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    if (open) closeRef.current?.focus();
+  }, [open]);
+
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-6">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-6"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={titleId}
+      tabIndex={-1}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") onClose();
+      }}
+    >
       <Card className="w-full max-w-3xl">
         <CardHeader>
-          <CardTitle>Review before publishing</CardTitle>
+          <CardTitle id={titleId}>Review before publishing</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="max-h-[60vh] space-y-4 overflow-y-auto pr-1">
@@ -67,7 +85,7 @@ export function AssessmentReviewDialog({
           </div>
 
           <div className="flex items-center justify-end gap-3">
-            <Button type="button" variant="secondary" onClick={onClose} disabled={loading}>
+            <Button type="button" variant="secondary" onClick={onClose} disabled={loading} ref={closeRef}>
               Keep Editing
             </Button>
             <Button type="button" onClick={onConfirm} disabled={loading}>

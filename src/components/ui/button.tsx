@@ -11,7 +11,7 @@ const base =
   "inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] disabled:pointer-events-none disabled:opacity-50";
 
 const variants: Record<NonNullable<ButtonProps["variant"]>, string> = {
-  primary: "bg-[var(--primary)] text-white hover:opacity-90",
+  primary: "bg-[var(--primary-strong)] text-white hover:bg-[color-mix(in_oklab,var(--primary-strong),black_12%)]",
   secondary: "bg-[var(--surface)] text-[var(--text)] border border-[var(--border)] hover:opacity-90",
   ghost: "bg-transparent text-[var(--text)] hover:bg-[var(--border)]",
 };

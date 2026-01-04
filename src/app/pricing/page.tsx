@@ -21,8 +21,8 @@ const pricingTiers = [
     buttonClass:
       "border border-[color-mix(in_oklab,#f59e0b,white_20%)] text-[#f59e0b] hover:bg-[color-mix(in_oklab,#f59e0b,black_85%)]",
   },
-  {
-    name: "Classroom Pack",
+    {
+      name: "Classroom Pack",
     price: "$29",
     cadence: "one-time",
     credits: "600 assessment credits",
@@ -33,12 +33,12 @@ const pricingTiers = [
       "Evidence snippets for review",
       "Enough for a full-class assessment",
     ],
-    ctaLabel: "Get Classroom",
-    ctaHref: "#waitlist",
-    accent: "text-[#34d399]",
-    buttonClass: "bg-[color-mix(in_oklab,#34d399,black_25%)] text-[#0b0f14] hover:opacity-90",
-    isPopular: true,
-  },
+      ctaLabel: "Get Classroom",
+      ctaHref: "#waitlist",
+      accent: "text-[#34d399]",
+      buttonClass: "bg-[color-mix(in_oklab,#34d399,black_25%)] text-[#0b0f14] hover:bg-[color-mix(in_oklab,#34d399,black_35%)]",
+      isPopular: true,
+    },
   {
     name: "School License",
     price: "Custom",
@@ -63,12 +63,18 @@ const pricingTiers = [
 export default function PricingPage() {
   return (
     <div className="veritas-wizard min-h-screen bg-[var(--background)] text-[var(--text)]">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-[var(--surface)] focus:px-3 focus:py-2 focus:text-sm focus:text-[var(--text)]"
+      >
+        Skip to main content
+      </a>
       <header className="sticky top-0 z-50 border-b border-[var(--border)] bg-[color-mix(in_oklab,var(--background),black_10%)] backdrop-blur-sm">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
           <Link href="/" className="text-lg font-semibold tracking-tight">
             SayVeritas
           </Link>
-          <nav className="hidden items-center gap-6 text-sm text-[var(--muted)] md:flex">
+          <nav className="hidden items-center gap-6 text-sm text-[var(--muted)] md:flex" aria-label="Primary">
             <Link href="/" className="hover:text-[var(--text)]">
               Home
             </Link>
@@ -85,13 +91,13 @@ export default function PricingPage() {
           <div className="flex items-center gap-2">
             <Link
               href="/login"
-              className="rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm hover:opacity-90"
+              className="rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm hover:bg-[color-mix(in_oklab,var(--surface),white_6%)]"
             >
               Sign in
             </Link>
             <a
               href="#waitlist"
-              className="rounded-md bg-[var(--primary)] px-3 py-2 text-sm text-white hover:opacity-90"
+              className="rounded-md bg-[var(--primary-strong)] px-3 py-2 text-sm text-white hover:bg-[color-mix(in_oklab,var(--primary-strong),black_12%)]"
             >
               Join waitlist
             </a>
@@ -99,7 +105,7 @@ export default function PricingPage() {
         </div>
       </header>
 
-      <main>
+      <main id="main-content">
         <section className="border-b border-[var(--border)]">
           <div className="mx-auto max-w-6xl px-6 py-16">
             <div className="text-center">
@@ -213,7 +219,7 @@ export default function PricingPage() {
               <div className="mt-8 flex flex-col justify-center gap-4 sm:flex-row">
                 <a
                   href="mailto:hello@sayveritas.com?subject=SayVeritas%20Demo%20Request"
-                  className="inline-flex h-12 items-center justify-center rounded-md bg-[var(--primary)] px-8 text-base font-medium text-white hover:opacity-90"
+                  className="inline-flex h-12 items-center justify-center rounded-md bg-[var(--primary-strong)] px-8 text-base font-medium text-white hover:bg-[color-mix(in_oklab,var(--primary-strong),black_12%)]"
                 >
                   Request Demo
                 </a>

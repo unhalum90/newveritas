@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -157,6 +157,8 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
   const [restartPrompt, setRestartPrompt] = useState<{ reason: "slow_start" | "off_topic"; questionId: string } | null>(null);
   const [restartWorking, setRestartWorking] = useState(false);
   const [restartError, setRestartError] = useState<string | null>(null);
+  const pdfDialogTitleId = useId();
+  const pdfCloseRef = useRef<HTMLButtonElement | null>(null);
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
   const autoRecordQuestionId = useRef<string | null>(null);
   const autoSubmitAttemptedRef = useRef(false);
@@ -180,6 +182,10 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
     const viewerFlags = "toolbar=0&navpanes=0&scrollbar=0&view=FitH";
     return url.includes("#") ? `${url}&${viewerFlags}` : `${url}#${viewerFlags}`;
   }, [documentPdf?.asset_url]);
+
+  useEffect(() => {
+    if (pdfOpen) pdfCloseRef.current?.focus();
+  }, [pdfOpen]);
   const requireAudioIntro = Boolean(audioIntro && (audioIntro.require_full_listen ?? true));
   const isPracticeMode = Boolean(assessment?.is_practice_mode);
   const feedbackReady = latest?.review_status === "published";
@@ -931,7 +937,11 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
                 <li>We do not train AI models on student recordings.</li>
                 <li>You can contact your teacher to revoke access.</li>
               </ul>
-              {consentError ? <div className="mt-3 text-sm text-red-300">{consentError}</div> : null}
+              {consentError ? (
+                <div className="mt-3 text-sm text-red-300" role="alert">
+                  {consentError}
+                </div>
+              ) : null}
               <div className="mt-5 flex items-center justify-end gap-2">
                 <Button type="button" disabled={consentWorking} onClick={acceptConsent}>
                   {consentWorking ? "Saving…" : "I Agree"}
@@ -953,7 +963,11 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
                   <li key={idx}>{line}</li>
                 ))}
               </ul>
-              {pledgeError ? <div className="mt-3 text-sm text-red-300">{pledgeError}</div> : null}
+              {pledgeError ? (
+                <div className="mt-3 text-sm text-red-300" role="alert">
+                  {pledgeError}
+                </div>
+              ) : null}
               <div className="mt-5 flex items-center justify-end gap-2">
                 <Button type="button" disabled={pledgeWorking} onClick={acceptPledge}>
                   {pledgeWorking ? "Saving…" : "I Agree"}
@@ -1010,9 +1024,13 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
         </div>
 
         {previewMode ? <div className="text-sm text-[var(--muted)]">Preview mode: student actions are disabled.</div> : null}
-        {error ? <div className="text-sm text-red-600">{error}</div> : null}
+        {error ? (
+          <div className="text-sm text-red-600" role="alert">
+            {error}
+          </div>
+        ) : null}
         {accessRestricted ? (
-          <div className="text-sm text-red-600">
+          <div className="text-sm text-red-600" role="alert">
             Your access has been restricted. Contact your teacher for help.
           </div>
         ) : null}
@@ -1023,7 +1041,7 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
               {assessment.asset_url ? (
                 <Card className="overflow-hidden">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={assessment.asset_url} alt="" className="h-72 w-full object-cover" />
+                  <img src={assessment.asset_url} alt={`${assessment.title} cover`} className="h-72 w-full object-cover" />
                 </Card>
               ) : null}
 
@@ -1065,10 +1083,19 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
               ) : null}
 
               {documentPdf && pdfOpen ? (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4 py-6">
+                <div
+                  className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4 py-6"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby={pdfDialogTitleId}
+                  tabIndex={-1}
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape") setPdfOpen(false);
+                  }}
+                >
                   <div className="flex h-full w-full max-w-6xl flex-col gap-4 overflow-hidden rounded-3xl border border-white/10 bg-[rgba(15,23,42,0.95)] p-4 shadow-[0_30px_80px_rgba(0,0,0,0.6)]">
                     <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div className="text-sm text-[var(--muted)]">
+                      <div className="text-sm text-[var(--muted)]" id={pdfDialogTitleId}>
                         {documentPdf.original_filename?.trim() || "Attached PDF"}
                       </div>
                       <div className="flex items-center gap-2">
@@ -1079,7 +1106,12 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
                         >
                           Open in new tab
                         </Button>
-                        <Button type="button" variant="secondary" onClick={() => setPdfOpen(false)}>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          onClick={() => setPdfOpen(false)}
+                          ref={pdfCloseRef}
+                        >
                           Close
                         </Button>
                       </div>
@@ -1252,7 +1284,11 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
                         </div>
 
                         {evidenceLoading ? <div className="mt-3 text-xs text-zinc-600">Loading evidence…</div> : null}
-                        {evidenceError ? <div className="mt-3 text-sm text-red-600">{evidenceError}</div> : null}
+                        {evidenceError ? (
+                          <div className="mt-3 text-sm text-red-600" role="alert">
+                            {evidenceError}
+                          </div>
+                        ) : null}
                         {activeEvidence ? (
                           <div className="mt-3">
                             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -1319,7 +1355,11 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
                         )}
                         {working ? <span className="text-sm text-zinc-600">Saving…</span> : null}
                       </div>
-                      {recordingError ? <div className="mt-2 text-sm text-red-600">{recordingError}</div> : null}
+                      {recordingError ? (
+                        <div className="mt-2 text-sm text-red-600" role="alert">
+                          {recordingError}
+                        </div>
+                      ) : null}
                     </div>
                   </CardContent>
                 </Card>

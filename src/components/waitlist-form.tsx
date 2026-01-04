@@ -71,7 +71,7 @@ export function WaitlistForm() {
         <button
           type="submit"
           disabled={status === "loading"}
-          className="inline-flex h-12 items-center justify-center rounded-md bg-[var(--primary)] px-6 text-base font-medium text-white shadow-lg hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+          className="inline-flex h-12 items-center justify-center rounded-md bg-[var(--primary-strong)] px-6 text-base font-medium text-white shadow-lg hover:bg-[color-mix(in_oklab,var(--primary-strong),black_12%)] disabled:cursor-not-allowed disabled:opacity-60"
         >
           {status === "loading" ? "Joining..." : "Join waitlist"}
         </button>

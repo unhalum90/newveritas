@@ -44,6 +44,15 @@ export async function POST(request: NextRequest) {
   if (aError) return NextResponse.json({ error: aError.message }, { status: 500 });
   if (!assessment) return NextResponse.json({ error: "Not found." }, { status: 404 });
   if (assessment.class_id !== student.class_id) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const { data: assignmentRows, error: assignmentError } = await admin
+    .from("assessment_assignments")
+    .select("student_id")
+    .eq("assessment_id", assessmentId);
+
+  if (assignmentError) return NextResponse.json({ error: assignmentError.message }, { status: 500 });
+  if ((assignmentRows ?? []).length > 0 && !(assignmentRows ?? []).some((row) => row.student_id === student.id)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
   if (assessment.status !== "live") return NextResponse.json({ error: "Not available." }, { status: 409 });
 
   const { data: existing, error: exError } = await admin

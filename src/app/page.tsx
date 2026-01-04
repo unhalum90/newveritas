@@ -50,7 +50,7 @@ export default function Home() {
       ctaLabel: "Get Classroom",
       ctaHref: "#waitlist",
       accent: "text-[#34d399]",
-      buttonClass: "bg-[color-mix(in_oklab,#34d399,black_25%)] text-[#0b0f14] hover:opacity-90",
+      buttonClass: "bg-[color-mix(in_oklab,#34d399,black_25%)] text-[#0b0f14] hover:bg-[color-mix(in_oklab,#34d399,black_35%)]",
       isPopular: true,
     },
     {
@@ -76,13 +76,19 @@ export default function Home() {
 
   return (
     <div className="veritas-wizard min-h-screen bg-[var(--background)] text-[var(--text)]">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-[var(--surface)] focus:px-3 focus:py-2 focus:text-sm focus:text-[var(--text)]"
+      >
+        Skip to main content
+      </a>
       {/* Sticky Header */}
       <header className="sticky top-0 z-50 border-b border-[var(--border)] bg-[color-mix(in_oklab,var(--background),black_10%)] backdrop-blur-sm">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
           <Link href="/" className="text-lg font-semibold tracking-tight">
             SayVeritas
           </Link>
-          <nav className="hidden items-center gap-6 text-sm text-[var(--muted)] md:flex">
+          <nav className="hidden items-center gap-6 text-sm text-[var(--muted)] md:flex" aria-label="Primary">
             <Link href="/about" className="hover:text-[var(--text)]">
               About
             </Link>
@@ -105,13 +111,13 @@ export default function Home() {
           <div className="flex items-center gap-2">
             <Link
               href="/login"
-              className="rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm hover:opacity-90"
+              className="rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm hover:bg-[color-mix(in_oklab,var(--surface),white_6%)]"
             >
               Sign in
             </Link>
             <a
               href="#waitlist"
-              className="rounded-md bg-[var(--primary)] px-3 py-2 text-sm text-white hover:opacity-90"
+              className="rounded-md bg-[var(--primary-strong)] px-3 py-2 text-sm text-white hover:bg-[color-mix(in_oklab,var(--primary-strong),black_12%)]"
             >
               Join waitlist
             </a>
@@ -119,7 +125,7 @@ export default function Home() {
         </div>
       </header>
 
-      <main>
+      <main id="main-content">
         {/* Hero - DARK BACKGROUND */}
         <section className="border-b border-[var(--border)]">
           <div className="mx-auto max-w-6xl px-6 py-16 md:py-24">
@@ -157,7 +163,7 @@ export default function Home() {
                 <div className="mt-8 flex flex-col gap-3 sm:flex-row">
                   <a
                     href="#how"
-                    className="inline-flex h-12 items-center justify-center rounded-md bg-[var(--primary)] px-6 text-base font-medium text-white hover:opacity-90"
+                    className="inline-flex h-12 items-center justify-center rounded-md bg-[var(--primary-strong)] px-6 text-base font-medium text-white hover:bg-[color-mix(in_oklab,var(--primary-strong),black_12%)]"
                   >
                     See how it works
                   </a>
@@ -169,7 +175,7 @@ export default function Home() {
                   </a>
                   <Link
                     href="/webinars"
-                    className="inline-flex h-12 items-center justify-center rounded-md border-2 border-[var(--primary)] bg-transparent px-6 text-base text-[var(--primary)] hover:bg-[color-mix(in_oklab,var(--primary),white_85%)]"
+                    className="inline-flex h-12 items-center justify-center rounded-md border-2 border-white bg-transparent px-6 text-base text-white hover:bg-white/10"
                   >
                     Attend webinar
                   </Link>
@@ -192,19 +198,19 @@ export default function Home() {
           <div className="mx-auto max-w-6xl px-6 py-16">
             <div className="grid gap-8 md:grid-cols-3">
               <div className="text-center">
-                <div className="text-5xl font-bold text-[var(--primary)] md:text-6xl">6 hours</div>
+                <div className="text-5xl font-bold text-[var(--primary-strong)] md:text-6xl">6 hours</div>
                 <p className="mt-3 text-base text-[#64748B]">saved per week</p>
-                <p className="mt-2 text-sm text-[#94A3B8]">vs. traditional grading</p>
+                <p className="mt-2 text-sm text-[#475569]">vs. traditional grading</p>
               </div>
               <div className="text-center">
-                <div className="text-5xl font-bold text-[var(--primary)] md:text-6xl">30 min</div>
+                <div className="text-5xl font-bold text-[var(--primary-strong)] md:text-6xl">30 min</div>
                 <p className="mt-3 text-base text-[#64748B]">to review 90 students</p>
-                <p className="mt-2 text-sm text-[#94A3B8]">with AI-assisted scoring</p>
+                <p className="mt-2 text-sm text-[#475569]">with AI-assisted scoring</p>
               </div>
               <div className="text-center">
-                <div className="text-5xl font-bold text-[var(--primary)] md:text-6xl">10-15%</div>
+                <div className="text-5xl font-bold text-[var(--primary-strong)] md:text-6xl">10-15%</div>
                 <p className="mt-3 text-base text-[#64748B]">need targeted support</p>
-                <p className="mt-2 text-sm text-[#94A3B8]">focus on who matters most</p>
+                <p className="mt-2 text-sm text-[#475569]">focus on who matters most</p>
               </div>
             </div>
           </div>
@@ -304,7 +310,7 @@ export default function Home() {
                     {/* Step Number Circle */}
                     <div className="relative z-10 mx-auto flex h-24 w-24 items-center justify-center">
                       <div 
-                        className="flex h-16 w-16 items-center justify-center rounded-full border-4 border-white font-bold text-white shadow-lg"
+                        className="flex h-16 w-16 items-center justify-center rounded-full border-4 border-white font-bold text-[#0b0f14] shadow-lg"
                         style={{ backgroundColor: step.color }}
                       >
                         <span className="text-2xl">{step.number}</span>
@@ -321,7 +327,7 @@ export default function Home() {
                     
                     {/* Arrow (except last step) */}
                     {idx < 3 && (
-                      <div className="absolute right-0 top-12 hidden -translate-y-1/2 translate-x-1/2 text-2xl text-[#CBD5E1] md:block">
+                      <div className="absolute right-0 top-12 hidden -translate-y-1/2 translate-x-1/2 text-2xl text-[#64748B] md:block">
                         →
                       </div>
                     )}
@@ -333,16 +339,16 @@ export default function Home() {
         </section>
 
         {/* Mid-Page CTA - TEAL ACCENT (NEW) */}
-        <section className="border-b border-[var(--border)] bg-gradient-to-br from-[var(--primary)] to-[#0891b2]">
+        <section className="border-b border-[var(--border)] bg-gradient-to-br from-[var(--primary-strong)] to-[#0e7490]">
           <div className="mx-auto max-w-4xl px-6 py-16 text-center">
             <h3 className="text-3xl font-bold text-white md:text-4xl">Ready to reclaim your time?</h3>
-            <p className="mx-auto mt-4 max-w-2xl text-lg text-white/90">
+            <p className="mx-auto mt-4 max-w-2xl text-lg text-white">
               Join our beta program and get priority onboarding, direct input on features, and founder pricing locked for 3 years.
             </p>
             <div className="mt-8 flex flex-col justify-center gap-4 sm:flex-row">
               <a
                 href="mailto:hello@sayveritas.com?subject=SayVeritas%20Demo%20Request"
-                className="inline-flex h-12 items-center justify-center rounded-md bg-white px-8 text-base font-medium text-[var(--primary)] shadow-lg hover:bg-white/90"
+                className="inline-flex h-12 items-center justify-center rounded-md bg-white px-8 text-base font-medium text-[var(--primary-strong)] shadow-lg hover:bg-white/90"
               >
                 Request Demo
               </a>
@@ -471,7 +477,7 @@ export default function Home() {
                 
                 <div className="flex-1 text-center md:text-left">
                   <p className="text-2xl leading-relaxed text-[#0F172A]">
-                    "Finally, I have time to actually <span className="font-semibold text-[var(--primary)]">teach</span> instead of grade papers. SayVeritas gave me my weekends back."
+                    "Finally, I have time to actually <span className="font-semibold text-[var(--primary-strong)]">teach</span> instead of grade papers. SayVeritas gave me my weekends back."
                   </p>
                   <div className="mt-6">
                     <p className="font-semibold text-[#0F172A]">Sarah M.</p>
@@ -587,7 +593,7 @@ export default function Home() {
 
             <div className="mt-8 text-center text-sm text-[var(--muted)]">
               Want the full breakdown?{" "}
-              <Link className="font-semibold text-[var(--primary)] hover:opacity-90" href="/pricing">
+              <Link className="font-semibold text-[var(--primary)] hover:underline" href="/pricing">
                 See detailed pricing →
               </Link>
             </div>

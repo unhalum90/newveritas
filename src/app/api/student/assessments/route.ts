@@ -35,11 +35,34 @@ export async function GET(request: NextRequest) {
   if (aError) return NextResponse.json({ error: aError.message }, { status: 500 });
 
   const ids = (assessments ?? []).map((a) => a.id);
-  const { data: assets, error: assetError } = ids.length
+  const { data: assignmentRows, error: assignmentError } = ids.length
+    ? await admin
+        .from("assessment_assignments")
+        .select("assessment_id, student_id")
+        .in("assessment_id", ids)
+    : { data: [], error: null };
+
+  if (assignmentError) return NextResponse.json({ error: assignmentError.message }, { status: 500 });
+
+  const assignedByAssessment = new Map<string, Set<string>>();
+  for (const row of assignmentRows ?? []) {
+    const set = assignedByAssessment.get(row.assessment_id) ?? new Set<string>();
+    if (row.student_id) set.add(row.student_id);
+    assignedByAssessment.set(row.assessment_id, set);
+  }
+
+  const visibleAssessments = (assessments ?? []).filter((assessment) => {
+    const assignedStudents = assignedByAssessment.get(assessment.id);
+    if (!assignedStudents || assignedStudents.size === 0) return true;
+    return assignedStudents.has(student.id);
+  });
+
+  const visibleIds = visibleAssessments.map((a) => a.id);
+  const { data: assets, error: assetError } = visibleIds.length
     ? await admin
         .from("assessment_assets")
         .select("assessment_id, asset_url, created_at")
-        .in("assessment_id", ids)
+        .in("assessment_id", visibleIds)
         .eq("asset_type", "image")
         .order("created_at", { ascending: false })
     : { data: [], error: null };
@@ -65,7 +88,7 @@ export async function GET(request: NextRequest) {
   }
 
   const res = NextResponse.json({
-    assessments: (assessments ?? []).map((a) => ({
+    assessments: visibleAssessments.map((a) => ({
       ...a,
       asset_url: assetUrlByAssessment.get(a.id) ?? null,
       latest_submission: latestSubmissionByAssessment.get(a.id) ?? null,

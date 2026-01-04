@@ -15,6 +15,7 @@ function NavLink({ href, label, dataTour }: { href: string; label: string; dataT
     <Link
       href={href}
       data-tour={dataTour}
+      aria-current={active ? "page" : undefined}
       className={`text-sm transition-colors ${
         active
           ? "font-semibold text-[var(--primary)]"
@@ -59,7 +60,7 @@ export function AppHeader() {
         <Link href="/dashboard" className="text-sm font-semibold text-[var(--text)]">
           Veritas
         </Link>
-        <nav className="flex items-center gap-5">
+        <nav className="flex items-center gap-5" aria-label="Primary">
           <NavLink href="/dashboard" label="Dashboard" />
           <NavLink href="/classes" label="Classes" dataTour="nav-classes" />
           <NavLink href="/assessments" label="Assessments" dataTour="nav-assessments" />

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -20,6 +20,12 @@ export function ContactModal({ className, label = "Contact" }: ContactModalProps
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const titleId = useId();
+  const nameRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (open) nameRef.current?.focus();
+  }, [open]);
 
   async function submit() {
     if (loading) return;
@@ -51,6 +57,7 @@ export function ContactModal({ className, label = "Contact" }: ContactModalProps
         type="button"
         className={`bg-transparent p-0 ${className ?? ""}`}
         onClick={() => setOpen(true)}
+        aria-haspopup="dialog"
       >
         {label}
       </button>
@@ -60,11 +67,16 @@ export function ContactModal({ className, label = "Contact" }: ContactModalProps
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-6"
           role="dialog"
           aria-modal="true"
+          aria-labelledby={titleId}
+          tabIndex={-1}
           onClick={() => setOpen(false)}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") setOpen(false);
+          }}
         >
           <Card className="w-full max-w-lg" onClick={(event) => event.stopPropagation()}>
             <CardHeader>
-              <CardTitle>Contact SayVeritas</CardTitle>
+              <CardTitle id={titleId}>Contact SayVeritas</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
@@ -75,6 +87,7 @@ export function ContactModal({ className, label = "Contact" }: ContactModalProps
                   onChange={(event) => setName(event.target.value)}
                   placeholder="Your name"
                   disabled={loading}
+                  ref={nameRef}
                 />
               </div>
               <div className="space-y-2">
@@ -99,8 +112,16 @@ export function ContactModal({ className, label = "Contact" }: ContactModalProps
                   disabled={loading}
                 />
               </div>
-              {error ? <div className="text-sm text-[var(--danger)]">{error}</div> : null}
-              {success ? <div className="text-sm text-[var(--primary)]">{success}</div> : null}
+              {error ? (
+                <div className="text-sm text-[var(--danger)]" role="alert">
+                  {error}
+                </div>
+              ) : null}
+              {success ? (
+                <div className="text-sm text-[var(--primary)]" role="status" aria-live="polite">
+                  {success}
+                </div>
+              ) : null}
               <div className="flex justify-end gap-3">
                 <Button type="button" variant="secondary" onClick={() => setOpen(false)} disabled={loading}>
                   Cancel

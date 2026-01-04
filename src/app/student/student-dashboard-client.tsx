@@ -135,7 +135,7 @@ export function StudentDashboardClient() {
               <Card key={a.id} className="overflow-hidden">
                 {a.asset_url ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={a.asset_url} alt="" className="h-40 w-full object-cover" />
+                  <img src={a.asset_url} alt={`${a.title} cover`} className="h-40 w-full object-cover" />
                 ) : null}
                 <CardHeader>
                   <CardTitle>{a.title}</CardTitle>

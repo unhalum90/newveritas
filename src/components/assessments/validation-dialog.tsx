@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useId, useRef } from "react";
+
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { ValidationError } from "@/lib/validation/assessment-validator";
@@ -11,13 +13,29 @@ type ValidationDialogProps = {
 };
 
 export function ValidationDialog({ open, errors, onClose }: ValidationDialogProps) {
+  const titleId = useId();
+  const closeRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    if (open) closeRef.current?.focus();
+  }, [open]);
+
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-6">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-6"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={titleId}
+      tabIndex={-1}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") onClose();
+      }}
+    >
       <Card className="w-full max-w-lg">
         <CardHeader>
-          <CardTitle>Fix issues before publishing</CardTitle>
+          <CardTitle id={titleId}>Fix issues before publishing</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-[var(--muted)]">
@@ -31,7 +49,7 @@ export function ValidationDialog({ open, errors, onClose }: ValidationDialogProp
             ))}
           </ul>
           <div className="flex justify-end">
-            <Button type="button" onClick={onClose}>
+            <Button type="button" onClick={onClose} ref={closeRef}>
               Fix Issues
             </Button>
           </div>

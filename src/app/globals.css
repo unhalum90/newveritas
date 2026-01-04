@@ -8,6 +8,7 @@
   --text: #0f172a; /* slate-900 */
   --muted: #52525b; /* zinc-600 */
   --primary: #0f766e; /* teal-700 */
+  --primary-strong: #0f766e; /* teal-700 */
   --danger: #dc2626; /* red-600 */
 
   /* Typography scale */
@@ -39,6 +40,7 @@
   --text: #e5e7eb;
   --muted: #9ca3af;
   --primary: #14b8a6; /* teal */
+  --primary-strong: #0f766e; /* teal-700 */
   --danger: #fb7185; /* rose-400 */
 }
 
@@ -50,6 +52,7 @@
   --text: #0f172a; /* slate-900 */
   --muted: #52525b; /* zinc-600 */
   --primary: #0f766e; /* teal-700 */
+  --primary-strong: #0f766e; /* teal-700 */
   --danger: #dc2626; /* red-600 */
 }
 
@@ -69,6 +72,7 @@
     --text: #e5e7eb; /* gray-200 */
     --muted: #a1a1aa; /* zinc-400 */
     --primary: #14b8a6; /* teal-500 */
+    --primary-strong: #0f766e; /* teal-700 */
     --danger: #fb7185; /* rose-400 */
   }
 }

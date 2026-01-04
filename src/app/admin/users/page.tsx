@@ -146,7 +146,7 @@ export default async function AdminUsersPage({
           <form id="admin-user-search" method="get" className="flex items-center gap-2">
             <button
               type="submit"
-              className="rounded-md bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90"
+              className="rounded-md bg-[var(--primary-strong)] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[color-mix(in_oklab,var(--primary-strong),black_12%)]"
             >
               Search
             </button>
@@ -309,7 +309,7 @@ export default async function AdminUsersPage({
                 />
                 <button
                   type="submit"
-                  className="w-full rounded-md bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90"
+                  className="w-full rounded-md bg-[var(--primary-strong)] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[color-mix(in_oklab,var(--primary-strong),black_12%)]"
                 >
                   Apply Adjustment
                 </button>

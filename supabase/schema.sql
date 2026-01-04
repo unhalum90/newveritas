@@ -360,6 +360,56 @@ using (
   )
 );
 
+-- Assessment assignments (optional per-student targeting within a class)
+create table if not exists public.assessment_assignments (
+  assessment_id uuid references public.assessments(id) on delete cascade,
+  student_id uuid references public.students(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (assessment_id, student_id)
+);
+
+create index if not exists assessment_assignments_assessment_id_idx on public.assessment_assignments(assessment_id);
+create index if not exists assessment_assignments_student_id_idx on public.assessment_assignments(student_id);
+
+alter table public.assessment_assignments enable row level security;
+
+drop policy if exists "Assessment assignments scoped to teacher" on public.assessment_assignments;
+create policy "Assessment assignments scoped to teacher"
+on public.assessment_assignments
+for select
+using (
+  assessment_id in (
+    select a.id
+    from public.assessments a
+    join public.classes c on c.id = a.class_id
+    join public.teachers t on t.workspace_id = c.workspace_id
+    where t.user_id = auth.uid()
+  )
+);
+
+drop policy if exists "Teachers can manage assessment assignments" on public.assessment_assignments;
+create policy "Teachers can manage assessment assignments"
+on public.assessment_assignments
+for all
+using (
+  assessment_id in (
+    select a.id
+    from public.assessments a
+    join public.classes c on c.id = a.class_id
+    join public.teachers t on t.workspace_id = c.workspace_id
+    where t.user_id = auth.uid()
+  )
+)
+with check (
+  assessment_id in (
+    select a.id
+    from public.assessments a
+    join public.classes c on c.id = a.class_id
+    join public.teachers t on t.workspace_id = c.workspace_id
+    where t.user_id = auth.uid()
+  )
+);
+
 -- Optional metadata for uploads/AI prompts
 create table if not exists public.assessment_sources (
   id uuid primary key default gen_random_uuid(),
