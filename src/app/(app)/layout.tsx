@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import { AppHeader } from "@/components/app/app-header";
+import { AppShell } from "@/components/app/app-shell";
 import { DisabledAccount } from "@/components/auth/disabled-account";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -96,53 +96,24 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   if (teacher?.disabled) {
     return (
-      <div className="veritas-wizard min-h-screen bg-[var(--background)] text-[var(--text)]">
-        <a
-          href="#main-content"
-          className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-[var(--surface)] focus:px-3 focus:py-2 focus:text-sm focus:text-[var(--text)]"
-        >
-          Skip to main content
-        </a>
-        <AppHeader />
-        <main id="main-content" className="mx-auto max-w-6xl px-6 py-10">
-          <DisabledAccount />
-        </main>
-      </div>
+      <AppShell>
+        <DisabledAccount />
+      </AppShell>
     );
   }
 
   if (!teacher || !teacher.workspace_id) {
     return (
-      <div className="veritas-wizard min-h-screen bg-[var(--background)] text-[var(--text)]">
-        <a
-          href="#main-content"
-          className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-[var(--surface)] focus:px-3 focus:py-2 focus:text-sm focus:text-[var(--text)]"
-        >
-          Skip to main content
-        </a>
-        <AppHeader />
-        <main id="main-content" className="mx-auto max-w-4xl px-6 py-12">
-          <div className="rounded-2xl border border-white/10 bg-[rgba(15,23,42,0.5)] p-6 text-sm text-[var(--muted)]">
-            We couldn&apos;t finalize your workspace. Refresh this page or contact support and we&apos;ll
-            fix it quickly.
-          </div>
-        </main>
-      </div>
+      <AppShell mainClassName="mx-auto max-w-4xl px-6 py-12">
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 text-sm text-[var(--muted)]">
+          We couldn&apos;t finalize your workspace. Refresh this page or contact support and we&apos;ll
+          fix it quickly.
+        </div>
+      </AppShell>
     );
   }
 
   return (
-    <div className="veritas-wizard min-h-screen bg-[var(--background)] text-[var(--text)]">
-      <a
-        href="#main-content"
-        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-[var(--surface)] focus:px-3 focus:py-2 focus:text-sm focus:text-[var(--text)]"
-      >
-        Skip to main content
-      </a>
-      <AppHeader />
-      <main id="main-content" className="mx-auto max-w-6xl px-6 py-10">
-        {children}
-      </main>
-    </div>
+    <AppShell>{children}</AppShell>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,6 +23,20 @@ export default function SettingsPage() {
   const [defaultTabSwitchMonitor, setDefaultTabSwitchMonitor] = useState(true);
   const [defaultShuffleQuestions, setDefaultShuffleQuestions] = useState(true);
   const [defaultPledgeEnabled, setDefaultPledgeEnabled] = useState(true);
+  const [standardsEnabled, setStandardsEnabled] = useState(false);
+  const [standardsSets, setStandardsSets] = useState<
+    Array<{
+      id: string;
+      key: string;
+      title: string;
+      subject?: string | null;
+      active?: boolean | null;
+      enabled: boolean;
+    }>
+  >([]);
+  const [standardsLoading, setStandardsLoading] = useState(false);
+  const [standardsSaving, setStandardsSaving] = useState(false);
+  const [standardsError, setStandardsError] = useState<string | null>(null);
 
   const initials = (displayName || email || "Teacher")
     .split(" ")
@@ -30,6 +44,65 @@ export default function SettingsPage() {
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase() ?? "")
     .join("");
+
+  useEffect(() => {
+    let active = true;
+    setStandardsLoading(true);
+    setStandardsError(null);
+    fetch("/api/standards/teacher", { cache: "no-store" })
+      .then(async (res) => {
+        const data = (await res.json().catch(() => null)) as
+          | {
+              enabled?: boolean;
+              sets?: Array<{ id: string; key: string; title: string; subject?: string | null; active?: boolean | null; enabled?: boolean }>;
+              error?: string;
+            }
+          | null;
+        if (!active) return;
+        if (!res.ok) {
+          const message = data && typeof data.error === "string" ? data.error : "Unable to load standards.";
+          throw new Error(message);
+        }
+        setStandardsEnabled(Boolean(data?.enabled));
+        const sets = (data?.sets ?? []).map((set) => ({
+          ...set,
+          enabled: Boolean(set.enabled),
+        }));
+        setStandardsSets(sets);
+      })
+      .catch((err) => {
+        if (!active) return;
+        setStandardsError(err instanceof Error ? err.message : "Unable to load standards.");
+      })
+      .finally(() => {
+        if (active) setStandardsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  async function saveStandardsSettings() {
+    setStandardsSaving(true);
+    setStandardsError(null);
+    try {
+      const enabledSetIds = standardsSets.filter((set) => set.enabled).map((set) => set.id);
+      const res = await fetch("/api/standards/teacher", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          standards_enabled: standardsEnabled,
+          enabled_set_ids: enabledSetIds,
+        }),
+      });
+      const data = (await res.json().catch(() => null)) as { error?: string } | null;
+      if (!res.ok) throw new Error(data?.error ?? "Unable to save standards settings.");
+    } catch (err) {
+      setStandardsError(err instanceof Error ? err.message : "Unable to save standards settings.");
+    } finally {
+      setStandardsSaving(false);
+    }
+  }
 
   function handlePresetChange(value: string) {
     setDefaultPreset(value);
@@ -266,6 +339,83 @@ export default function SettingsPage() {
               onCheckedChange={setDefaultPledgeEnabled}
               aria-label="Academic integrity pledge"
             />
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Standards</CardTitle>
+          <CardDescription>Enable standards tagging and choose which frameworks to use.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <div className="text-sm font-medium text-[var(--text)]">Standards tagging</div>
+              <div className="text-xs text-[var(--muted)]">Allow question-level standards tagging in the builder.</div>
+            </div>
+            <Switch
+              checked={standardsEnabled}
+              onCheckedChange={setStandardsEnabled}
+              aria-label="Standards tagging"
+            />
+          </div>
+
+          {standardsEnabled ? (
+            <div className="space-y-3">
+              <div className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--muted)]">
+                Available standards
+              </div>
+              {standardsSets.length ? (
+                <div className="grid gap-3 md:grid-cols-2">
+                  {standardsSets.map((set) => (
+                    <label
+                      key={set.id}
+                      className={`flex items-start gap-3 rounded-md border border-[var(--border)] bg-[var(--surface)] p-3 ${
+                        set.active === false ? "opacity-60" : ""
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        className="mt-1 h-4 w-4"
+                        disabled={standardsLoading || set.active === false}
+                        checked={set.enabled}
+                        onChange={(event) => {
+                          const checked = event.target.checked;
+                          setStandardsSets((prev) =>
+                            prev.map((item) => (item.id === set.id ? { ...item, enabled: checked } : item)),
+                          );
+                        }}
+                      />
+                      <div>
+                        <div className="text-sm font-medium text-[var(--text)]">{set.title}</div>
+                        <div className="text-xs text-[var(--muted)]">
+                          {set.subject ? `Subject: ${set.subject}` : "Subject: General"}
+                        </div>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-sm text-[var(--muted)]">No standards sets found.</div>
+              )}
+            </div>
+          ) : (
+            <div className="text-xs text-[var(--muted)]">
+              Turn this on to select standards frameworks.
+            </div>
+          )}
+
+          {standardsError ? (
+            <div className="text-sm text-[var(--danger)]" role="alert">
+              {standardsError}
+            </div>
+          ) : null}
+
+          <div className="flex items-center justify-end">
+            <Button type="button" disabled={standardsSaving || standardsLoading} onClick={saveStandardsSettings}>
+              {standardsSaving ? "Saving…" : "Save Standards"}
+            </Button>
           </div>
         </CardContent>
       </Card>

@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
 function NavLink({ href, label, dataTour }: { href: string; label: string; dataTour?: string }) {
@@ -27,7 +28,14 @@ function NavLink({ href, label, dataTour }: { href: string; label: string; dataT
   );
 }
 
-export function AppHeader() {
+type ThemeMode = "dark" | "light";
+
+type AppHeaderProps = {
+  theme?: ThemeMode;
+  onThemeChange?: (theme: ThemeMode) => void;
+};
+
+export function AppHeader({ theme = "dark", onThemeChange }: AppHeaderProps) {
   const router = useRouter();
   const [teacherLabel, setTeacherLabel] = useState<string | null>(null);
 
@@ -66,6 +74,17 @@ export function AppHeader() {
           <NavLink href="/assessments" label="Assessments" dataTour="nav-assessments" />
           <NavLink href="/help" label="Help" dataTour="nav-help" />
           <NavLink href="/settings" label="Settings" />
+          {onThemeChange ? (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-[var(--muted)]">Theme</span>
+              <Switch
+                checked={theme === "dark"}
+                onCheckedChange={(checked) => onThemeChange(checked ? "dark" : "light")}
+                aria-label="Toggle dark mode"
+              />
+              <span className="text-xs text-[var(--muted)]">{theme === "dark" ? "Dark" : "Light"}</span>
+            </div>
+          ) : null}
           {teacherLabel ? <span className="text-sm text-[var(--muted)]">{teacherLabel}</span> : null}
           <Button
             variant="ghost"

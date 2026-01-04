@@ -47,6 +47,22 @@ type Question = {
   evidence_upload?: "disabled" | "optional" | "required";
   blooms_level?: string | null;
   order_index: number;
+  standards?: StandardNode[];
+};
+
+type StandardsSet = {
+  id: string;
+  key: string;
+  title: string;
+  subject?: string | null;
+};
+
+type StandardNode = {
+  id: string;
+  code: string;
+  description: string | null;
+  set_id?: string | null;
+  standards_sets?: { key?: string | null; title?: string | null; subject?: string | null } | null;
 };
 
 type AssessmentAsset = {
@@ -98,6 +114,12 @@ type TemplateSummary = {
   blooms_level_avg: string | null;
   description: string | null;
   question_count: number;
+};
+
+type QuestionResponse = Question & {
+  assessment_question_standards?: Array<{
+    standards_nodes?: StandardNode | null;
+  }>;
 };
 
 function getErrorMessage(payload: unknown) {
@@ -217,11 +239,19 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
   const [newQuestionTypePreset, setNewQuestionTypePreset] = useState<string>(QUESTION_TYPE_OPTIONS[0].value);
   const [newQuestionTypeCustom, setNewQuestionTypeCustom] = useState("");
   const [newQuestionBloom, setNewQuestionBloom] = useState<string>("understand");
+  const [newQuestionStandards, setNewQuestionStandards] = useState<StandardNode[]>([]);
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
   const [editingQuestionText, setEditingQuestionText] = useState("");
   const [editingQuestionTypePreset, setEditingQuestionTypePreset] = useState<string>(QUESTION_TYPE_OPTIONS[0].value);
   const [editingQuestionTypeCustom, setEditingQuestionTypeCustom] = useState("");
   const [editingQuestionBloom, setEditingQuestionBloom] = useState<string>("understand");
+  const [editingQuestionStandards, setEditingQuestionStandards] = useState<StandardNode[]>([]);
+  const [standardsEnabled, setStandardsEnabled] = useState(false);
+  const [enabledStandardsSets, setEnabledStandardsSets] = useState<StandardsSet[]>([]);
+  const [standardsSearch, setStandardsSearch] = useState("");
+  const [standardsResults, setStandardsResults] = useState<StandardNode[]>([]);
+  const [standardsLoading, setStandardsLoading] = useState(false);
+  const [standardsError, setStandardsError] = useState<string | null>(null);
   const [rubrics, setRubrics] = useState<Record<RubricType, Rubric | null>>({
     reasoning: null,
     evidence: null,
@@ -324,11 +354,95 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
     })();
   }, [assessment?.authoring_mode, templates.length, templatesLoading]);
 
+  useEffect(() => {
+    let active = true;
+    setStandardsError(null);
+    fetch("/api/standards/teacher", { cache: "no-store" })
+      .then(async (res) => {
+        const data = (await res.json().catch(() => null)) as
+          | {
+              enabled?: boolean;
+              sets?: Array<StandardsSet & { enabled?: boolean }>;
+              error?: string;
+            }
+          | null;
+        if (!active) return;
+        if (!res.ok) {
+          const message = data && typeof data.error === "string" ? data.error : "Unable to load standards.";
+          throw new Error(message);
+        }
+        setStandardsEnabled(Boolean(data?.enabled));
+        const enabledSets = (data?.sets ?? []).filter((set) => set.enabled);
+        setEnabledStandardsSets(enabledSets);
+      })
+      .catch((err) => {
+        if (!active) return;
+        setStandardsError(err instanceof Error ? err.message : "Unable to load standards.");
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const standardsSubjectFilter = useMemo(() => {
+    const subject = (assessment?.subject ?? "").toLowerCase();
+    if (!subject) return "";
+    if (subject.includes("language arts") || subject.includes("literature")) return "ELA";
+    if (subject.includes("math")) return "Math";
+    if (subject.includes("science")) return "Science";
+    if (subject.includes("history")) return "History";
+    if (subject.includes("language")) return "World Languages";
+    return "";
+  }, [assessment?.subject]);
+
+  const hasStandardsAccess = standardsEnabled && enabledStandardsSets.length > 0;
+
+  async function searchStandards() {
+    if (!hasStandardsAccess) return;
+    const query = standardsSearch.trim();
+    if (query.length < 2) {
+      setStandardsResults([]);
+      return;
+    }
+    setStandardsLoading(true);
+    setStandardsError(null);
+    try {
+      const params = new URLSearchParams({ q: query, limit: "50" });
+      if (standardsSubjectFilter) params.set("subject", standardsSubjectFilter);
+      const data = await jsonFetch<{ nodes: StandardNode[] }>(`/api/standards/nodes?${params.toString()}`, {
+        cache: "no-store",
+      });
+      setStandardsResults(data.nodes ?? []);
+    } catch (err) {
+      setStandardsError(err instanceof Error ? err.message : "Unable to load standards.");
+    } finally {
+      setStandardsLoading(false);
+    }
+  }
+
+  function addStandard(target: "new" | "edit", standard: StandardNode) {
+    if (target === "new") {
+      setNewQuestionStandards((prev) => (prev.some((item) => item.id === standard.id) ? prev : [...prev, standard]));
+      return;
+    }
+    setEditingQuestionStandards((prev) =>
+      prev.some((item) => item.id === standard.id) ? prev : [...prev, standard],
+    );
+  }
+
+  function removeStandard(target: "new" | "edit", standardId: string) {
+    if (target === "new") {
+      setNewQuestionStandards((prev) => prev.filter((item) => item.id !== standardId));
+      return;
+    }
+    setEditingQuestionStandards((prev) => prev.filter((item) => item.id !== standardId));
+  }
+
   const load = useCallback(async () => {
     setError(null);
     const [data, q, assetResult, audioResult, documentResult, rubricsResult, assignmentsResult] = await Promise.all([
       jsonFetch<{ assessment: Assessment }>(`/api/assessments/${assessmentId}`, { cache: "no-store" }),
-      jsonFetch<{ questions: Question[] }>(`/api/assessments/${assessmentId}/questions`, { cache: "no-store" }),
+      jsonFetch<{ questions: QuestionResponse[] }>(`/api/assessments/${assessmentId}/questions`, { cache: "no-store" }),
       jsonFetch<{ asset: AssessmentAsset | null }>(`/api/assessments/${assessmentId}/asset`, { cache: "no-store" }).catch(
         () => ({ asset: null }),
       ),
@@ -346,8 +460,14 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
 
     setAssessment(data.assessment);
 
-    setQuestions(q.questions);
-    setQuestionsCount(q.questions.length);
+    const hydratedQuestions = (q.questions ?? []).map((question) => ({
+      ...question,
+      standards: (question.assessment_question_standards ?? [])
+        .map((row) => row.standards_nodes)
+        .filter(Boolean) as StandardNode[],
+    }));
+    setQuestions(hydratedQuestions);
+    setQuestionsCount(hydratedQuestions.length);
 
     setAssetUrl(assetResult.asset?.asset_url ?? "");
     setAssetPrompt(assetResult.asset?.generation_prompt ?? "");
@@ -951,7 +1071,7 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
     try {
       const questionType =
         newQuestionTypePreset === CUSTOM_QUESTION_TYPE ? newQuestionTypeCustom.trim() : newQuestionTypePreset;
-      await jsonFetch(`/api/assessments/${assessmentId}/questions`, {
+      const created = await jsonFetch<{ ok: boolean; id: string }>(`/api/assessments/${assessmentId}/questions`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -960,10 +1080,14 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
           blooms_level: newQuestionBloom || null,
         }),
       });
+      if (standardsEnabled && newQuestionStandards.length) {
+        await persistQuestionStandards(created.id, newQuestionStandards);
+      }
       setNewQuestionText("");
       setNewQuestionTypePreset(QUESTION_TYPE_OPTIONS[0].value);
       setNewQuestionTypeCustom("");
       setNewQuestionBloom("understand");
+      setNewQuestionStandards([]);
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Save failed.");
@@ -979,6 +1103,7 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
     setEditingQuestionTypePreset(next.preset);
     setEditingQuestionTypeCustom(next.custom);
     setEditingQuestionBloom(q.blooms_level ?? "understand");
+    setEditingQuestionStandards(q.standards ?? []);
   }
 
   async function saveEditedQuestion() {
@@ -997,13 +1122,25 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
           blooms_level: editingQuestionBloom || null,
         }),
       });
+      if (standardsEnabled) {
+        await persistQuestionStandards(editingQuestionId, editingQuestionStandards);
+      }
       setEditingQuestionId(null);
+      setEditingQuestionStandards([]);
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Save failed.");
     } finally {
       setSaving(false);
     }
+  }
+
+  async function persistQuestionStandards(questionId: string, standards: StandardNode[]) {
+    await jsonFetch(`/api/questions/${questionId}/standards`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ standard_ids: standards.map((item) => item.id) }),
+    });
   }
 
   async function updateEvidenceUpload(questionId: string, evidence_upload: "disabled" | "optional" | "required") {
@@ -1659,7 +1796,7 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
                       disabled={readonly}
                     >
                       <option value="">Select…</option>
-                      {["History", "Science", "Literature", "Math", "Language Arts", "Other"].map((v) => (
+                      {["History", "Science", "Literature", "Math", "Language Arts", "World Languages", "Other"].map((v) => (
                         <option key={v} value={v}>
                           {v}
                         </option>
@@ -1984,7 +2121,15 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
                               <div className="flex items-center gap-2">
                                 {editing ? (
                                   <>
-                                    <Button type="button" variant="secondary" disabled={saving} onClick={() => setEditingQuestionId(null)}>
+                                    <Button
+                                      type="button"
+                                      variant="secondary"
+                                      disabled={saving}
+                                      onClick={() => {
+                                        setEditingQuestionId(null);
+                                        setEditingQuestionStandards([]);
+                                      }}
+                                    >
                                       Cancel
                                     </Button>
                                     <Button type="button" disabled={saving || !editingQuestionText.trim()} onClick={saveEditedQuestion}>
@@ -2082,6 +2227,75 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
                                       <p className="text-xs text-[var(--muted)]">Students can upload a photo of their work before recording.</p>
                                     </div>
                                   </div>
+                                  {standardsEnabled ? (
+                                    <div className="space-y-2">
+                                      <div className="text-sm font-medium text-[var(--text)]">Standards</div>
+                                      {enabledStandardsSets.length ? (
+                                        <>
+                                          {editingQuestionStandards.length ? (
+                                            <div className="flex flex-wrap gap-2">
+                                              {editingQuestionStandards.map((standard) => (
+                                                <button
+                                                  key={standard.id}
+                                                  type="button"
+                                                  className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--background)] px-3 py-1 text-xs text-[var(--text)]"
+                                                  onClick={() => removeStandard("edit", standard.id)}
+                                                >
+                                                  <span>{standard.code}</span>
+                                                  <span className="text-[var(--muted)]">×</span>
+                                                </button>
+                                              ))}
+                                            </div>
+                                          ) : (
+                                            <div className="text-xs text-[var(--muted)]">No standards selected.</div>
+                                          )}
+                                          <div className="flex flex-wrap items-center gap-2">
+                                            <Input
+                                              value={standardsSearch}
+                                              onChange={(event) => setStandardsSearch(event.target.value)}
+                                              placeholder="Search standards (e.g., L.K.1 or grammar)"
+                                            />
+                                            <Button type="button" variant="secondary" disabled={standardsLoading} onClick={searchStandards}>
+                                              {standardsLoading ? "Searching…" : "Search"}
+                                            </Button>
+                                          </div>
+                                          {standardsSubjectFilter ? (
+                                            <div className="text-xs text-[var(--muted)]">
+                                              Filtered by subject: {standardsSubjectFilter}
+                                            </div>
+                                          ) : (
+                                            <div className="text-xs text-[var(--muted)]">Select a subject in Step 2 to filter standards.</div>
+                                          )}
+                                          {standardsResults.length ? (
+                                            <div className="max-h-48 space-y-2 overflow-auto rounded-md border border-[var(--border)] bg-[var(--surface)] p-2">
+                                              {standardsResults.map((standard) => (
+                                                <div key={standard.id} className="flex items-start justify-between gap-3">
+                                                  <div>
+                                                    <div className="text-xs font-semibold text-[var(--text)]">{standard.code}</div>
+                                                    <div className="text-xs text-[var(--muted)]">{standard.description}</div>
+                                                  </div>
+                                                  <Button type="button" variant="secondary" onClick={() => addStandard("edit", standard)}>
+                                                    Add
+                                                  </Button>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          ) : (
+                                            <div className="text-xs text-[var(--muted)]">
+                                              Search to find standards in your enabled frameworks.
+                                            </div>
+                                          )}
+                                        </>
+                                      ) : (
+                                        <div className="text-xs text-[var(--muted)]">Enable at least one standards set in Settings.</div>
+                                      )}
+                                      {standardsError ? (
+                                        <div className="text-xs text-[var(--danger)]" role="alert">
+                                          {standardsError}
+                                        </div>
+                                      ) : null}
+                                    </div>
+                                  ) : null}
                                 </>
                               ) : (
                                 <div className="space-y-2">
@@ -2106,6 +2320,25 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
                                       </Button>
                                     </div>
                                   </div>
+                                  {standardsEnabled ? (
+                                    <div className="space-y-1">
+                                      <div className="text-xs text-[var(--muted)]">Standards</div>
+                                      {q.standards && q.standards.length ? (
+                                        <div className="flex flex-wrap gap-2">
+                                          {q.standards.map((standard) => (
+                                            <span
+                                              key={standard.id}
+                                              className="rounded-full border border-[var(--border)] bg-[var(--background)] px-2 py-1 text-xs text-[var(--text)]"
+                                            >
+                                              {standard.code}
+                                            </span>
+                                          ))}
+                                        </div>
+                                      ) : (
+                                        <div className="text-xs text-[var(--muted)]">No standards selected.</div>
+                                      )}
+                                    </div>
+                                  ) : null}
                                 </div>
                               )}
                             </div>
@@ -2179,7 +2412,15 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
                           )}
                         </div>
                         <div className="flex items-end justify-end gap-2">
-                          <Button type="button" variant="secondary" disabled={saving} onClick={() => setAddingQuestion(false)}>
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            disabled={saving}
+                            onClick={() => {
+                              setAddingQuestion(false);
+                              setNewQuestionStandards([]);
+                            }}
+                          >
                             Cancel
                           </Button>
                           <Button
@@ -2194,6 +2435,75 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
                           </Button>
                         </div>
                       </div>
+                      {standardsEnabled ? (
+                        <div className="space-y-2">
+                          <div className="text-sm font-medium text-[var(--text)]">Standards</div>
+                          {enabledStandardsSets.length ? (
+                            <>
+                              {newQuestionStandards.length ? (
+                                <div className="flex flex-wrap gap-2">
+                                  {newQuestionStandards.map((standard) => (
+                                    <button
+                                      key={standard.id}
+                                      type="button"
+                                      className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--background)] px-3 py-1 text-xs text-[var(--text)]"
+                                      onClick={() => removeStandard("new", standard.id)}
+                                    >
+                                      <span>{standard.code}</span>
+                                      <span className="text-[var(--muted)]">×</span>
+                                    </button>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="text-xs text-[var(--muted)]">No standards selected.</div>
+                              )}
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Input
+                                  value={standardsSearch}
+                                  onChange={(event) => setStandardsSearch(event.target.value)}
+                                  placeholder="Search standards (e.g., L.K.1 or grammar)"
+                                />
+                                <Button type="button" variant="secondary" disabled={standardsLoading} onClick={searchStandards}>
+                                  {standardsLoading ? "Searching…" : "Search"}
+                                </Button>
+                              </div>
+                              {standardsSubjectFilter ? (
+                                <div className="text-xs text-[var(--muted)]">
+                                  Filtered by subject: {standardsSubjectFilter}
+                                </div>
+                              ) : (
+                                <div className="text-xs text-[var(--muted)]">Select a subject in Step 2 to filter standards.</div>
+                              )}
+                              {standardsResults.length ? (
+                                <div className="max-h-48 space-y-2 overflow-auto rounded-md border border-[var(--border)] bg-[var(--surface)] p-2">
+                                  {standardsResults.map((standard) => (
+                                    <div key={standard.id} className="flex items-start justify-between gap-3">
+                                      <div>
+                                        <div className="text-xs font-semibold text-[var(--text)]">{standard.code}</div>
+                                        <div className="text-xs text-[var(--muted)]">{standard.description}</div>
+                                      </div>
+                                      <Button type="button" variant="secondary" onClick={() => addStandard("new", standard)}>
+                                        Add
+                                      </Button>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="text-xs text-[var(--muted)]">
+                                  Search to find standards in your enabled frameworks.
+                                </div>
+                              )}
+                            </>
+                          ) : (
+                            <div className="text-xs text-[var(--muted)]">Enable at least one standards set in Settings.</div>
+                          )}
+                          {standardsError ? (
+                            <div className="text-xs text-[var(--danger)]" role="alert">
+                              {standardsError}
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
                     </div>
                   </div>
                 ) : (

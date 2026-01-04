@@ -14,6 +14,7 @@ create table if not exists public.teachers (
   teaching_level text,
   onboarding_stage text not null default '0',
   disabled boolean not null default false,
+  standards_tagging_enabled boolean not null default false,
   school_id uuid,
   workspace_id uuid,
   created_at timestamptz not null default now(),
@@ -26,6 +27,7 @@ create index if not exists teachers_user_id_idx on public.teachers(user_id);
 alter table public.teachers add column if not exists school_id uuid;
 alter table public.teachers add column if not exists workspace_id uuid;
 alter table public.teachers add column if not exists disabled boolean not null default false;
+alter table public.teachers add column if not exists standards_tagging_enabled boolean not null default false;
 
 create or replace function public.set_updated_at()
 returns trigger
@@ -711,6 +713,132 @@ with check (
     join public.classes c on c.id = a.class_id
     join public.teachers t on t.workspace_id = c.workspace_id
     where r.id = rubric_id and a.status = 'draft' and t.user_id = auth.uid()
+  )
+);
+
+-- =========================
+-- Standards: Question-level tagging
+-- =========================
+
+create table if not exists public.standards_sets (
+  id uuid primary key default gen_random_uuid(),
+  key text not null unique,
+  title text not null,
+  subject text,
+  jurisdiction text,
+  organization text,
+  version text,
+  description text,
+  source_url text,
+  license text,
+  active boolean not null default true,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.standards_nodes (
+  id uuid primary key default gen_random_uuid(),
+  set_id uuid not null references public.standards_sets(id) on delete cascade,
+  code text not null,
+  title text,
+  description text,
+  node_type text not null default 'standard', -- standard | substandard | strand | domain
+  parent_code text,
+  sort_order int,
+  metadata jsonb,
+  created_at timestamptz not null default now()
+);
+
+create unique index if not exists standards_nodes_set_code_uq
+on public.standards_nodes(set_id, code);
+
+create index if not exists standards_nodes_set_id_idx on public.standards_nodes(set_id);
+create index if not exists standards_nodes_parent_code_idx on public.standards_nodes(parent_code);
+
+alter table public.standards_sets enable row level security;
+alter table public.standards_nodes enable row level security;
+
+drop policy if exists "Standards sets readable" on public.standards_sets;
+create policy "Standards sets readable"
+on public.standards_sets
+for select
+to authenticated
+using (true);
+
+drop policy if exists "Standards nodes readable" on public.standards_nodes;
+create policy "Standards nodes readable"
+on public.standards_nodes
+for select
+to authenticated
+using (true);
+
+create table if not exists public.teacher_enabled_standards (
+  teacher_id uuid not null references public.teachers(id) on delete cascade,
+  standards_set_id uuid not null references public.standards_sets(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (teacher_id, standards_set_id)
+);
+
+create index if not exists teacher_enabled_standards_set_idx
+on public.teacher_enabled_standards(standards_set_id);
+
+alter table public.teacher_enabled_standards enable row level security;
+
+drop policy if exists "Teacher enabled standards scoped to teacher" on public.teacher_enabled_standards;
+create policy "Teacher enabled standards scoped to teacher"
+on public.teacher_enabled_standards
+for all
+using (
+  teacher_id in (
+    select t.id
+    from public.teachers t
+    where t.user_id = auth.uid()
+  )
+)
+with check (
+  teacher_id in (
+    select t.id
+    from public.teachers t
+    where t.user_id = auth.uid()
+  )
+);
+
+create table if not exists public.assessment_question_standards (
+  question_id uuid not null references public.assessment_questions(id) on delete cascade,
+  standard_id uuid not null references public.standards_nodes(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (question_id, standard_id)
+);
+
+create index if not exists assessment_question_standards_question_idx
+on public.assessment_question_standards(question_id);
+
+create index if not exists assessment_question_standards_standard_idx
+on public.assessment_question_standards(standard_id);
+
+alter table public.assessment_question_standards enable row level security;
+
+drop policy if exists "Assessment question standards scoped to teacher" on public.assessment_question_standards;
+create policy "Assessment question standards scoped to teacher"
+on public.assessment_question_standards
+for all
+using (
+  exists (
+    select 1
+    from public.assessment_questions q
+    join public.assessments a on a.id = q.assessment_id
+    join public.classes c on c.id = a.class_id
+    join public.teachers t on t.workspace_id = c.workspace_id
+    where q.id = question_id and t.user_id = auth.uid()
+  )
+)
+with check (
+  exists (
+    select 1
+    from public.assessment_questions q
+    join public.assessments a on a.id = q.assessment_id
+    join public.classes c on c.id = a.class_id
+    join public.teachers t on t.workspace_id = c.workspace_id
+    where q.id = question_id and t.user_id = auth.uid()
   )
 );
 

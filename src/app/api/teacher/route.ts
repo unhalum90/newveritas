@@ -63,6 +63,7 @@ const patchSchema = z.object({
   teaching_level: z.string().min(1).optional().nullable(),
   school_name: z.string().min(1).optional(),
   onboarding_stage: z.enum(["0", "1", "2", "COMPLETE"]).optional(),
+  standards_tagging_enabled: z.boolean().optional(),
 });
 
 export async function PATCH(request: NextRequest) {

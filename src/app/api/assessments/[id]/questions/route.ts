@@ -12,7 +12,9 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
 
   const { data: questions, error: listError } = await supabase
     .from("assessment_questions")
-    .select("id, assessment_id, question_text, question_type, blooms_level, evidence_upload, order_index, created_at")
+    .select(
+      "id, assessment_id, question_text, question_type, blooms_level, evidence_upload, order_index, created_at, assessment_question_standards(standard_id, standards_nodes(id, code, description))",
+    )
     .eq("assessment_id", assessmentId)
     .order("order_index", { ascending: true });
 
