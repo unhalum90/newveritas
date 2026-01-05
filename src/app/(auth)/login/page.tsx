@@ -104,10 +104,11 @@ export default function LoginPage() {
             </div>
           </form>
           <div className="mt-4 text-center text-sm text-[var(--muted)]">
-            Don&apos;t have an account?{" "}
-            <Link href="/signup" className="text-[var(--text)] hover:underline">
-              Sign up
+            Need access?{" "}
+            <Link href="/#waitlist" className="text-[var(--text)] hover:underline">
+              Join the waitlist
             </Link>
+            .
           </div>
           <div className="mt-2 text-center text-sm text-[var(--muted)]">
             Student?{" "}
