@@ -17,9 +17,12 @@ export default function SignupPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <Button asChild className="w-full">
-              <Link href="/#waitlist">Join the waitlist</Link>
-            </Button>
+            <Link
+              href="/#waitlist"
+              className="inline-flex h-10 w-full items-center justify-center rounded-md bg-[var(--primary-strong)] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[color-mix(in_oklab,var(--primary-strong),black_12%)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]"
+            >
+              Join the waitlist
+            </Link>
             <div className="text-center text-sm text-[var(--muted)]">
               Already invited?{" "}
               <Link href="/login" className="text-[var(--text)] hover:underline">
