@@ -81,13 +81,13 @@ function ToolsDropdown() {
       {isOpen && (
         <div className="absolute top-full right-0 mt-2 w-48 rounded-md border border-[var(--border)] bg-[var(--surface)] p-1 shadow-lg animate-in fade-in zoom-in-95 duration-200 z-50">
           <Link
-            href="/formative"
+            href="/activities/pulse"
             className="flex w-full items-center rounded-sm px-3 py-2 text-sm text-[var(--text)] hover:bg-[var(--background)] transition-colors"
           >
             Pulse
           </Link>
           <Link
-            href="/studylab"
+            href="/activities/studylab"
             className="flex w-full items-center rounded-sm px-3 py-2 text-sm text-[var(--text)] hover:bg-[var(--background)] transition-colors"
           >
             StudyLab

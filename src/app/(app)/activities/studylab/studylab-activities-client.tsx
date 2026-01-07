@@ -32,7 +32,7 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
     closed: { label: "Closed", color: "bg-red-100 text-red-700" },
 };
 
-export function FormativeActivitiesClient({
+export function StudyLabActivitiesClient({
     initialActivities,
     classNameById,
     classIdsByActivity,
@@ -58,7 +58,7 @@ export function FormativeActivitiesClient({
                     <Label htmlFor="search" className="sr-only">Search</Label>
                     <Input
                         id="search"
-                        placeholder="Search activities..."
+                        placeholder="Search StudyLab sessions..."
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
                     />
@@ -82,20 +82,21 @@ export function FormativeActivitiesClient({
             {filtered.length === 0 ? (
                 <Card>
                     <CardHeader>
-                        <CardTitle>No matching activities</CardTitle>
-                        <CardDescription>Try adjusting your search or filters.</CardDescription>
+                        <CardTitle>No StudyLab sessions yet</CardTitle>
+                        <CardDescription>Create your first AI-guided StudyLab session.</CardDescription>
                     </CardHeader>
                 </Card>
             ) : (
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                     {filtered.map((activity) => {
                         const classIds = classIdsByActivity[activity.id] ?? [];
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
                         const classNames = classIds.map((id) => classNameById[id] ?? "Unknown").join(", ");
                         const stats = submissionStatsById[activity.id] ?? { assigned: 0, submitted: 0, reviewed: 0 };
                         const statusInfo = STATUS_LABELS[activity.status];
 
                         return (
-                            <Link key={activity.id} href={`/formative/${activity.id}`}>
+                            <Link key={activity.id} href={`/activities/studylab/${activity.id}`}>
                                 <Card className="hover:border-[var(--primary)] transition-colors cursor-pointer h-full">
                                     <CardHeader className="pb-3">
                                         <div className="flex items-start justify-between gap-2">
@@ -110,11 +111,8 @@ export function FormativeActivitiesClient({
                                     </CardHeader>
                                     <div className="px-6 pb-4">
                                         <div className="flex gap-4 text-xs text-[var(--muted)]">
-                                            <span title="Needs submission">
-                                                📝 {stats.submitted} submitted
-                                            </span>
-                                            <span title="Reviewed">
-                                                ✅ {stats.reviewed} reviewed
+                                            <span title="Completed">
+                                                🧠 {stats.submitted} completed
                                             </span>
                                         </div>
                                         {activity.due_at && (

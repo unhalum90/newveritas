@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { MarketingFooter } from "@/components/marketing/marketing-footer";
+import { SalesContactModal } from "@/components/sales-contact-modal";
 
 const pricingTiers = [
   {
@@ -21,8 +22,8 @@ const pricingTiers = [
     buttonClass:
       "border border-[color-mix(in_oklab,#f59e0b,white_20%)] text-[#f59e0b] hover:bg-[color-mix(in_oklab,#f59e0b,black_85%)]",
   },
-    {
-      name: "Classroom Pack",
+  {
+    name: "Classroom Pack",
     price: "$29",
     cadence: "one-time",
     credits: "600 assessment credits",
@@ -33,12 +34,12 @@ const pricingTiers = [
       "Evidence snippets for review",
       "Enough for a full-class assessment",
     ],
-      ctaLabel: "Get Classroom",
-      ctaHref: "#waitlist",
-      accent: "text-[#34d399]",
-      buttonClass: "bg-[color-mix(in_oklab,#34d399,black_25%)] text-[#0b0f14] hover:bg-[color-mix(in_oklab,#34d399,black_35%)]",
-      isPopular: true,
-    },
+    ctaLabel: "Get Classroom",
+    ctaHref: "#waitlist",
+    accent: "text-[#34d399]",
+    buttonClass: "bg-[color-mix(in_oklab,#34d399,black_25%)] text-[#0b0f14] hover:bg-[color-mix(in_oklab,#34d399,black_35%)]",
+    isPopular: true,
+  },
   {
     name: "School License",
     price: "Custom",
@@ -127,11 +128,10 @@ export default function PricingPage() {
               {pricingTiers.map((tier) => (
                 <div
                   key={tier.name}
-                  className={`relative flex h-full flex-col rounded-3xl border p-8 shadow-[0_30px_80px_-60px_rgba(20,184,166,0.35)] ${
-                    tier.isPopular
-                      ? "border-[color-mix(in_oklab,#34d399,white_30%)] bg-[linear-gradient(160deg,rgba(16,55,48,0.96),rgba(10,22,24,0.96))]"
-                      : "border-[var(--border)] bg-[linear-gradient(160deg,rgba(18,24,34,0.96),rgba(11,15,20,0.96))]"
-                  }`}
+                  className={`relative flex h-full flex-col rounded-3xl border p-8 shadow-[0_30px_80px_-60px_rgba(20,184,166,0.35)] ${tier.isPopular
+                    ? "border-[color-mix(in_oklab,#34d399,white_30%)] bg-[linear-gradient(160deg,rgba(16,55,48,0.96),rgba(10,22,24,0.96))]"
+                    : "border-[var(--border)] bg-[linear-gradient(160deg,rgba(18,24,34,0.96),rgba(11,15,20,0.96))]"
+                    }`}
                 >
                   {tier.isPopular ? (
                     <span className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-1/2 rounded-full border border-[color-mix(in_oklab,#34d399,white_25%)] bg-[color-mix(in_oklab,#34d399,black_10%)] px-4 py-1 text-xs font-semibold uppercase tracking-widest text-white">
@@ -217,18 +217,7 @@ export default function PricingPage() {
                 Join the waitlist for early access, founder pricing, and direct input on new assessment features.
               </p>
               <div className="mt-8 flex flex-col justify-center gap-4 sm:flex-row">
-                <a
-                  href="mailto:hello@sayveritas.com?subject=SayVeritas%20Demo%20Request"
-                  className="inline-flex h-12 items-center justify-center rounded-md bg-[var(--primary-strong)] px-8 text-base font-medium text-white hover:bg-[color-mix(in_oklab,var(--primary-strong),black_12%)]"
-                >
-                  Request Demo
-                </a>
-                <a
-                  href="mailto:hello@sayveritas.com?subject=SayVeritas%20Pricing%20Question"
-                  className="inline-flex h-12 items-center justify-center rounded-md border-2 border-[var(--border)] bg-transparent px-8 text-base hover:bg-[var(--surface)]"
-                >
-                  Talk to Sales
-                </a>
+                <SalesContactModal />
               </div>
             </div>
           </div>

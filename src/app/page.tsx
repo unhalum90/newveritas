@@ -1,20 +1,11 @@
 import Link from "next/link";
-import { WaitlistForm } from "@/components/waitlist-form";
 import { FeatureGallery } from "@/components/home/feature-gallery";
 import { HeroImage } from "@/components/home/hero-image";
 import { MarketingFooter } from "@/components/marketing/marketing-footer";
+import { WebinarCalendar } from "@/components/marketing/webinar-calendar";
+import { WebinarRegistrationForm } from "@/components/marketing/webinar-registration-form";
 
 export default function Home() {
-  const featureItems: Array<{ title: string; body: string }> = [
-    { title: "Socratic follow-ups", body: "Adaptive probing based on what students actually say (per assessment)." },
-    { title: "Question rotation", body: "Create multiple prompts that assess the same target skill to reduce sharing." },
-    { title: "Integrity settings", body: "Time limits and integrity options that don't interrupt the student experience." },
-    { title: "Teacher-validated scoring", body: "AI assists, teachers maintain professional judgment." },
-    { title: "Works on any device", body: "Students record on phones, tablets, or laptops." },
-    { title: "Admin-ready", body: "School admin onboarding and bulk account workflows (where enabled)." },
-  ];
-
-  const featureAccents = ["#14b8a6", "#60a5fa", "#a78bfa", "#34d399", "#f59e0b", "#fb7185"] as const;
   const pricingTiers = [
     {
       name: "Starter Pack",
@@ -30,7 +21,7 @@ export default function Home() {
       ],
       isPopular: false,
       ctaLabel: "Get Starter",
-      ctaHref: "#waitlist",
+      ctaHref: "/waitlist",
       accent: "text-[#f59e0b]",
       buttonClass:
         "border border-[color-mix(in_oklab,#f59e0b,white_20%)] text-[#f59e0b] hover:bg-[color-mix(in_oklab,#f59e0b,black_85%)]",
@@ -48,7 +39,7 @@ export default function Home() {
         "Enough for a full-class assessment",
       ],
       ctaLabel: "Get Classroom",
-      ctaHref: "#waitlist",
+      ctaHref: "/waitlist",
       accent: "text-[#34d399]",
       buttonClass: "bg-[color-mix(in_oklab,#34d399,black_25%)] text-[#0b0f14] hover:bg-[color-mix(in_oklab,#34d399,black_35%)]",
       isPopular: true,
@@ -92,21 +83,27 @@ export default function Home() {
             <Link href="/about" className="hover:text-[var(--text)]">
               About
             </Link>
-            <a href="#how" className="hover:text-[var(--text)]">
+            <Link href="#how" className="hover:text-[var(--text)]">
               How it works
-            </a>
-            <a href="#features" className="hover:text-[var(--text)]">
+            </Link>
+            <Link href="/studylab" className="text-[var(--studylab-accent)] font-medium hover:text-[var(--text)]">
+              StudyLab
+            </Link>
+            <Link href="/pulse" className="text-[var(--pulse-accent)] font-medium hover:text-[var(--text)]">
+              Pulse
+            </Link>
+            <Link href="#features" className="hover:text-[var(--text)]">
               Features
-            </a>
+            </Link>
             <Link href="/pricing" className="hover:text-[var(--text)]">
               Pricing
             </Link>
-            <a href="#use-cases" className="hover:text-[var(--text)]">
+            <Link href="#use-cases" className="hover:text-[var(--text)]">
               Use cases
-            </a>
-            <a href="#security" className="hover:text-[var(--text)]">
+            </Link>
+            <Link href="#security" className="hover:text-[var(--text)]">
               Trust
-            </a>
+            </Link>
           </nav>
           <div className="flex items-center gap-2">
             <Link
@@ -115,12 +112,12 @@ export default function Home() {
             >
               Sign in
             </Link>
-            <a
+            <Link
               href="#waitlist"
               className="rounded-md bg-[var(--primary-strong)] px-3 py-2 text-sm text-white hover:bg-[color-mix(in_oklab,var(--primary-strong),black_12%)]"
             >
               Join waitlist
-            </a>
+            </Link>
           </div>
         </div>
       </header>
@@ -133,51 +130,45 @@ export default function Home() {
               {/* Left Column - Content */}
               <div>
                 <p className="mb-3 inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-xs text-[var(--muted)]">
-                  Oral assessment • AI-assisted scoring • Teacher-verified
+                  Voice-based learning platform
                 </p>
                 <div className="mb-6 flex flex-wrap gap-2">
-                  <span className="rounded-full border border-[color-mix(in_oklab,var(--primary),white_35%)] bg-[color-mix(in_oklab,var(--primary),black_75%)] px-3 py-1 text-xs text-[color-mix(in_oklab,white,black_8%)]">
-                    AI scoring
+                  <span className="rounded-full border border-[color-mix(in_oklab,var(--pulse-accent),white_35%)] bg-[color-mix(in_oklab,var(--pulse-accent),black_75%)] px-3 py-1 text-xs text-[color-mix(in_oklab,white,black_8%)]">
+                    Daily Pulse
                   </span>
-                  <span className="rounded-full border border-[color-mix(in_oklab,#60a5fa,white_35%)] bg-[color-mix(in_oklab,#60a5fa,black_80%)] px-3 py-1 text-xs text-[color-mix(in_oklab,white,black_8%)]">
-                    Socratic follow-ups
+                  <span className="rounded-full border border-[color-mix(in_oklab,var(--studylab-accent),white_35%)] bg-[color-mix(in_oklab,var(--studylab-accent),black_75%)] px-3 py-1 text-xs text-[color-mix(in_oklab,white,black_8%)]">
+                    Weekly StudyLab
                   </span>
-                  <span className="rounded-full border border-[color-mix(in_oklab,#a78bfa,white_35%)] bg-[color-mix(in_oklab,#a78bfa,black_82%)] px-3 py-1 text-xs text-[color-mix(in_oklab,white,black_8%)]">
-                    Integrity options
+                  <span className="rounded-full border border-[color-mix(in_oklab,var(--core-accent),white_35%)] bg-[color-mix(in_oklab,var(--core-accent),black_82%)] px-3 py-1 text-xs text-[color-mix(in_oklab,white,black_8%)]">
+                    Unit Assessments
                   </span>
                   <span className="rounded-full border border-[color-mix(in_oklab,#34d399,white_35%)] bg-[color-mix(in_oklab,#34d399,black_82%)] px-3 py-1 text-xs text-[color-mix(in_oklab,white,black_8%)]">
-                    Mobile-ready
+                    AI-assisted
                   </span>
                 </div>
 
-                {/* ENLARGED HERO HEADLINE - was 4xl/5xl, now 5xl/7xl */}
                 <h1 className="text-5xl font-bold leading-tight tracking-tight md:text-7xl">
-                  Stop grading. <br />
-                  <span className="text-[var(--primary)]">Start teaching.</span>
+                  Voice-based learning <br />
+                  <span className="text-[var(--primary)]">platform.</span>
                 </h1>
 
                 <p className="mt-6 text-lg leading-relaxed text-[var(--muted)] md:text-xl">
-                  AI-powered oral assessment that scores student understanding in minutes—so you can focus on the students who
-                  need you most.
+                  Daily formative check-ins. Weekly Socratic study sessions. Unit oral assessments.
+                  One platform where thinking happens through speaking, not typing.
                 </p>
                 <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-                  <a
-                    href="#how"
-                    className="inline-flex h-12 items-center justify-center rounded-md bg-[var(--primary-strong)] px-6 text-base font-medium text-white hover:bg-[color-mix(in_oklab,var(--primary-strong),black_12%)]"
-                  >
-                    See how it works
-                  </a>
-                  <a
-                    href="#waitlist"
-                    className="inline-flex h-12 items-center justify-center rounded-md border-2 border-[var(--border)] bg-transparent px-6 text-base hover:bg-[var(--surface)]"
-                  >
-                    Join waitlist
-                  </a>
                   <Link
-                    href="/webinars"
-                    className="inline-flex h-12 items-center justify-center rounded-md border-2 border-white bg-transparent px-6 text-base text-white hover:bg-white/10"
+                    href="#how"
+                    className="inline-flex h-12 items-center justify-center rounded-md bg-[var(--primary-strong)] px-6 text-base font-medium text-white hover:bg-[color-mix(in_oklab,var(--primary-strong),black_12%)] whitespace-nowrap"
                   >
-                    Attend webinar
+                    See How It Works
+                  </Link>
+
+                  <Link
+                    href="#webinars"
+                    className="inline-flex h-12 items-center justify-center rounded-md border-2 border-[var(--border)] bg-transparent px-6 text-base hover:bg-[var(--surface)] whitespace-nowrap"
+                  >
+                    Attend Webinar
                   </Link>
                 </div>
               </div>
@@ -193,62 +184,118 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Stats Section - WHITE BACKGROUND (NEW) */}
-        <section className="border-b border-[var(--border)] bg-white">
-          <div className="mx-auto max-w-6xl px-6 py-16">
-            <div className="grid gap-8 md:grid-cols-3">
-              <div className="text-center">
-                <div className="text-5xl font-bold text-[var(--primary-strong)] md:text-6xl">6 hours</div>
-                <p className="mt-3 text-base text-[#64748B]">saved per week</p>
-                <p className="mt-2 text-sm text-[#475569]">vs. traditional grading</p>
+        {/* How Students Use SayVeritas Section */}
+        <section id="how" className="bg-[var(--surface)] py-20 border-b border-[var(--border)]">
+          <div className="mx-auto max-w-6xl px-6">
+            <h2 className="text-center text-3xl font-bold md:text-4xl text-[var(--text)] mb-16">
+              How Students Use SayVeritas
+            </h2>
+            <div className="grid gap-8 md:grid-cols-3 relative">
+              {/* Visual Timeline Line - Hidden on mobile */}
+              <div className="hidden md:block absolute top-12 left-0 w-full h-1 bg-[var(--border)] z-0 transform -translate-y-1/2"></div>
+
+              {/* Card 1: Pulse (Daily) */}
+              <div className="relative z-10 bg-[var(--background)] p-6 rounded-xl border border-[var(--border)] shadow-sm">
+                <div className="w-12 h-12 rounded-full bg-[var(--pulse-accent)] text-white flex items-center justify-center font-bold text-xl mb-4 mx-auto md:mx-0 relative border-4 border-[var(--surface)]">
+                  D
+                </div>
+                <h3 className="text-xl font-bold mb-2 text-center md:text-left">Daily</h3>
+                <div className="text-[var(--pulse-accent)] font-semibold text-sm uppercase tracking-wide mb-3 text-center md:text-left">Pulse</div>
+                <p className="text-[var(--muted)] text-sm mb-4">
+                  A 60-second voice checkout. "Explain the main conflict in Chapter 4." Teachers get an audio highlights reel instantly.
+                </p>
+                <ul className="text-sm space-y-2 text-[var(--text)]">
+                  <li>• Replaces exit tickets</li>
+                  <li>• 100% participation</li>
+                  <li>• Instant misconceptions</li>
+                </ul>
               </div>
-              <div className="text-center">
-                <div className="text-5xl font-bold text-[var(--primary-strong)] md:text-6xl">30 min</div>
-                <p className="mt-3 text-base text-[#64748B]">to review 90 students</p>
-                <p className="mt-2 text-sm text-[#475569]">with AI-assisted scoring</p>
+
+              {/* Card 2: StudyLab (Weekly) */}
+              <div className="relative z-10 bg-[var(--background)] p-6 rounded-xl border border-[var(--border)] shadow-sm">
+                <div className="w-12 h-12 rounded-full bg-[var(--studylab-accent)] text-white flex items-center justify-center font-bold text-xl mb-4 mx-auto md:mx-0 relative border-4 border-[var(--surface)]">
+                  W
+                </div>
+                <h3 className="text-xl font-bold mb-2 text-center md:text-left">Weekly</h3>
+                <div className="text-[var(--studylab-accent)] font-semibold text-sm uppercase tracking-wide mb-3 text-center md:text-left">StudyLab</div>
+                <p className="text-[var(--muted)] text-sm mb-4">
+                  Students chat with an AI tutor that acts like a Socratic guide. It helps them articulate concepts *before* they are tested.
+                </p>
+                <ul className="text-sm space-y-2 text-[var(--text)]">
+                  <li>• Low stakes</li>
+                  <li>• Builds confidence</li>
+                  <li>• Identifies gaps</li>
+                </ul>
               </div>
-              <div className="text-center">
-                <div className="text-5xl font-bold text-[var(--primary-strong)] md:text-6xl">10-15%</div>
-                <p className="mt-3 text-base text-[#64748B]">need targeted support</p>
-                <p className="mt-2 text-sm text-[#475569]">focus on who matters most</p>
+
+              {/* Card 3: Core */}
+              <div className="relative z-10 bg-[var(--background)] p-6 rounded-xl border border-[var(--border)] shadow-sm">
+                <div className="w-12 h-12 rounded-full bg-[var(--core-accent)] text-white flex items-center justify-center font-bold text-xl mb-4 mx-auto md:mx-0 relative border-4 border-[var(--surface)]">
+                  U
+                </div>
+                <h3 className="text-xl font-bold mb-2 text-center md:text-left">Unit</h3>
+                <div className="text-[var(--core-accent)] font-semibold text-sm uppercase tracking-wide mb-3 text-center md:text-left">Core</div>
+                <p className="text-[var(--muted)] text-sm mb-4">
+                  Secure, graded oral assessments. Replaces or supplements the unit test. Automated grading with integrity checks.
+                </p>
+                <ul className="text-sm space-y-2 text-[var(--text)]">
+                  <li>• Summative grades</li>
+                  <li>• Anti-cheat secured</li>
+                  <li>• Standardized rubric</li>
+                </ul>
               </div>
             </div>
           </div>
         </section>
 
-        {/* Problem Section - DARK BACKGROUND */}
-        <section className="border-b border-[var(--border)] bg-[color-mix(in_oklab,var(--background),black_6%)]">
-          <div className="mx-auto max-w-6xl px-6 py-14">
-            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-8">
-              <h2 className="text-3xl font-semibold tracking-tight md:text-4xl">
-                The grading treadmill is killing good teaching
-              </h2>
-              <div className="mt-8 grid gap-6 md:grid-cols-3">
-                <div className="rounded-xl border border-[var(--border)] bg-[color-mix(in_oklab,var(--surface),black_6%)] p-6 text-center">
-                  <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-lg bg-[var(--primary)] text-2xl">⏱️</div>
-                  <p className="text-base font-semibold">The time trap</p>
-                  <p className="mt-3 text-sm leading-relaxed text-[var(--muted)]">
-                    Teachers spend hours grading. By the time scores are back, the moment for intervention has passed.
-                  </p>
-                </div>
-                <div className="rounded-xl border border-[var(--border)] bg-[color-mix(in_oklab,var(--surface),black_6%)] p-6 text-center">
-                  <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-lg bg-[#60a5fa] text-2xl">📊</div>
-                  <p className="text-base font-semibold">The scale problem</p>
-                  <p className="mt-3 text-sm leading-relaxed text-[var(--muted)]">
-                    Oral assessments reveal deep understanding—but 5 minutes per student doesn&apos;t scale.
-                  </p>
-                </div>
-                <div className="rounded-xl border border-[var(--border)] bg-[color-mix(in_oklab,var(--surface),black_6%)] p-6 text-center">
-                  <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-lg bg-[#f59e0b] text-2xl">🔒</div>
-                  <p className="text-base font-semibold">The integrity crisis</p>
-                  <p className="mt-3 text-sm leading-relaxed text-[var(--muted)]">
-                    Answers spread quickly. Traditional assessment formats struggle to keep up.
-                  </p>
-                </div>
+        {/* Education Level Segmentation */}
+        <section className="bg-[var(--background)] py-20 border-b border-[var(--border)]">
+          <div className="mx-auto max-w-6xl px-6">
+            <div className="grid gap-8 md:grid-cols-3">
+              <div className="text-center p-6">
+                <div className="text-4xl mb-4">🏫</div>
+                <h3 className="text-lg font-bold">Grades 6–12</h3>
+                <p className="text-[var(--muted)] text-sm mt-2">
+                  Build verbal fluency and critical thinking across ELA, History, Science, and World Languages.
+                </p>
               </div>
-              <p className="mt-8 text-center text-base text-[var(--muted)]">
-                What if you could assess authentic understanding—at scale—without losing control?
-              </p>
+              <div className="text-center p-6 bg-[var(--surface)] rounded-xl border border-[var(--border)]">
+                <div className="text-4xl mb-4">🎓</div>
+                <h3 className="text-lg font-bold">Higher Ed</h3>
+                <p className="text-[var(--muted)] text-sm mt-2">
+                  Scale oral exams for large lecture sections. Verify student identity and original thinking in the AI era.
+                </p>
+              </div>
+              <div className="text-center p-6">
+                <div className="text-4xl mb-4">💻</div>
+                <h3 className="text-lg font-bold">Virtual Learning</h3>
+                <p className="text-[var(--muted)] text-sm mt-2">
+                  Bring human connection back to online classes. Ensure the student behind the screen is doing the thinking.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Stats Section - WHITE BACKGROUND (NEW) */}
+        <section className="border-b border-[var(--border)] bg-white">
+          <div className="mx-auto max-w-6xl px-6 py-16">
+            <div className="grid gap-8 md:grid-cols-3">
+              <div className="text-center">
+                <div className="text-5xl font-bold text-[var(--primary-strong)] md:text-6xl">30 Days</div>
+                <p className="mt-3 text-base text-[#64748B]">free trial</p>
+                <p className="mt-2 text-sm text-[#475569]">for individual teachers</p>
+              </div>
+              <div className="text-center">
+                <div className="text-5xl font-bold text-[var(--primary-strong)] md:text-6xl">60 Sec</div>
+                <p className="mt-3 text-base text-[#64748B]">to check understanding</p>
+                <p className="mt-2 text-sm text-[#475569]">voice-based exit tickets</p>
+              </div>
+              <div className="text-center">
+                <div className="text-5xl font-bold text-[var(--primary-strong)] md:text-6xl">100%</div>
+                <p className="mt-3 text-base text-[#64748B]">student participation</p>
+                <p className="mt-2 text-sm text-[#475569]">no more flying under the radar</p>
+              </div>
             </div>
           </div>
         </section>
@@ -372,28 +419,41 @@ export default function Home() {
         <section id="features" className="border-b border-[var(--border)] bg-[#F8FAFC]">
           <div className="mx-auto max-w-6xl px-6 py-16">
             <h2 className="text-center text-3xl font-semibold tracking-tight text-[#0F172A] md:text-4xl">
-              Built for real classrooms
+              Complete Assessment Infrastructure
             </h2>
-            <div className="mt-12 grid gap-6 md:grid-cols-2">
-              {featureItems.map((item, idx) => (
-                <div
-                  key={item.title}
-                  className="group rounded-xl border border-[#E2E8F0] bg-white p-6 shadow-sm transition-shadow hover:shadow-md"
-                  style={{
-                    borderLeftColor: featureAccents[idx % featureAccents.length],
-                    borderLeftWidth: 4
-                  }}
-                >
-                  <div className="flex items-center gap-3">
-                    <span
-                      className="h-3 w-3 rounded-full"
-                      style={{ backgroundColor: featureAccents[idx % featureAccents.length] }}
-                    />
-                    <p className="text-base font-semibold text-[#0F172A]">{item.title}</p>
-                  </div>
-                  <p className="mt-3 text-sm leading-relaxed text-[#64748B]">{item.body}</p>
+            <div className="mt-12 grid gap-6 md:grid-cols-3">
+              {/* Feature 1: StudyLab */}
+              <div className="group rounded-xl border border-[#E2E8F0] bg-white p-6 shadow-sm transition-shadow hover:shadow-md border-l-4 border-l-[var(--studylab-accent)]">
+                <div className="flex items-center gap-3">
+                  <span className="h-3 w-3 rounded-full bg-[var(--studylab-accent)]" />
+                  <p className="text-base font-semibold text-[#0F172A]">AI Socratic Tutor</p>
                 </div>
-              ))}
+                <p className="mt-3 text-sm leading-relaxed text-[#64748B]">
+                  Give every student a personal tutor that pushes their thinking further. Low-stakes practice that builds high-stakes confidence.
+                </p>
+              </div>
+
+              {/* Feature 2: Pulse */}
+              <div className="group rounded-xl border border-[#E2E8F0] bg-white p-6 shadow-sm transition-shadow hover:shadow-md border-l-4 border-l-[var(--pulse-accent)]">
+                <div className="flex items-center gap-3">
+                  <span className="h-3 w-3 rounded-full bg-[var(--pulse-accent)]" />
+                  <p className="text-base font-semibold text-[#0F172A]">Formative Voice Check-in</p>
+                </div>
+                <p className="mt-3 text-sm leading-relaxed text-[#64748B]">
+                  Replace exit tickets with 60-second voice summaries. Get a heatmap of class understanding before you leave simple misconceptions behind.
+                </p>
+              </div>
+
+              {/* Feature 3: Core */}
+              <div className="group rounded-xl border border-[#E2E8F0] bg-white p-6 shadow-sm transition-shadow hover:shadow-md border-l-4 border-l-[var(--core-accent)]">
+                <div className="flex items-center gap-3">
+                  <span className="h-3 w-3 rounded-full bg-[var(--core-accent)]" />
+                  <p className="text-base font-semibold text-[#0F172A]">Secure Oral Assessment</p>
+                </div>
+                <p className="mt-3 text-sm leading-relaxed text-[#64748B]">
+                  Administer oral exams at scale. Randomized questions, integrity checks, and standardized rubrics ensure fair and rigorous grading.
+                </p>
+              </div>
             </div>
           </div>
         </section>
@@ -455,33 +515,51 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Testimonial - LIGHT BACKGROUND (NEW) */}
+        {/* Testimonials - LIGHT BACKGROUND (NEW) */}
         <section className="border-b border-[var(--border)] bg-white">
-          <div className="mx-auto max-w-4xl px-6 py-16">
-            <div className="rounded-2xl border border-[#E2E8F0] bg-gradient-to-br from-[#F8FAFC] to-white p-8 shadow-lg md:p-12">
-              <div className="flex flex-col items-center gap-8 md:flex-row">
-                {/* IMAGE PLACEHOLDER: Teacher headshot */}
-                <div className="flex-shrink-0">
-                  <div className="flex h-24 w-24 items-center justify-center rounded-full border-4 border-[var(--primary)] bg-[#F1F5F9]">
-                    <span className="text-3xl">👤</span>
+          <div className="mx-auto max-w-6xl px-6 py-16">
+            <h2 className="text-center text-3xl font-semibold tracking-tight text-[#0F172A] mb-12">
+              Loved by teachers who want to teach, not grade
+            </h2>
+            <div className="grid gap-8 md:grid-cols-3">
+              {/* Testimonial 1 */}
+              <div className="rounded-2xl border border-[#E2E8F0] bg-gradient-to-br from-[#F8FAFC] to-white p-6 shadow-sm">
+                <p className="text-lg leading-relaxed text-[#0F172A] italic">
+                  &quot;Finally, I have time to actually <span className="font-semibold text-[var(--primary-strong)]">teach</span> instead of grade papers. SayVeritas gave me my weekends back.&quot;
+                </p>
+                <div className="mt-6 flex items-center gap-3">
+                  <div className="h-10 w-10 flex items-center justify-center rounded-full bg-teal-100 text-teal-700 font-bold">SM</div>
+                  <div>
+                    <p className="font-semibold text-[#0F172A] text-sm">Sarah M.</p>
+                    <p className="text-xs text-[#64748B]">AP Biology Teacher</p>
                   </div>
-                  {/* Replace with actual photo:
-                  <Image 
-                    src="/testimonials/sarah-m.jpg"
-                    alt="Sarah M., Biology Teacher"
-                    width={96}
-                    height={96}
-                    className="rounded-full"
-                  /> */}
                 </div>
+              </div>
 
-                <div className="flex-1 text-center md:text-left">
-                  <p className="text-2xl leading-relaxed text-[#0F172A]">
-                    &quot;Finally, I have time to actually <span className="font-semibold text-[var(--primary-strong)]">teach</span> instead of grade papers. SayVeritas gave me my weekends back.&quot;
-                  </p>
-                  <div className="mt-6">
-                    <p className="font-semibold text-[#0F172A]">Sarah M.</p>
-                    <p className="text-sm text-[#64748B]">Biology Teacher</p>
+              {/* Testimonial 2 */}
+              <div className="rounded-2xl border border-[#E2E8F0] bg-gradient-to-br from-[#F8FAFC] to-white p-6 shadow-sm">
+                <p className="text-lg leading-relaxed text-[#0F172A] italic">
+                  &quot;Grading essays used to take all weekend. Now I listen to 30 minutes of Pulse highlights and know exactly what to reteach on Monday.&quot;
+                </p>
+                <div className="mt-6 flex items-center gap-3">
+                  <div className="h-10 w-10 flex items-center justify-center rounded-full bg-blue-100 text-blue-700 font-bold">JL</div>
+                  <div>
+                    <p className="font-semibold text-[#0F172A] text-sm">James L.</p>
+                    <p className="text-xs text-[#64748B]">History Dept Chair</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Testimonial 3 */}
+              <div className="rounded-2xl border border-[#E2E8F0] bg-gradient-to-br from-[#F8FAFC] to-white p-6 shadow-sm">
+                <p className="text-lg leading-relaxed text-[#0F172A] italic">
+                  &quot;My students are actually speaking the language now. They can't hide behind Google Translate when they have to respond with their voice.&quot;
+                </p>
+                <div className="mt-6 flex items-center gap-3">
+                  <div className="h-10 w-10 flex items-center justify-center rounded-full bg-purple-100 text-purple-700 font-bold">MG</div>
+                  <div>
+                    <p className="font-semibold text-[#0F172A] text-sm">Maria G.</p>
+                    <p className="text-xs text-[#64748B]">Spanish Teacher</p>
                   </div>
                 </div>
               </div>
@@ -582,6 +660,7 @@ export default function Home() {
 
                   <a
                     href={tier.ctaHref}
+                    data-analytics-event={`pricing_${tier.ctaLabel.toLowerCase().replace(/\s+/g, '_')}_click`}
                     className={`mt-8 inline-flex h-11 items-center justify-center rounded-full px-6 text-sm font-semibold transition ${tier.buttonClass}`}
                   >
                     {tier.ctaLabel}
@@ -601,13 +680,70 @@ export default function Home() {
 
         {/* Final CTA - DARK BACKGROUND */}
         <section id="waitlist" className="border-b border-[var(--border)]">
-          <div className="mx-auto max-w-4xl px-6 py-16">
-            <div className="rounded-2xl border-2 border-[var(--primary)] bg-[var(--surface)] p-10 text-center">
-              <h3 className="text-3xl font-bold tracking-tight md:text-4xl">Join the waitlist</h3>
-              <p className="mx-auto mt-4 max-w-2xl text-lg text-[var(--muted)]">
-                Early access partners get priority onboarding, direct input on features, and founder pricing locked for 3 years.
+          <div className="mx-auto max-w-4xl px-6 py-20 text-center">
+            <h3 className="text-3xl font-bold tracking-tight md:text-5xl">Transform your classroom with voice.</h3>
+            <p className="mx-auto mt-6 max-w-2xl text-lg text-[var(--muted)]">
+              Join 1,000+ teachers who have stopped grading papers and started listening to their students.
+            </p>
+            <div className="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row">
+              <Link
+                href="/waitlist"
+                className="rounded-full bg-[var(--primary-strong)] px-8 py-4 text-lg font-semibold text-white shadow-lg hover:bg-[color-mix(in_oklab,var(--primary-strong),black_12%)] transition"
+              >
+                Start 30-Day Free Trial
+              </Link>
+              <Link
+                href="/waitlist"
+                className="rounded-full border-2 border-[var(--border)] bg-[var(--surface)] px-8 py-4 text-lg font-medium text-[var(--text)] hover:bg-[color-mix(in_oklab,var(--surface),white_4%)] transition"
+              >
+                Book a Demo
+              </Link>
+            </div>
+            <p className="mt-6 text-sm text-[var(--muted)]">
+              No credit card required. Cancel anytime.
+            </p>
+          </div>
+        </section>
+
+        {/* Webinars Section */}
+        <section id="webinars" className="border-t border-[var(--border)] bg-[var(--surface)] py-20">
+          <div className="mx-auto max-w-6xl px-6">
+            <div className="mb-12 md:max-w-2xl">
+              <span className="mb-2 inline-block rounded-full bg-indigo-100 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-indigo-700">
+                Weekly Live Sessions
+              </span>
+              <h2 className="text-3xl font-bold tracking-tight text-[var(--text)] md:text-4xl">
+                See SayVeritas in action.
+              </h2>
+              <p className="mt-4 text-lg text-[var(--muted)]">
+                Join our product team for a live walkthrough. We'll show you how to set up your first class,
+                run a Pulse check-in, and use StudyLab for deeper practice.
               </p>
-              <WaitlistForm />
+            </div>
+
+            <div className="grid gap-12 lg:grid-cols-2">
+              <WebinarRegistrationForm />
+              <div className="space-y-8">
+                <WebinarCalendar />
+
+                <div className="rounded-xl border border-[var(--border)] bg-indigo-50/50 p-6">
+                  <h3 className="font-semibold text-indigo-900">What we cover:</h3>
+                  <ul className="mt-4 space-y-3">
+                    <li className="flex items-start gap-3">
+                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-xs font-bold text-indigo-600">1</span>
+                      <span className="text-sm text-indigo-900/80">How to replace exit tickets with 60-second voice check-ins</span>
+                    </li>
+                    <li className="flex items-start gap-3">
+                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-xs font-bold text-indigo-600">2</span>
+                      <span className="text-sm text-indigo-900/80">Using StudyLab to give every student a personal Socratic tutor</span>
+                    </li>
+                    <li className="flex items-start gap-3">
+                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-xs font-bold text-indigo-600">3</span>
+                      <span className="text-sm text-indigo-900/80">Live Q&A with our founder</span>
+                    </li>
+                  </ul>
+                </div>
+              </div>
             </div>
           </div>
         </section>

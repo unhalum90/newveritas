@@ -38,7 +38,52 @@ const timeline = [
 export default function AboutPage() {
   return (
     <div className="min-h-screen bg-[var(--background)] text-[var(--text)]">
-      <main className="relative">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-[var(--surface)] focus:px-3 focus:py-2 focus:text-sm focus:text-[var(--text)]"
+      >
+        Skip to main content
+      </a>
+      <header className="sticky top-0 z-50 border-b border-[var(--border)] bg-[color-mix(in_oklab,var(--background),black_10%)] backdrop-blur-sm">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
+          <Link href="/" className="text-lg font-semibold tracking-tight">
+            SayVeritas
+          </Link>
+          <nav className="hidden items-center gap-6 text-sm text-[var(--muted)] md:flex" aria-label="Primary">
+            <Link href="/" className="hover:text-[var(--text)]">
+              Home
+            </Link>
+            <Link href="/about" className="hover:text-[var(--text)] text-[var(--text)] font-medium">
+              About
+            </Link>
+            <Link href="/studylab" className="hover:text-[var(--text)]">
+              StudyLab
+            </Link>
+            <Link href="/pulse" className="hover:text-[var(--text)]">
+              Pulse
+            </Link>
+            <Link href="/pricing" className="hover:text-[var(--text)]">
+              Pricing
+            </Link>
+          </nav>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/login"
+              className="rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm hover:bg-[color-mix(in_oklab,var(--surface),white_6%)]"
+            >
+              Sign in
+            </Link>
+            <Link
+              href="/waitlist"
+              className="rounded-md bg-[var(--primary-strong)] px-3 py-2 text-sm text-white hover:bg-[color-mix(in_oklab,var(--primary-strong),black_12%)]"
+            >
+              Join waitlist
+            </Link>
+          </div>
+        </div>
+      </header>
+
+      <main id="main-content" className="relative">
         <section className="relative overflow-hidden border-b border-[var(--border)] bg-[color-mix(in_oklab,var(--primary),var(--surface)_92%)]">
           <div className="absolute inset-0 bg-[radial-gradient(80%_60%_at_50%_0%,rgba(20,184,166,0.18),transparent)]" />
           <div className="relative mx-auto grid max-w-6xl gap-10 px-6 py-16 md:grid-cols-[0.9fr_1.1fr] md:items-center">
@@ -66,7 +111,7 @@ export default function AboutPage() {
                 I started teaching in 1999, right as &quot;21st century skills&quot; became education&apos;s rallying cry. A quarter
                 century later, entering the second quarter of the 21st century, it&apos;s clear: the tools we built for that
                 era don&apos;t work anymore. AI has fundamentally changed what students can fake and what teachers can
-                verify. SayVeritas is my attempt to build assessment infrastructure for the reality we face today—grounded
+                verify. SayVeritas is my attempt to build assessment platform for the reality we face today—grounded
                 in pedagogy, not just AI hype.
               </p>
             </div>

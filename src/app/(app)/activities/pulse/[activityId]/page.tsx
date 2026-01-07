@@ -24,7 +24,7 @@ export default async function FormativeActivityPage({ params }: Props) {
         .maybeSingle();
 
     if (!activity || activity.teacher_id !== user.id) {
-        redirect("/formative");
+        redirect("/activities/pulse");
     }
 
     // Get assignment info
@@ -83,7 +83,7 @@ export default async function FormativeActivityPage({ params }: Props) {
                         )}
                     </div>
                 </div>
-                <Link href={`/formative/${activityId}/review`}>
+                <Link href={`/activities/pulse/${activityId}/review`}>
                     <Button type="button">
                         Review Submissions {stats.submitted > 0 && `(${stats.submitted})`}
                     </Button>
@@ -149,7 +149,7 @@ export default async function FormativeActivityPage({ params }: Props) {
 
                         {stats.submitted > 0 && (
                             <div className="mt-4">
-                                <Link href={`/formative/${activityId}/review`}>
+                                <Link href={`/activities/pulse/${activityId}/review`}>
                                     <Button type="button" className="w-full">
                                         Review {stats.submitted} Submission{stats.submitted !== 1 && "s"}
                                     </Button>
@@ -163,7 +163,7 @@ export default async function FormativeActivityPage({ params }: Props) {
             {/* Actions */}
             <Card>
                 <CardContent className="py-4 flex gap-3">
-                    <Link href="/formative">
+                    <Link href="/activities/pulse">
                         <Button type="button" variant="secondary">← Back to Activities</Button>
                     </Link>
                     {activity.status === "draft" && (

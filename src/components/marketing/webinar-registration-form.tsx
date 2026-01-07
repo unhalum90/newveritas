@@ -85,7 +85,7 @@ export function WebinarRegistrationForm() {
     status === "success" ? "text-[var(--primary)]" : status === "error" ? "text-[var(--danger)]" : "text-[var(--muted)]";
 
   return (
-    <div className="rounded-2xl border border-[var(--border)] bg-white p-6 shadow-[0_24px_60px_rgba(15,23,42,0.08)] md:p-8">
+    <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-2xl md:p-8">
       <div className="space-y-2">
         <p className="text-xs uppercase tracking-[0.3em] text-[var(--muted)]">Alternating sessions (ET)</p>
         <h2 className="text-2xl font-semibold text-[var(--text)]">Register for a live walkthrough</h2>
@@ -102,9 +102,8 @@ export function WebinarRegistrationForm() {
               key={session.id}
               type="button"
               onClick={() => setSessionId(session.id)}
-              className={`rounded-xl border px-4 py-4 text-left transition ${
-                active ? "border-[var(--primary)] bg-[color-mix(in_oklab,var(--primary),white_92%)]" : "border-[var(--border)] bg-white"
-              }`}
+              className={`rounded-xl border px-4 py-4 text-left transition ${active ? "border-[var(--primary)] bg-[var(--primary)]/10" : "border-[var(--border)] bg-[var(--background)] hover:bg-[var(--surface-highlight)]"
+                }`}
             >
               <div className="text-xs uppercase tracking-[0.2em] text-[var(--muted)]">{session.label}</div>
               <div className="mt-2 text-lg font-semibold text-[var(--text)]">{session.time}</div>

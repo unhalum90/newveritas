@@ -51,7 +51,7 @@ export function WebinarCalendar() {
   const upcoming = buildUpcomingSessions(6);
 
   return (
-    <div className="rounded-xl border border-[var(--border)] bg-white p-4">
+    <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
       <div className="flex items-center justify-between">
         <div>
           <p className="text-xs uppercase tracking-[0.2em] text-[var(--muted)]">Calendar</p>
@@ -61,7 +61,7 @@ export function WebinarCalendar() {
       </div>
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
         {upcoming.map((item) => (
-          <div key={`${item.session.id}-${item.date.toISOString()}`} className="rounded-lg border border-[var(--border)] bg-white px-3 py-3">
+          <div key={`${item.session.id}-${item.date.toISOString()}`} className="rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-3">
             <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">{item.session.label}</div>
             <div className="mt-2 text-base font-semibold text-[var(--text)]">{dateFormatter.format(item.date)}</div>
             <div className="mt-1 text-xs text-[var(--muted)]">{item.session.time}</div>

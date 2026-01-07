@@ -24,7 +24,7 @@ export default async function StudyLabActivityPage({ params }: Props) {
         .maybeSingle();
 
     if (!activity || activity.teacher_id !== user.id) {
-        redirect("/studylab");
+        redirect("/activities/studylab");
     }
 
     // Get assignment info
@@ -140,7 +140,7 @@ export default async function StudyLabActivityPage({ params }: Props) {
                         {stats.submitted > 0 && (
                             <div className="mt-4">
                                 {/* Note: We don't have review page yet, but this link is the logical next step */}
-                                <Link href={`/studylab/${activityId}/review`}>
+                                <Link href={`/activities/studylab/${activityId}/review`}>
                                     <Button type="button" className="w-full">
                                         Review {stats.submitted} Session{stats.submitted !== 1 && "s"}
                                     </Button>
@@ -154,7 +154,7 @@ export default async function StudyLabActivityPage({ params }: Props) {
             {/* Actions */}
             <Card>
                 <CardContent className="py-4 flex gap-3">
-                    <Link href="/studylab">
+                    <Link href="/activities/studylab">
                         <Button type="button" variant="secondary">← Back to StudyLab</Button>
                     </Link>
                     {/* Edit button could go here */}

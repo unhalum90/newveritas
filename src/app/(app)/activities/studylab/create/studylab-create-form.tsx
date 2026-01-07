@@ -90,7 +90,7 @@ export function StudyLabCreateForm({ teacherId, classes }: Props) {
             }
 
             // Redirect to StudyLab dashboard
-            router.push(`/studylab`);
+            router.push(`/activities/studylab`);
             router.refresh();
         } catch (err) {
             setError(err instanceof Error ? err.message : "An error occurred.");

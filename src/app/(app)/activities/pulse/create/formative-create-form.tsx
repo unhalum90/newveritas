@@ -94,7 +94,7 @@ export function FormativeCreateForm({ teacherId, classes }: Props) {
             }
 
             const { activityId } = await response.json();
-            router.push(`/formative/${activityId}`);
+            router.push(`/activities/pulse/${activityId}`);
         } catch (err) {
             setError(err instanceof Error ? err.message : "An error occurred.");
         } finally {
@@ -166,8 +166,8 @@ export function FormativeCreateForm({ teacherId, classes }: Props) {
                             <label
                                 key={template.id}
                                 className={`flex items-start gap-3 rounded-md border p-3 cursor-pointer transition-colors ${selectedPromptId === template.id
-                                        ? "border-[var(--primary)] bg-[var(--primary)]/5"
-                                        : "border-[var(--border)] hover:border-[var(--primary)]/50"
+                                    ? "border-[var(--primary)] bg-[var(--primary)]/5"
+                                    : "border-[var(--border)] hover:border-[var(--primary)]/50"
                                     }`}
                             >
                                 <input
@@ -217,8 +217,8 @@ export function FormativeCreateForm({ teacherId, classes }: Props) {
                             <label
                                 key={rubric.id}
                                 className={`flex items-center gap-3 rounded-md border p-3 cursor-pointer transition-colors ${rubricTemplate === rubric.id
-                                        ? "border-[var(--primary)] bg-[var(--primary)]/5"
-                                        : "border-[var(--border)] hover:border-[var(--primary)]/50"
+                                    ? "border-[var(--primary)] bg-[var(--primary)]/5"
+                                    : "border-[var(--border)] hover:border-[var(--primary)]/50"
                                     }`}
                             >
                                 <input
@@ -272,8 +272,8 @@ export function FormativeCreateForm({ teacherId, classes }: Props) {
                                 <label
                                     key={cls.id}
                                     className={`flex items-center gap-3 rounded-md border p-3 cursor-pointer transition-colors ${selectedClassIds.includes(cls.id)
-                                            ? "border-[var(--primary)] bg-[var(--primary)]/5"
-                                            : "border-[var(--border)] hover:border-[var(--primary)]/50"
+                                        ? "border-[var(--primary)] bg-[var(--primary)]/5"
+                                        : "border-[var(--border)] hover:border-[var(--primary)]/50"
                                         }`}
                                 >
                                     <input

@@ -1,17 +1,18 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
+import Link from "next/link";
 
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { FormativeActivitiesClient } from "./formative-activities-client";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { StudyLabActivitiesClient } from "./studylab-activities-client";
 
-export default async function FormativePage() {
+export default async function StudyLabPage() {
     const supabase = await createSupabaseServerClient();
     const { data } = await supabase.auth.getUser();
+
     if (!data.user) redirect("/login");
 
-    // Get teacher's workspace from teachers table (matching ClassesPage logic)
+    // Get teacher's workspace
     const { data: teacher } = await supabase
         .from("teachers")
         .select("workspace_id")
@@ -26,7 +27,7 @@ export default async function FormativePage() {
 
     const classNameById = new Map(classes?.map((c) => [c.id, c.name]));
 
-    // Get formative activities
+    // Get studylab activities
     const { data: activities } = await supabase
         .from("formative_activities")
         .select(`
@@ -39,7 +40,7 @@ export default async function FormativePage() {
       created_at
     `)
         .eq("teacher_id", data.user.id)
-        .eq("type", "pulse")
+        .eq("type", "studylab")
         .order("created_at", { ascending: false });
 
     // Get assignments for each activity
@@ -80,13 +81,13 @@ export default async function FormativePage() {
         <div className="space-y-6">
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-2xl font-semibold text-[var(--text)]">Pulse</h1>
+                    <h1 className="text-2xl font-semibold text-[var(--text)]">StudyLab</h1>
                     <p className="mt-1 text-sm text-[var(--muted)]">
-                        Verbal check-ins &quot;Capture + Defend&quot; activities.
+                        AI-guided Socratic study sessions.
                     </p>
                 </div>
-                <Link href="/formative/create">
-                    <Button type="button">+ New Activity</Button>
+                <Link href="/activities/studylab/create">
+                    <Button type="button">+ New Session</Button>
                 </Link>
             </div>
 
@@ -94,7 +95,7 @@ export default async function FormativePage() {
                 <Card>
                     <CardHeader>
                         <CardTitle>Create a class first</CardTitle>
-                        <CardDescription>Formative activities are assigned to classes.</CardDescription>
+                        <CardDescription>StudyLab sessions are assigned to classes.</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <Link href="/classes/new">
@@ -102,30 +103,10 @@ export default async function FormativePage() {
                         </Link>
                     </CardContent>
                 </Card>
-            ) : !activities?.length ? (
-                <Card>
-                    <CardHeader>
-                        <CardTitle>No formative activities yet</CardTitle>
-                        <CardDescription>Create your first &quot;Capture + Defend&quot; activity.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="space-y-3 text-sm text-[var(--muted)]">
-                            <p>StudyLab lets students:</p>
-                            <ol className="list-decimal space-y-1 pl-5">
-                                <li>Upload their handwritten notes or sketches</li>
-                                <li>Record a short voice explanation (60–120 seconds)</li>
-                                <li>Receive fast feedback with a micro-rubric</li>
-                            </ol>
-                            <Link href="/formative/create">
-                                <Button type="button" className="mt-3">Create Activity</Button>
-                            </Link>
-                        </div>
-                    </CardContent>
-                </Card>
             ) : (
-                <FormativeActivitiesClient
-                    initialActivities={activities}
-                    classNameById={Object.fromEntries(classNameById.entries())}
+                <StudyLabActivitiesClient
+                    initialActivities={(activities as any[]) || []}
+                    classNameById={Object.fromEntries(classNameById)}
                     classIdsByActivity={classIdsByActivity}
                     submissionStatsById={submissionStatsById}
                 />
