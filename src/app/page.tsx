@@ -129,23 +129,7 @@ export default function Home() {
             <div className="grid gap-12 md:grid-cols-2 md:items-center">
               {/* Left Column - Content */}
               <div>
-                <p className="mb-3 inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-xs text-[var(--muted)]">
-                  Voice-based learning platform
-                </p>
-                <div className="mb-6 flex flex-wrap gap-2">
-                  <span className="rounded-full border border-[color-mix(in_oklab,var(--pulse-accent),white_35%)] bg-[color-mix(in_oklab,var(--pulse-accent),black_75%)] px-3 py-1 text-xs text-[color-mix(in_oklab,white,black_8%)]">
-                    Daily Pulse
-                  </span>
-                  <span className="rounded-full border border-[color-mix(in_oklab,var(--studylab-accent),white_35%)] bg-[color-mix(in_oklab,var(--studylab-accent),black_75%)] px-3 py-1 text-xs text-[color-mix(in_oklab,white,black_8%)]">
-                    Weekly StudyLab
-                  </span>
-                  <span className="rounded-full border border-[color-mix(in_oklab,var(--core-accent),white_35%)] bg-[color-mix(in_oklab,var(--core-accent),black_82%)] px-3 py-1 text-xs text-[color-mix(in_oklab,white,black_8%)]">
-                    Unit Assessments
-                  </span>
-                  <span className="rounded-full border border-[color-mix(in_oklab,#34d399,white_35%)] bg-[color-mix(in_oklab,#34d399,black_82%)] px-3 py-1 text-xs text-[color-mix(in_oklab,white,black_8%)]">
-                    AI-assisted
-                  </span>
-                </div>
+
 
                 <h1 className="text-5xl font-bold leading-tight tracking-tight md:text-7xl">
                   Voice-based learning <br />

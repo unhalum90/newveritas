@@ -14,6 +14,9 @@ const marketingPaths = [
   "/security-privacy",
   "/assessment-playbook",
   "/roadmap",
+  "/waitlist",
+  "/studylab",
+  "/pulse",
 ];
 
 const authPaths = ["/login", "/signup", "/student/login", "/activate"];
