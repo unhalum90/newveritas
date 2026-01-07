@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { requirePlatformAdmin } from "@/lib/auth/platform-admin";
 
@@ -27,11 +28,11 @@ export default async function AdminSupportPage() {
   const formatDateTime = (value?: string | null) =>
     value
       ? new Date(value).toLocaleString("en-US", {
-          month: "short",
-          day: "numeric",
-          hour: "numeric",
-          minute: "2-digit",
-        })
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      })
       : "-";
 
   return (

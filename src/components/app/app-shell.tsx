@@ -19,6 +19,7 @@ export function AppShell({ children, mainClassName = "mx-auto max-w-6xl px-6 py-
   useEffect(() => {
     const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
     if (stored === "light" || stored === "dark") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setTheme(stored);
     }
   }, []);

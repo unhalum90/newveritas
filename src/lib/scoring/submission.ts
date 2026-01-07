@@ -173,10 +173,10 @@ async function openaiGenerateJson(model: string, system: string, user: string, c
 
   const data = (await res.json().catch(() => null)) as
     | {
-        error?: { message?: unknown };
-        choices?: Array<{ message?: { content?: unknown } }>;
-        usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
-      }
+      error?: { message?: unknown };
+      choices?: Array<{ message?: { content?: unknown } }>;
+      usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
+    }
     | null;
   const usage = data?.usage;
 
@@ -362,7 +362,7 @@ async function transcribeWithGemini(audioBytes: Buffer, mimeType: string) {
   return transcript.trim();
 }
 
-async function transcribeAudio(audioBytes: Buffer, mimeType: string, context?: OpenAiLogContext) {
+export async function transcribeAudio(audioBytes: Buffer, mimeType: string, context?: OpenAiLogContext) {
   // Prefer OpenAI for transcription (most reliable with API keys).
   if (process.env.OPENAI_API_KEY) return transcribeWithOpenAi(audioBytes, mimeType, context);
 
@@ -636,7 +636,7 @@ export async function scoreSubmission(submissionId: string) {
         continue;
       }
 
-      let followupPrompt =
+      const followupPrompt =
         typeof primaryResp.ai_followup_question === "string" ? primaryResp.ai_followup_question.trim() : "";
       if (isAudioFollowup(q.question_type)) {
         const followupResp = respSet?.followup ?? null;

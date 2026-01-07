@@ -86,6 +86,7 @@ function countWords(text: string) {
 export async function buildAssessmentMetrics(
   supabase: {
     from: (table: string) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       select: (columns: string) => any;
     };
   },
@@ -113,9 +114,9 @@ export async function buildAssessmentMetrics(
   const { data: responses, error: responsesError } =
     submissionIds.length > 0
       ? await supabase
-          .from("submission_responses")
-          .select("submission_id, question_id, transcript")
-          .in("submission_id", submissionIds)
+        .from("submission_responses")
+        .select("submission_id, question_id, transcript")
+        .in("submission_id", submissionIds)
       : { data: [], error: null };
   if (responsesError) throw responsesError;
 
@@ -138,9 +139,9 @@ export async function buildAssessmentMetrics(
   const { data: scores, error: scoresError } =
     submissionIds.length > 0
       ? await supabase
-          .from("question_scores")
-          .select("submission_id, question_id, scorer_type, score")
-          .in("submission_id", submissionIds)
+        .from("question_scores")
+        .select("submission_id, question_id, scorer_type, score")
+        .in("submission_id", submissionIds)
       : { data: [], error: null };
   if (scoresError) throw scoresError;
 

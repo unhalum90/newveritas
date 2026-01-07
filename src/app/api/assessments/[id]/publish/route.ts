@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { createRouteSupabaseClient } from "@/lib/supabase/route";
 import { validateAssessmentPhase1 } from "@/lib/validation/assessment-validator";
+import { validateAgainstConstraints, type ProfileId } from "@/lib/assessments/profiles";
 
 export async function POST(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
@@ -11,7 +12,7 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
 
   const { data: assessment, error: getError } = await supabase
     .from("assessments")
-    .select("id, status, title, selected_asset_id")
+    .select("id, status, title, selected_asset_id, assessment_profile")
     .eq("id", id)
     .maybeSingle();
 
@@ -41,6 +42,36 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
   const validation = validateAssessmentPhase1({ questions, rubrics: rubrics ?? [] });
   if (!validation.can_publish) {
     return NextResponse.json(validation, { status: 400 });
+  }
+
+  // Validate profile constraints if a profile is selected
+  if (assessment.assessment_profile) {
+    const { data: integrity } = await supabase
+      .from("assessment_integrity")
+      .select("*")
+      .eq("assessment_id", id)
+      .maybeSingle();
+
+    const profileValidation = validateAgainstConstraints(
+      assessment.assessment_profile as ProfileId,
+      {
+        recording_limit_seconds: integrity?.recording_limit_seconds ?? 60,
+        viewing_timer_seconds: integrity?.viewing_timer_seconds ?? 20,
+        pledge_enabled: integrity?.pledge_enabled ?? false,
+        socratic_follow_ups: undefined, // TODO: add when socratic_follow_ups is tracked
+      }
+    );
+
+    if (!profileValidation.valid) {
+      return NextResponse.json({
+        can_publish: false,
+        critical_errors: profileValidation.errors.map((e) => ({
+          code: "PROFILE_CONSTRAINT",
+          message: e.message,
+          field: e.field,
+        })),
+      }, { status: 400 });
+    }
   }
 
   const now = new Date().toISOString();

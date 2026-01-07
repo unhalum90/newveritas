@@ -149,13 +149,13 @@ export default function Home() {
                     Mobile-ready
                   </span>
                 </div>
-                
+
                 {/* ENLARGED HERO HEADLINE - was 4xl/5xl, now 5xl/7xl */}
                 <h1 className="text-5xl font-bold leading-tight tracking-tight md:text-7xl">
                   Stop grading. <br />
                   <span className="text-[var(--primary)]">Start teaching.</span>
                 </h1>
-                
+
                 <p className="mt-6 text-lg leading-relaxed text-[var(--muted)] md:text-xl">
                   AI-powered oral assessment that scores student understanding in minutes—so you can focus on the students who
                   need you most.
@@ -235,7 +235,7 @@ export default function Home() {
                   <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-lg bg-[#60a5fa] text-2xl">📊</div>
                   <p className="text-base font-semibold">The scale problem</p>
                   <p className="mt-3 text-sm leading-relaxed text-[var(--muted)]">
-                    Oral assessments reveal deep understanding—but 5 minutes per student doesn't scale.
+                    Oral assessments reveal deep understanding—but 5 minutes per student doesn&apos;t scale.
                   </p>
                 </div>
                 <div className="rounded-xl border border-[var(--border)] bg-[color-mix(in_oklab,var(--surface),black_6%)] p-6 text-center">
@@ -260,9 +260,9 @@ export default function Home() {
               See It In Action
             </h2>
             <p className="mx-auto mt-4 max-w-2xl text-center text-lg text-[#64748B]">
-              From assessment creation to student responses to teacher review—here's how SayVeritas works in real classrooms.
+              From assessment creation to student responses to teacher review—here&apos;s how SayVeritas works in real classrooms.
             </p>
-            
+
             <FeatureGallery />
           </div>
         </section>
@@ -273,12 +273,12 @@ export default function Home() {
             <h2 className="text-center text-3xl font-semibold tracking-tight text-[#0F172A] md:text-4xl">
               Assessment that thinks like a professor, scales like technology
             </h2>
-            
+
             {/* Horizontal Timeline Layout */}
             <div className="relative mt-12">
               {/* Timeline Line */}
               <div className="absolute left-0 right-0 top-12 hidden h-0.5 bg-[#E2E8F0] md:block" />
-              
+
               <div className="grid gap-8 md:grid-cols-4">
                 {[
                   {
@@ -309,14 +309,14 @@ export default function Home() {
                   <div key={step.number} className="relative">
                     {/* Step Number Circle */}
                     <div className="relative z-10 mx-auto flex h-24 w-24 items-center justify-center">
-                      <div 
+                      <div
                         className="flex h-16 w-16 items-center justify-center rounded-full border-4 border-white font-bold text-[#0b0f14] shadow-lg"
                         style={{ backgroundColor: step.color }}
                       >
                         <span className="text-2xl">{step.number}</span>
                       </div>
                     </div>
-                    
+
                     {/* Step Content */}
                     <div className="mt-4 text-center">
                       <p className="text-base font-semibold text-[#0F172A]">{step.title}</p>
@@ -324,7 +324,7 @@ export default function Home() {
                         {step.description}
                       </p>
                     </div>
-                    
+
                     {/* Arrow (except last step) */}
                     {idx < 3 && (
                       <div className="absolute right-0 top-12 hidden -translate-y-1/2 translate-x-1/2 text-2xl text-[#64748B] md:block">
@@ -379,9 +379,9 @@ export default function Home() {
                 <div
                   key={item.title}
                   className="group rounded-xl border border-[#E2E8F0] bg-white p-6 shadow-sm transition-shadow hover:shadow-md"
-                  style={{ 
-                    borderLeftColor: featureAccents[idx % featureAccents.length], 
-                    borderLeftWidth: 4 
+                  style={{
+                    borderLeftColor: featureAccents[idx % featureAccents.length],
+                    borderLeftWidth: 4
                   }}
                 >
                   <div className="flex items-center gap-3">
@@ -442,7 +442,7 @@ export default function Home() {
                     height={300}
                     className="w-full rounded-lg"
                   /> */}
-                  
+
                   <p className="text-lg font-semibold" style={{ color: useCase.color }}>
                     {useCase.title}
                   </p>
@@ -474,10 +474,10 @@ export default function Home() {
                     className="rounded-full"
                   /> */}
                 </div>
-                
+
                 <div className="flex-1 text-center md:text-left">
                   <p className="text-2xl leading-relaxed text-[#0F172A]">
-                    "Finally, I have time to actually <span className="font-semibold text-[var(--primary-strong)]">teach</span> instead of grade papers. SayVeritas gave me my weekends back."
+                    &quot;Finally, I have time to actually <span className="font-semibold text-[var(--primary-strong)]">teach</span> instead of grade papers. SayVeritas gave me my weekends back.&quot;
                   </p>
                   <div className="mt-6">
                     <p className="font-semibold text-[#0F172A]">Sarah M.</p>
@@ -550,11 +550,10 @@ export default function Home() {
               {pricingTiers.map((tier) => (
                 <div
                   key={tier.name}
-                  className={`relative flex h-full flex-col rounded-3xl border p-8 shadow-[0_30px_80px_-60px_rgba(20,184,166,0.35)] ${
-                    tier.isPopular
-                      ? "border-[color-mix(in_oklab,#34d399,white_30%)] bg-[linear-gradient(160deg,rgba(16,55,48,0.96),rgba(10,22,24,0.96))]"
-                      : "border-[var(--border)] bg-[linear-gradient(160deg,rgba(18,24,34,0.96),rgba(11,15,20,0.96))]"
-                  }`}
+                  className={`relative flex h-full flex-col rounded-3xl border p-8 shadow-[0_30px_80px_-60px_rgba(20,184,166,0.35)] ${tier.isPopular
+                    ? "border-[color-mix(in_oklab,#34d399,white_30%)] bg-[linear-gradient(160deg,rgba(16,55,48,0.96),rgba(10,22,24,0.96))]"
+                    : "border-[var(--border)] bg-[linear-gradient(160deg,rgba(18,24,34,0.96),rgba(11,15,20,0.96))]"
+                    }`}
                 >
                   {tier.isPopular ? (
                     <span className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-1/2 rounded-full border border-[color-mix(in_oklab,#34d399,white_25%)] bg-[color-mix(in_oklab,#34d399,black_10%)] px-4 py-1 text-xs font-semibold uppercase tracking-widest text-white">

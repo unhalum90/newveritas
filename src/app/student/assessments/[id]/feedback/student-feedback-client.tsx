@@ -12,29 +12,29 @@ type FeedbackQuestion = {
   question_text: string;
   question_type: string | null;
   response:
-    | {
-        signed_url: string;
-        duration_seconds: number | null;
-        created_at: string;
-        transcript: string | null;
-      }
-    | null;
+  | {
+    signed_url: string;
+    duration_seconds: number | null;
+    created_at: string;
+    transcript: string | null;
+  }
+  | null;
   evidence:
-    | {
-        signed_url: string;
-        mime_type: string | null;
-        file_size_bytes: number | null;
-        width_px: number | null;
-        height_px: number | null;
-        uploaded_at: string;
-      }
-    | null;
+  | {
+    signed_url: string;
+    mime_type: string | null;
+    file_size_bytes: number | null;
+    width_px: number | null;
+    height_px: number | null;
+    uploaded_at: string;
+  }
+  | null;
   scores:
-    | {
-        reasoning: { score: number | null; justification: string | null };
-        evidence: { score: number | null; justification: string | null };
-      }
-    | null;
+  | {
+    reasoning: { score: number | null; justification: string | null };
+    evidence: { score: number | null; justification: string | null };
+  }
+  | null;
 };
 
 type FeedbackPayload = {
@@ -116,17 +116,19 @@ export function StudentFeedbackClient({ assessmentId }: { assessmentId: string }
               <CardHeader>
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <CardTitle>Teacher verified score</CardTitle>
+                    <CardTitle>Assessment Score</CardTitle>
                     <CardDescription>
                       {payload.submission.published_at
                         ? `Released ${formatDateTime(payload.submission.published_at)}`
-                        : "Released"}
+                        : "Score Preview"}
                     </CardDescription>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
-                      Verified
-                    </span>
+                    {payload.submission.review_status === 'published' && (
+                      <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                        Verified
+                      </span>
+                    )}
                     <div className="text-2xl font-semibold text-[var(--text)]">{scoreLabel}</div>
                   </div>
                 </div>

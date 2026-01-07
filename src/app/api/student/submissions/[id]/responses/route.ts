@@ -1,8 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { isAudioFollowup, isEvidenceFollowup } from "@/lib/assessments/question-types";
-import { generateAudioFollowup, transcribeAudioForFollowup } from "@/lib/ai/audio-followup";
-import { detectOffTopic } from "@/lib/ai/off-topic";
+import { processResponseAsync } from "@/lib/assessments/process-response";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createRouteSupabaseClient } from "@/lib/supabase/route";
 
@@ -52,7 +51,7 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
   const { data: responses, error: rError } = await admin
     .from("submission_responses")
     .select(
-      "id, submission_id, question_id, storage_bucket, storage_path, mime_type, duration_seconds, created_at, response_stage, ai_followup_question",
+      "id, submission_id, question_id, storage_bucket, storage_path, mime_type, duration_seconds, created_at, response_stage, ai_followup_question, processing_status, processing_error",
     )
     .eq("submission_id", submissionId)
     .order("created_at", { ascending: false });
@@ -246,71 +245,12 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
   });
   if (uploadError) return NextResponse.json({ error: uploadError.message }, { status: 500 });
 
-  let transcript: string | null = null;
-  let followupQuestion: string | null = null;
-  let restartHint: { reason: "off_topic"; confidence: number | null } | null = null;
+  // Determine if async processing is needed
   const shouldGenerateFollowup = isAudioFollowupQuestion && responseStage === "primary";
-  if (shouldGenerateFollowup && process.env.OPENAI_API_KEY) {
-    transcript = await transcribeAudioForFollowup({
-      audio: bytes,
-      mimeType: file.type || "audio/webm",
-      context: {
-        assessmentId: submission.assessment_id,
-        studentId: student.id,
-        submissionId,
-        questionId,
-      },
-    });
-    if (transcript) {
-      followupQuestion = await generateAudioFollowup({
-        questionText: q.question_text,
-        transcript,
-        context: {
-          assessmentId: submission.assessment_id,
-          studentId: student.id,
-          submissionId,
-          questionId,
-        },
-      });
-    }
-  }
   const canEvaluateRestart = allowGraceRestart && !restartUsed && responseStage === "primary";
-  if (canEvaluateRestart && process.env.OPENAI_API_KEY) {
-    const transcriptForRestart =
-      transcript ??
-      (await transcribeAudioForFollowup({
-        audio: bytes,
-        mimeType: file.type || "audio/webm",
-        context: {
-          assessmentId: submission.assessment_id,
-          studentId: student.id,
-          submissionId,
-          questionId,
-        },
-      }));
-    if (transcriptForRestart && !transcript) {
-      transcript = transcriptForRestart;
-    }
-    if (transcriptForRestart) {
-      const offTopic = await detectOffTopic({
-        questionText: q.question_text,
-        transcript: transcriptForRestart,
-        context: {
-          assessmentId: submission.assessment_id,
-          studentId: student.id,
-          submissionId,
-          questionId,
-        },
-      });
-      if (offTopic?.offTopic && (offTopic.confidence ?? 0) >= 0.85) {
-        restartHint = { reason: "off_topic", confidence: offTopic.confidence ?? null };
-      }
-    }
-  }
-  if (shouldGenerateFollowup && !followupQuestion) {
-    followupQuestion = "Tell me one more detail about your reasoning.";
-  }
+  const needsAsyncProcessing = shouldGenerateFollowup || canEvaluateRestart;
 
+  // Insert response immediately with processing status
   const insertPayload = {
     submission_id: submissionId,
     question_id: questionId,
@@ -318,15 +258,16 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
     storage_path: path,
     mime_type: file.type || null,
     duration_seconds: Number.isFinite(durationSeconds) ? Math.max(0, Math.round(durationSeconds as number)) : null,
-    transcript: transcript ?? null,
     response_stage: responseStage,
+    processing_status: needsAsyncProcessing ? "pending" : "complete",
+    processing_started_at: needsAsyncProcessing ? new Date().toISOString() : null,
   };
 
   const { data: row, error: insertError } = await admin
     .from("submission_responses")
     .insert(insertPayload)
     .select(
-      "id, submission_id, question_id, storage_bucket, storage_path, mime_type, duration_seconds, created_at, response_stage, ai_followup_question",
+      "id, submission_id, question_id, storage_bucket, storage_path, mime_type, duration_seconds, created_at, response_stage, ai_followup_question, processing_status",
     )
     .single();
 
@@ -338,18 +279,7 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
     return NextResponse.json({ error: insertError.message }, { status: 500 });
   }
 
-  if (followupQuestion) {
-    try {
-      await admin
-        .from("submission_responses")
-        .update({ ai_followup_question: followupQuestion, ai_followup_created_at: new Date().toISOString() })
-        .eq("id", row.id);
-    } catch {
-      // Best-effort: follow-up prompts are optional.
-    }
-  }
-
-  // If the student uploaded evidence before recording, link it to this response row.
+  // Link evidence images to this response (best-effort)
   try {
     await admin
       .from("evidence_images")
@@ -361,13 +291,33 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
     // best-effort; the evidence row is optional
   }
 
+  // Fire off async processing (non-blocking)
+  if (needsAsyncProcessing) {
+    void processResponseAsync(row.id, {
+      audioPath: path,
+      bucket,
+      mimeType: file.type || "audio/webm",
+      questionId,
+      questionText: q.question_text,
+      questionType: q.question_type,
+      shouldGenerateFollowup,
+      canEvaluateRestart,
+      context: {
+        submissionId,
+        assessmentId: submission.assessment_id,
+        studentId: student.id,
+      },
+    });
+  }
+
   const { data: signedUrl, error: signedError } = await admin.storage.from(bucket).createSignedUrl(path, 60 * 60);
   if (signedError) return NextResponse.json({ error: signedError.message }, { status: 500 });
 
+  // Return immediately with processing flag
   const res = NextResponse.json({
     ok: true,
+    processing: needsAsyncProcessing,
     response: { ...row, signed_url: signedUrl.signedUrl },
-    restart_hint: restartHint,
   });
   pendingCookies.forEach(({ name, value, options }) => res.cookies.set(name, value, options));
   return res;

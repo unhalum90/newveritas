@@ -17,11 +17,10 @@ function NavLink({ href, label, dataTour }: { href: string; label: string; dataT
       href={href}
       data-tour={dataTour}
       aria-current={active ? "page" : undefined}
-      className={`text-sm transition-colors ${
-        active
-          ? "font-semibold text-[var(--primary)]"
-          : "text-[var(--muted)] hover:text-[var(--text)]"
-      }`}
+      className={`text-sm transition-colors ${active
+        ? "font-semibold text-[var(--primary)]"
+        : "text-[var(--muted)] hover:text-[var(--text)]"
+        }`}
     >
       {label}
     </Link>
@@ -34,6 +33,77 @@ type AppHeaderProps = {
   theme?: ThemeMode;
   onThemeChange?: (theme: ThemeMode) => void;
 };
+
+
+function ToolsDropdown() {
+  const [isOpen, setIsOpen] = useState(false);
+
+  // Close when clicking outside - simple implementation using window listener
+  useEffect(() => {
+    if (!isOpen) return;
+    const close = () => setIsOpen(false);
+    window.addEventListener("click", close);
+    // Cleanup
+    return () => window.removeEventListener("click", close);
+  }, [isOpen]);
+
+  // Prevent closing when clicking inside the dropdown button (so it toggles)
+  const handleToggle = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsOpen(!isOpen);
+  };
+
+  return (
+    <div className="relative">
+      <button
+        onClick={handleToggle}
+        className={`flex items-center gap-1.5 text-sm transition-colors ${isOpen ? "text-[var(--text)]" : "text-[var(--muted)] hover:text-[var(--text)]"
+          }`}
+        aria-expanded={isOpen}
+      >
+        Tools
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className={`transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
+        >
+          <path d="m6 9 6 6 6-6" />
+        </svg>
+      </button>
+
+      {isOpen && (
+        <div className="absolute top-full right-0 mt-2 w-48 rounded-md border border-[var(--border)] bg-[var(--surface)] p-1 shadow-lg animate-in fade-in zoom-in-95 duration-200 z-50">
+          <Link
+            href="/formative"
+            className="flex w-full items-center rounded-sm px-3 py-2 text-sm text-[var(--text)] hover:bg-[var(--background)] transition-colors"
+          >
+            Pulse
+          </Link>
+          <Link
+            href="/studylab"
+            className="flex w-full items-center rounded-sm px-3 py-2 text-sm text-[var(--text)] hover:bg-[var(--background)] transition-colors"
+          >
+            StudyLab
+          </Link>
+          <div className="my-1 h-px bg-[var(--border)]" />
+          <Link
+            href="/assessments"
+            className="flex w-full items-center rounded-sm px-3 py-2 text-sm text-[var(--text)] hover:bg-[var(--background)] transition-colors"
+          >
+            Summative
+          </Link>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function AppHeader({ theme = "dark", onThemeChange }: AppHeaderProps) {
   const router = useRouter();
@@ -71,7 +141,9 @@ export function AppHeader({ theme = "dark", onThemeChange }: AppHeaderProps) {
         <nav className="flex items-center gap-5" aria-label="Primary">
           <NavLink href="/dashboard" label="Dashboard" />
           <NavLink href="/classes" label="Classes" dataTour="nav-classes" />
-          <NavLink href="/assessments" label="Assessments" dataTour="nav-assessments" />
+
+          <ToolsDropdown />
+
           <NavLink href="/help" label="Help" dataTour="nav-help" />
           <NavLink href="/settings" label="Settings" />
           {onThemeChange ? (

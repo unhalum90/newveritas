@@ -63,9 +63,9 @@ export default function AboutPage() {
             <div>
               <h1 className="text-4xl font-semibold tracking-tight md:text-5xl">My Journey</h1>
               <p className="mt-6 text-lg leading-relaxed text-[var(--muted)]">
-                I started teaching in 1999, right as &quot;21st century skills&quot; became education's rallying cry. A quarter
-                century later, entering the second quarter of the 21st century, it's clear: the tools we built for that
-                era don't work anymore. AI has fundamentally changed what students can fake and what teachers can
+                I started teaching in 1999, right as &quot;21st century skills&quot; became education&apos;s rallying cry. A quarter
+                century later, entering the second quarter of the 21st century, it&apos;s clear: the tools we built for that
+                era don&apos;t work anymore. AI has fundamentally changed what students can fake and what teachers can
                 verify. SayVeritas is my attempt to build assessment infrastructure for the reality we face today—grounded
                 in pedagogy, not just AI hype.
               </p>
@@ -93,9 +93,8 @@ export default function AboutPage() {
                       </div>
                       <div className={`w-full md:w-[46%] ${isLeft ? "md:pr-16" : "md:pl-16"}`}>
                         <div
-                          className={`rounded-[32px] border border-[var(--border)] bg-[var(--surface)] px-8 py-6 shadow-[0_30px_80px_-55px_rgba(15,118,110,0.45)] ${
-                            isLeft ? "text-left" : "text-left md:text-right"
-                          }`}
+                          className={`rounded-[32px] border border-[var(--border)] bg-[var(--surface)] px-8 py-6 shadow-[0_30px_80px_-55px_rgba(15,118,110,0.45)] ${isLeft ? "text-left" : "text-left md:text-right"
+                            }`}
                         >
                           <h3 className="text-xl font-semibold">{item.title}</h3>
                           <p className="mt-3 text-sm leading-relaxed text-[var(--muted)]">{item.body}</p>

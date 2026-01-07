@@ -1616,3 +1616,67 @@ alter table public.system_logs add column if not exists data_classification text
 alter table public.support_tickets add column if not exists data_classification text not null default 'personal';
 alter table public.admin_audit_trail add column if not exists data_classification text not null default 'personal';
 alter table public.credit_adjustments add column if not exists data_classification text not null default 'personal';
+
+-- =========================
+-- Async Follow-up Processing
+-- =========================
+
+-- Add processing status columns to submission_responses for async STT + follow-up generation
+alter table public.submission_responses add column if not exists processing_status text not null default 'complete';
+alter table public.submission_responses add column if not exists processing_error text;
+alter table public.submission_responses add column if not exists processing_started_at timestamptz;
+
+-- Add constraint for processing_status values
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'submission_responses_processing_status_chk'
+  ) then
+    alter table public.submission_responses
+      add constraint submission_responses_processing_status_chk
+      check (processing_status in ('pending', 'transcribing', 'generating', 'complete', 'error'));
+  end if;
+end;
+$$;
+
+-- Index for efficient polling/realtime queries on processing status
+create index if not exists submission_responses_processing_idx
+on public.submission_responses(submission_id, processing_status)
+where processing_status != 'complete';
+
+-- =========================
+-- Assessment Profiles
+-- =========================
+
+-- Add profile fields to assessments table
+alter table public.assessments add column if not exists assessment_profile text;
+alter table public.assessments add column if not exists profile_modified boolean not null default false;
+alter table public.assessments add column if not exists profile_version integer not null default 1;
+alter table public.assessments add column if not exists profile_override_keys text[];
+
+-- Add constraint for valid profile values
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'assessments_profile_chk'
+  ) then
+    alter table public.assessments
+      add constraint assessments_profile_chk
+      check (assessment_profile is null or assessment_profile in (
+        'k6_formative',
+        '712_formative',
+        '712_summative',
+        'higher_ed_viva',
+        'language_proficiency'
+      ));
+  end if;
+end;
+$$;
+
+-- Index for profile-based queries
+create index if not exists assessments_profile_idx on public.assessments(assessment_profile);
+

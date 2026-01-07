@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { validateAssessmentPhase1, type ValidationError, type ValidationResult } from "@/lib/validation/assessment-validator";
+import { PROFILE_LIST, getProfile, applyProfile, detectOverrides, type ProfileId } from "@/lib/assessments/profiles";
 
 type ClassRow = { id: string; name: string };
 type StudentRow = { id: string; first_name: string; last_name: string; email?: string | null };
@@ -27,6 +28,11 @@ type Assessment = {
   authoring_mode: AuthoringMode;
   is_practice_mode?: boolean | null;
   classes?: { name?: string | null } | null;
+  // Profile fields
+  assessment_profile?: ProfileId | null;
+  profile_modified?: boolean;
+  profile_version?: number;
+  profile_override_keys?: string[];
   assessment_integrity: {
     pause_threshold_seconds: number | null;
     tab_switch_monitor: boolean;
@@ -361,10 +367,10 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
       .then(async (res) => {
         const data = (await res.json().catch(() => null)) as
           | {
-              enabled?: boolean;
-              sets?: Array<StandardsSet & { enabled?: boolean }>;
-              error?: string;
-            }
+            enabled?: boolean;
+            sets?: Array<StandardsSet & { enabled?: boolean }>;
+            error?: string;
+          }
           | null;
         if (!active) return;
         if (!res.ok) {
@@ -676,6 +682,36 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify(next),
       });
+
+      // Detect profile overrides after updating integrity settings
+      if (assessment?.assessment_profile && !assessment.profile_modified) {
+        const updatedState = {
+          ...assessment.assessment_integrity,
+          ...next,
+        };
+        const overrides = detectOverrides(assessment.assessment_profile, {
+          recording_limit_seconds: updatedState.recording_limit_seconds,
+          viewing_timer_seconds: updatedState.viewing_timer_seconds,
+          tab_switch_monitor: updatedState.tab_switch_monitor,
+          shuffle_questions: updatedState.shuffle_questions,
+          pledge_enabled: updatedState.pledge_enabled,
+          pause_threshold_seconds: updatedState.pause_threshold_seconds,
+          allow_grace_restart: updatedState.allow_grace_restart,
+        });
+
+        if (overrides.length > 0) {
+          // Update profile_modified flag
+          await jsonFetch(`/api/assessments/${assessmentId}`, {
+            method: "PATCH",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              profile_modified: true,
+              profile_override_keys: overrides,
+            }),
+          });
+        }
+      }
+
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Save failed.");
@@ -787,9 +823,8 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
       {
         step: 2,
         title: "General Info",
-        summary: `Instructions: ${instructions ? "Provided" : "Missing"} • Practice mode: ${
-          assessment.is_practice_mode ? "On" : "Off"
-        }`,
+        summary: `Instructions: ${instructions ? "Provided" : "Missing"} • Practice mode: ${assessment.is_practice_mode ? "On" : "Off"
+          }`,
         details: instructions ? [`Instructions preview: ${instructionsPreview}`] : [],
       },
       {
@@ -1268,18 +1303,15 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
                     type="button"
                     disabled={disabled}
                     onClick={() => goToStep(s.n)}
-                    className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm transition-colors border-[var(--border)] ${
-                      active ? "bg-[var(--border)] text-[var(--text)]" : "bg-transparent text-[var(--muted)]"
-                    } ${
-                      disabled ? "opacity-40 cursor-not-allowed" : "hover:border-[var(--primary)] hover:text-[var(--text)]"
-                    }`}
+                    className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm transition-colors border-[var(--border)] ${active ? "bg-[var(--border)] text-[var(--text)]" : "bg-transparent text-[var(--muted)]"
+                      } ${disabled ? "opacity-40 cursor-not-allowed" : "hover:border-[var(--primary)] hover:text-[var(--text)]"
+                      }`}
                   >
                     <span
-                      className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold ${
-                        active
-                          ? "bg-[var(--primary-strong)] text-white"
-                          : "bg-[var(--surface)] text-[var(--muted)] border border-[var(--border)]"
-                      }`}
+                      className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold ${active
+                        ? "bg-[var(--primary-strong)] text-white"
+                        : "bg-[var(--surface)] text-[var(--muted)] border border-[var(--border)]"
+                        }`}
                     >
                       {s.n}
                     </span>
@@ -1294,41 +1326,120 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
             <Card>
               <CardHeader>
                 <CardTitle>Start</CardTitle>
-                <CardDescription>Choose how to create it, then set the basics.</CardDescription>
+                <CardDescription>Choose your assessment type, how to create it, then set the basics.</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                  {(
-                    [
-                      { key: "manual", title: "Start from scratch", desc: "Fill out the wizard step-by-step." },
-                      { key: "upload", title: "Upload existing material", desc: "Upload a PDF; we extract text and generate a draft." },
-                      { key: "ai", title: "Generate with AI", desc: "Describe what you want; we generate a draft to review." },
-                      { key: "template", title: "Use a template", desc: "Browse pre-built questions by subject." },
-                    ] as const
-                  ).map((m) => (
-                    <Card key={m.key} className={assessment.authoring_mode === m.key ? "ring-1 ring-[var(--primary)]" : ""}>
-                      <CardHeader>
-                        <CardTitle className="text-base">{m.title}</CardTitle>
-                        <CardDescription>{m.desc}</CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        <Button
+              <CardContent className="space-y-6">
+                {/* Assessment Profile Selector */}
+                <div className="space-y-3">
+                  <Label>Assessment Profile</Label>
+                  <p className="text-xs text-[var(--muted)]">
+                    Select the type of assessment you're creating. This sets recommended defaults for timing, integrity, and follow-ups.
+                  </p>
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+                    {PROFILE_LIST.map((profile) => {
+                      const isSelected = assessment.assessment_profile === profile.id;
+                      return (
+                        <button
+                          key={profile.id}
                           type="button"
-                          variant={assessment.authoring_mode === m.key ? "primary" : "secondary"}
-                          onClick={() => {
-                            setAssessment({ ...assessment, authoring_mode: m.key });
-                            if (m.key !== "ai") setStartAiPrompt("");
-                            if (m.key !== "upload") setStartPdfFile(null);
-                            if (m.key !== "template") setSelectedTemplateId(null);
-                            setDirty(true);
-                          }}
                           disabled={readonly}
+                          onClick={() => {
+                            // Apply profile defaults
+                            const result = applyProfile(profile.id, {
+                              recording_limit_seconds: assessment.assessment_integrity?.recording_limit_seconds,
+                              viewing_timer_seconds: assessment.assessment_integrity?.viewing_timer_seconds,
+                              tab_switch_monitor: assessment.assessment_integrity?.tab_switch_monitor,
+                              shuffle_questions: assessment.assessment_integrity?.shuffle_questions,
+                              pledge_enabled: assessment.assessment_integrity?.pledge_enabled,
+                              pause_threshold_seconds: assessment.assessment_integrity?.pause_threshold_seconds,
+                              allow_grace_restart: assessment.assessment_integrity?.allow_grace_restart,
+                              socratic_enabled: undefined, // Will be applied from defaults
+                              is_practice_mode: assessment.is_practice_mode ?? false,
+                            }, { resetToDefaults: true });
+
+                            setAssessment({
+                              ...assessment,
+                              assessment_profile: profile.id,
+                              profile_modified: false,
+                              profile_version: 1,
+                              profile_override_keys: [],
+                            });
+                            setDirty(true);
+
+                            // Update integrity settings with profile defaults
+                            void updateIntegrity({
+                              recording_limit_seconds: result.newState.recording_limit_seconds,
+                              viewing_timer_seconds: result.newState.viewing_timer_seconds,
+                              tab_switch_monitor: result.newState.tab_switch_monitor,
+                              shuffle_questions: result.newState.shuffle_questions,
+                              pledge_enabled: result.newState.pledge_enabled,
+                              pause_threshold_seconds: result.newState.pause_threshold_seconds,
+                              allow_grace_restart: result.newState.allow_grace_restart,
+                            });
+                          }}
+                          className={`p-4 text-left rounded-lg border transition-all ${isSelected
+                            ? "border-[var(--primary)] bg-[var(--primary)]/5 ring-1 ring-[var(--primary)]"
+                            : "border-[var(--border)] hover:border-[var(--primary)]/50"
+                            } ${readonly ? "opacity-60 cursor-not-allowed" : ""}`}
                         >
-                          {assessment.authoring_mode === m.key ? "Selected" : "Select"}
-                        </Button>
-                      </CardContent>
-                    </Card>
-                  ))}
+                          <div className="font-medium text-sm">{profile.label}</div>
+                          <div className="text-xs text-[var(--muted)] mt-1">{profile.description}</div>
+                          <div className="text-xs text-[var(--muted)] mt-2 flex items-center gap-2">
+                            <span className="inline-block px-1.5 py-0.5 bg-[var(--surface)] rounded text-[10px] uppercase tracking-wide">
+                              {profile.gradeRange}
+                            </span>
+                            {isSelected && (
+                              <span className="text-[var(--primary)] font-medium">✓ Selected</span>
+                            )}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {assessment.assessment_profile && assessment.profile_modified && (
+                    <div className="text-xs text-[var(--warning)] flex items-center gap-1">
+                      <span>⚠</span>
+                      <span>Settings have been modified from profile defaults</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Authoring Mode */}
+                <div className="space-y-3">
+                  <Label>Authoring Mode</Label>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    {(
+                      [
+                        { key: "manual", title: "Start from scratch", desc: "Fill out the wizard step-by-step." },
+                        { key: "upload", title: "Upload existing material", desc: "Upload a PDF; we extract text and generate a draft." },
+                        { key: "ai", title: "Generate with AI", desc: "Describe what you want; we generate a draft to review." },
+                        { key: "template", title: "Use a template", desc: "Browse pre-built questions by subject." },
+                      ] as const
+                    ).map((m) => (
+                      <Card key={m.key} className={assessment.authoring_mode === m.key ? "ring-1 ring-[var(--primary)]" : ""}>
+                        <CardHeader>
+                          <CardTitle className="text-base">{m.title}</CardTitle>
+                          <CardDescription>{m.desc}</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <Button
+                            type="button"
+                            variant={assessment.authoring_mode === m.key ? "primary" : "secondary"}
+                            onClick={() => {
+                              setAssessment({ ...assessment, authoring_mode: m.key });
+                              if (m.key !== "ai") setStartAiPrompt("");
+                              if (m.key !== "upload") setStartPdfFile(null);
+                              if (m.key !== "template") setSelectedTemplateId(null);
+                              setDirty(true);
+                            }}
+                            disabled={readonly}
+                          >
+                            {assessment.authoring_mode === m.key ? "Selected" : "Select"}
+                          </Button>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
                 </div>
 
                 <div className="space-y-2">
@@ -1600,9 +1711,8 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
                             key={t.id}
                             type="button"
                             onClick={() => setSelectedTemplateId(t.id)}
-                            className={`rounded-md border p-4 text-left transition-colors border-[var(--border)] ${
-                              selected ? "ring-2 ring-[var(--primary)]" : "hover:border-[var(--primary)]"
-                            }`}
+                            className={`rounded-md border p-4 text-left transition-colors border-[var(--border)] ${selected ? "ring-2 ring-[var(--primary)]" : "hover:border-[var(--primary)]"
+                              }`}
                             disabled={readonly}
                           >
                             <div className="flex items-start justify-between gap-3">
@@ -1886,9 +1996,8 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
                             key={url}
                             type="button"
                             onClick={() => setAssetUrl(url)}
-                            className={`overflow-hidden rounded-md border transition-colors border-[var(--border)] ${
-                              selected ? "ring-2 ring-[var(--primary)]" : "hover:border-[var(--primary)]"
-                            }`}
+                            className={`overflow-hidden rounded-md border transition-colors border-[var(--border)] ${selected ? "ring-2 ring-[var(--primary)]" : "hover:border-[var(--primary)]"
+                              }`}
                           >
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img src={url} alt="Generated option" className="h-40 w-full object-cover" />

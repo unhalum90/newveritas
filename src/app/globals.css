@@ -82,3 +82,89 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* ================================
+   Accessibility: High Contrast Mode
+   ================================ */
+.high-contrast {
+  --background: #000000;
+  --surface: #000000;
+  --border: #ffffff;
+  --text: #ffffff;
+  --muted: #cccccc;
+  --primary: #00ff00;
+  --primary-strong: #00cc00;
+  --danger: #ff0000;
+}
+
+.high-contrast * {
+  border-color: #ffffff !important;
+}
+
+.high-contrast button,
+.high-contrast a {
+  text-decoration: underline;
+}
+
+/* ================================
+   Accessibility: OpenDyslexic Font
+   ================================ */
+@font-face {
+  font-family: 'OpenDyslexic';
+  src: url('https://cdn.jsdelivr.net/npm/open-dyslexic@1.0.3/woff/OpenDyslexic-Regular.woff') format('woff');
+  font-weight: normal;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'OpenDyslexic';
+  src: url('https://cdn.jsdelivr.net/npm/open-dyslexic@1.0.3/woff/OpenDyslexic-Bold.woff') format('woff');
+  font-weight: bold;
+  font-style: normal;
+}
+
+.font-opendyslexic,
+.font-opendyslexic * {
+  font-family: 'OpenDyslexic', Arial, sans-serif !important;
+  letter-spacing: 0.05em;
+  word-spacing: 0.1em;
+  line-height: 1.6;
+}
+
+/* ================================
+   Accessibility: Focus Indicators
+   ================================ */
+*:focus-visible {
+  outline: 3px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* Skip link for keyboard navigation */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  z-index: 9999;
+  padding: 1rem;
+  background: var(--primary);
+  color: white;
+  text-decoration: none;
+}
+
+.skip-link:focus {
+  left: 0;
+  top: 0;
+}
+
+/* ================================
+   Accessibility: Reduced Motion
+   ================================ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+

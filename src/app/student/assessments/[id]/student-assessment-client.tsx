@@ -87,6 +87,8 @@ type ResponseRow = {
   signed_url: string;
   response_stage?: "primary" | "followup" | null;
   ai_followup_question?: string | null;
+  processing_status?: "pending" | "transcribing" | "generating" | "complete" | "error" | null;
+  processing_error?: string | null;
 };
 
 type StudentAccess = {
@@ -101,6 +103,9 @@ const SLOW_START_THRESHOLD_MS = 6000;
 const GRACE_RESTART_THRESHOLD_MS = 10000;
 const LONG_PAUSE_THRESHOLD_MS = 10000;
 const AUDIO_ACTIVITY_THRESHOLD = 0.03;
+const FOLLOWUP_POLL_INTERVAL_MS = 1500;
+const FOLLOWUP_TIMEOUT_MS = 10000;
+const FALLBACK_FOLLOWUP_QUESTION = "Tell me one more detail about your reasoning.";
 
 function formatDuration(value?: number | null) {
   if (!value || !Number.isFinite(value)) return "Length unknown";
@@ -282,10 +287,59 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
     () => activeResponses.find((r) => r.response_stage === "followup") ?? null,
     [activeResponses],
   );
-  const followupPrompt = useMemo(
-    () => (typeof activePrimaryResponse?.ai_followup_question === "string" ? activePrimaryResponse.ai_followup_question.trim() : ""),
-    [activePrimaryResponse?.ai_followup_question],
-  );
+
+  // Check if follow-up is still being generated
+  const isFollowupProcessing = useMemo(() => {
+    if (!activePrimaryResponse) return false;
+    const status = activePrimaryResponse.processing_status;
+    return status === "pending" || status === "transcribing" || status === "generating";
+  }, [activePrimaryResponse]);
+
+  // Compute the follow-up prompt (with fallback for timeout or error)
+  const [fallbackFollowupActive, setFallbackFollowupActive] = useState(false);
+  const followupPrompt = useMemo(() => {
+    // If we have an AI-generated follow-up, use it
+    if (typeof activePrimaryResponse?.ai_followup_question === "string" && activePrimaryResponse.ai_followup_question.trim()) {
+      return activePrimaryResponse.ai_followup_question.trim();
+    }
+    // If processing failed or timed out, use fallback
+    if (fallbackFollowupActive || activePrimaryResponse?.processing_status === "error") {
+      return FALLBACK_FOLLOWUP_QUESTION;
+    }
+    return "";
+  }, [activePrimaryResponse?.ai_followup_question, activePrimaryResponse?.processing_status, fallbackFollowupActive]);
+
+  // Poll for async follow-up completion
+  useEffect(() => {
+    if (!latest || latest.status !== "started") return;
+    if (!activePrimaryResponse) return;
+    if (!isFollowupProcessing) return;
+
+    // Poll for completion
+    const pollInterval = setInterval(() => {
+      void refreshResponses(latest.id);
+    }, FOLLOWUP_POLL_INTERVAL_MS);
+
+    return () => clearInterval(pollInterval);
+  }, [latest?.id, latest?.status, activePrimaryResponse?.id, isFollowupProcessing]);
+
+  // Timeout fallback for slow processing
+  useEffect(() => {
+    if (!isFollowupProcessing) {
+      setFallbackFollowupActive(false);
+      return;
+    }
+
+    const timeout = setTimeout(() => {
+      if (isFollowupProcessing) {
+        console.warn("Follow-up processing timeout, using fallback");
+        setFallbackFollowupActive(true);
+      }
+    }, FOLLOWUP_TIMEOUT_MS);
+
+    return () => clearTimeout(timeout);
+  }, [isFollowupProcessing, activePrimaryResponse?.id]);
+
   const followupNeeded = Boolean(isAudioFollowupQuestion && activePrimaryResponse && !activeFollowupResponse);
 
   const isEvidenceFollowupQuestion = useMemo(() => isEvidenceFollowup(activeQuestion?.question_type), [activeQuestion?.question_type]);
@@ -364,12 +418,12 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
     const res = await fetch(`/api/student/assessments/${assessmentId}${previewQuery}`, { cache: "no-store" });
     const data = (await res.json().catch(() => null)) as
       | {
-          assessment?: Assessment;
-          latest_submission?: Submission | null;
-          progress?: { answered_count?: number; total_count?: number };
-          student?: StudentAccess;
-          error?: string;
-        }
+        assessment?: Assessment;
+        latest_submission?: Submission | null;
+        progress?: { answered_count?: number; total_count?: number };
+        student?: StudentAccess;
+        error?: string;
+      }
       | null;
     if (!res.ok || !data?.assessment) throw new Error(data?.error ?? "Unable to load assessment.");
     setAssessment(data.assessment);
@@ -736,13 +790,15 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
         if (firstSoundAt != null) {
           const lastAudioAt = lastSoundAt ?? firstSoundAt;
           const silentMs = now - lastAudioAt;
-          if (!pauseActive && silentMs >= LONG_PAUSE_THRESHOLD_MS) {
+          const dynamicPauseThreshold = (assessment?.integrity?.pause_threshold_seconds ?? 10) * 1000;
+
+          if (!pauseActive && silentMs >= dynamicPauseThreshold) {
             pauseActive = true;
             void logIntegrityEvent(latest.id, {
               event_type: "long_pause",
               duration_ms: silentMs,
               question_id: recordedQuestionId,
-              metadata: { threshold_ms: LONG_PAUSE_THRESHOLD_MS },
+              metadata: { threshold_ms: dynamicPauseThreshold },
             });
           }
         }
@@ -1013,13 +1069,6 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
                 Back
               </Button>
             </Link>
-            <Button
-              type="button"
-              disabled={previewMode || working || (latest?.status === "submitted" && !isPracticeMode) || accessRestricted || consentRequired}
-              onClick={startOrResume}
-            >
-              {working ? "Working…" : latest?.status === "started" ? "Resume" : "Start"}
-            </Button>
           </div>
         </div>
 
@@ -1038,38 +1087,67 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
 
         {assessment ? (
           <div className="space-y-4">
-              {assessment.asset_url ? (
-                <Card className="overflow-hidden">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={assessment.asset_url} alt={`${assessment.title} cover`} className="h-72 w-full object-cover" />
-                </Card>
-              ) : null}
+            {assessment.asset_url ? (
+              <Card className="overflow-hidden">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={assessment.asset_url} alt={`${assessment.title} cover`} className="h-72 w-full object-cover" />
+              </Card>
+            ) : null}
 
-              {documentPdf ? (
-                <Card className="overflow-hidden">
-                  <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    <div>
-                      <CardTitle>Reference PDF</CardTitle>
-                      <CardDescription>Review the document before you start.</CardDescription>
-                    </div>
-                    <Button type="button" variant="secondary" onClick={() => setPdfOpen(true)}>
-                      Full screen
+            {documentPdf ? (
+              <Card className="overflow-hidden">
+                <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <CardTitle>Reference PDF</CardTitle>
+                    <CardDescription>Review the document before you start.</CardDescription>
+                  </div>
+                  <Button type="button" variant="secondary" onClick={() => setPdfOpen(true)}>
+                    Full screen
+                  </Button>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="text-xs uppercase tracking-[0.2em] text-[var(--muted)]">
+                    {documentPdf.original_filename?.trim() || "Attached PDF"}
+                  </div>
+                  <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/30 shadow-[0_24px_60px_rgba(0,0,0,0.45)]">
+                    <iframe
+                      title="Reference PDF"
+                      src={pdfInlineUrl}
+                      className="h-[520px] w-full"
+                      loading="lazy"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-[var(--muted)]">
+                    <span>Scroll to zoom or open full screen for detail.</span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => window.open(documentPdf.asset_url, "_blank", "noopener,noreferrer")}
+                    >
+                      Open in new tab
                     </Button>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="text-xs uppercase tracking-[0.2em] text-[var(--muted)]">
+                  </div>
+                </CardContent>
+              </Card>
+            ) : null}
+
+            {documentPdf && pdfOpen ? (
+              <div
+                className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4 py-6"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby={pdfDialogTitleId}
+                tabIndex={-1}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") setPdfOpen(false);
+                }}
+              >
+                <div className="flex h-full w-full max-w-6xl flex-col gap-4 overflow-hidden rounded-3xl border border-white/10 bg-[rgba(15,23,42,0.95)] p-4 shadow-[0_30px_80px_rgba(0,0,0,0.6)]">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="text-sm text-[var(--muted)]" id={pdfDialogTitleId}>
                       {documentPdf.original_filename?.trim() || "Attached PDF"}
                     </div>
-                    <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/30 shadow-[0_24px_60px_rgba(0,0,0,0.45)]">
-                      <iframe
-                        title="Reference PDF"
-                        src={pdfInlineUrl}
-                        className="h-[520px] w-full"
-                        loading="lazy"
-                      />
-                    </div>
-                    <div className="flex items-center justify-between text-xs text-[var(--muted)]">
-                      <span>Scroll to zoom or open full screen for detail.</span>
+                    <div className="flex items-center gap-2">
                       <Button
                         type="button"
                         variant="ghost"
@@ -1077,306 +1155,277 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
                       >
                         Open in new tab
                       </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ) : null}
-
-              {documentPdf && pdfOpen ? (
-                <div
-                  className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4 py-6"
-                  role="dialog"
-                  aria-modal="true"
-                  aria-labelledby={pdfDialogTitleId}
-                  tabIndex={-1}
-                  onKeyDown={(event) => {
-                    if (event.key === "Escape") setPdfOpen(false);
-                  }}
-                >
-                  <div className="flex h-full w-full max-w-6xl flex-col gap-4 overflow-hidden rounded-3xl border border-white/10 bg-[rgba(15,23,42,0.95)] p-4 shadow-[0_30px_80px_rgba(0,0,0,0.6)]">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div className="text-sm text-[var(--muted)]" id={pdfDialogTitleId}>
-                        {documentPdf.original_filename?.trim() || "Attached PDF"}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          onClick={() => window.open(documentPdf.asset_url, "_blank", "noopener,noreferrer")}
-                        >
-                          Open in new tab
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          onClick={() => setPdfOpen(false)}
-                          ref={pdfCloseRef}
-                        >
-                          Close
-                        </Button>
-                      </div>
-                    </div>
-                    <div className="flex-1 overflow-hidden rounded-2xl border border-white/10 bg-black/30">
-                      <iframe title="Reference PDF" src={pdfInlineUrl} className="h-full w-full" />
-                    </div>
-                  </div>
-                </div>
-              ) : null}
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Instructions</CardTitle>
-                  <CardDescription>This is an assessment. Questions are revealed one at a time after you start.</CardDescription>
-                </CardHeader>
-                <CardContent className="text-sm text-[var(--muted)]">
-                  {assessment.instructions?.trim() ? assessment.instructions : "No instructions provided."}
-                </CardContent>
-              </Card>
-
-              {!started ? (
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Ready?</CardTitle>
-                    <CardDescription>
-                      This assessment has {total} question{total === 1 ? "" : "s"}. Once you start, you will see one question at a time.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="flex items-center justify-between gap-3">
-                    <div className="text-sm text-[var(--muted)]">When you click Start, you should be ready to answer immediately.</div>
-                    <Button
-                      type="button"
-                      disabled={previewMode || working || (latest?.status === "submitted" && !isPracticeMode) || accessRestricted || consentRequired}
-                      onClick={startOrResume}
-                    >
-                      {working ? "Starting…" : "Start Assessment"}
-                    </Button>
-                  </CardContent>
-                </Card>
-              ) : latest?.status === "submitted" ? (
-                <Card>
-                  <CardHeader>
-                    <CardTitle>{isPracticeMode ? "Practice Complete" : "Submitted"}</CardTitle>
-                    <CardDescription>
-                      {isPracticeMode
-                        ? "This was a practice attempt. You can try again whenever you're ready."
-                        : "Your responses have been submitted."}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="text-sm text-[var(--muted)]">
-                      {isPracticeMode
-                        ? feedbackReady
-                          ? "Your practice feedback is ready."
-                          : "Scoring your practice attempt now. This usually takes under a minute."
-                        : feedbackReady
-                          ? "Your teacher has released verified feedback."
-                          : "Your teacher will review and release feedback soon."}
-                    </div>
-                    {feedbackReady ? (
-                      <Link href={`/student/assessments/${assessmentId}/feedback`}>
-                        <Button type="button">View Feedback</Button>
-                      </Link>
-                    ) : null}
-                    {isPracticeMode ? (
                       <Button
                         type="button"
-                        disabled={previewMode || working || accessRestricted || consentRequired}
-                        onClick={startOrResume}
+                        variant="secondary"
+                        onClick={() => setPdfOpen(false)}
+                        ref={pdfCloseRef}
                       >
-                        {working ? "Starting…" : "Start Another Attempt"}
+                        Close
                       </Button>
-                    ) : null}
-                  </CardContent>
-                </Card>
-              ) : audioGateActive && audioIntro ? (
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Audio Intro</CardTitle>
-                    <CardDescription>Listen to the full audio before your questions appear.</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-zinc-700">
-                      <span>{audioIntro.original_filename?.trim() || "Audio intro"}</span>
-                      <span>{formatDuration(audioIntro.duration_seconds)}</span>
                     </div>
-                    <audio
-                      controls
-                      src={audioIntro.asset_url}
-                      className="w-full"
-                      onEnded={() => setAudioIntroCompleted(true)}
-                    />
-                    <div className="text-xs text-zinc-600">Once the audio finishes, your first question will appear.</div>
-                  </CardContent>
-                </Card>
-              ) : activeQuestion ? (
-                <Card>
-                  <CardHeader>
-                    <CardTitle>
-                      Question {activeQuestion.order_index} of {total}
-                    </CardTitle>
-                    <CardDescription>Progress: {attempted}/{total} completed</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
+                  </div>
+                  <div className="flex-1 overflow-hidden rounded-2xl border border-white/10 bg-black/30">
+                    <iframe title="Reference PDF" src={pdfInlineUrl} className="h-full w-full" />
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Instructions</CardTitle>
+                <CardDescription>This is an assessment. Questions are revealed one at a time after you start.</CardDescription>
+              </CardHeader>
+              <CardContent className="text-sm text-[var(--muted)]">
+                {assessment.instructions?.trim() ? assessment.instructions : "No instructions provided."}
+              </CardContent>
+            </Card>
+
+            {!started ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Ready?</CardTitle>
+                  <CardDescription>
+                    This assessment has {total} question{total === 1 ? "" : "s"}. Once you start, you will see one question at a time.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="flex items-center justify-between gap-3">
+                  <div className="text-sm text-[var(--muted)]">When you click Start, you should be ready to answer immediately.</div>
+                  <Button
+                    type="button"
+                    disabled={previewMode || working || (latest?.status === "submitted" && !isPracticeMode) || accessRestricted || consentRequired}
+                    onClick={startOrResume}
+                  >
+                    {working ? "Starting…" : "Start Assessment"}
+                  </Button>
+                </CardContent>
+              </Card>
+            ) : latest?.status === "submitted" ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle>{isPracticeMode ? "Practice Complete" : "Submitted"}</CardTitle>
+                  <CardDescription>
+                    {isPracticeMode
+                      ? "This was a practice attempt. You can try again whenever you're ready."
+                      : "Your responses have been submitted."}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="text-sm text-[var(--muted)]">
+                    {isPracticeMode
+                      ? feedbackReady
+                        ? "Your practice feedback is ready."
+                        : "Scoring your practice attempt now. This usually takes under a minute."
+                      : feedbackReady
+                        ? "Your teacher has released verified feedback."
+                        : "Your teacher will review and release feedback soon."}
+                  </div>
+                  {feedbackReady ? (
+                    <Link href={`/student/assessments/${assessmentId}/feedback`}>
+                      <Button type="button">View Feedback</Button>
+                    </Link>
+                  ) : null}
+                  {isPracticeMode ? (
+                    <Button
+                      type="button"
+                      disabled={previewMode || working || accessRestricted || consentRequired}
+                      onClick={startOrResume}
+                    >
+                      {working ? "Starting…" : "Start Another Attempt"}
+                    </Button>
+                  ) : null}
+                </CardContent>
+              </Card>
+            ) : audioGateActive && audioIntro ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Audio Intro</CardTitle>
+                  <CardDescription>Listen to the full audio before your questions appear.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-zinc-700">
+                    <span>{audioIntro.original_filename?.trim() || "Audio intro"}</span>
+                    <span>{formatDuration(audioIntro.duration_seconds)}</span>
+                  </div>
+                  <audio
+                    controls
+                    src={audioIntro.asset_url}
+                    className="w-full"
+                    onEnded={() => setAudioIntroCompleted(true)}
+                  />
+                  <div className="text-xs text-zinc-600">Once the audio finishes, your first question will appear.</div>
+                </CardContent>
+              </Card>
+            ) : activeQuestion ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle>
+                    Question {activeQuestion.order_index} of {total}
+                  </CardTitle>
+                  <CardDescription>Progress: {attempted}/{total} completed</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="rounded-md border border-zinc-200 bg-white p-4">
+                    <div className="text-xs font-semibold uppercase text-zinc-500">
+                      {followupNeeded ? "Follow-up question" : "Question"}
+                    </div>
+                    <div className="mt-2 text-sm text-zinc-900">
+                      {followupNeeded && followupPrompt ? followupPrompt : activeQuestion.question_text}
+                    </div>
+                  </div>
+
+                  {isAudioFollowupQuestion && followupNeeded ? (
+                    <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
+                      <div className="text-xs font-semibold uppercase text-emerald-700">AI follow-up prompt</div>
+                      {followupPrompt ? (
+                        <div className="mt-2 text-sm text-emerald-900">{followupPrompt}</div>
+                      ) : (
+                        <div className="mt-2 text-xs text-emerald-800">Generating follow-up question…</div>
+                      )}
+                    </div>
+                  ) : null}
+
+                  {evidenceSetting !== "disabled" ? (
                     <div className="rounded-md border border-zinc-200 bg-white p-4">
-                      <div className="text-xs font-semibold uppercase text-zinc-500">
-                        {followupNeeded ? "Follow-up question" : "Question"}
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <div className="text-sm font-medium text-zinc-900">Evidence</div>
+                          <div className="mt-0.5 text-xs text-zinc-600">
+                            {evidenceSetting === "required"
+                              ? isEvidenceFollowupQuestion
+                                ? "Required. Upload to generate follow-up questions."
+                                : "Required before recording."
+                              : "Optional. Upload a photo of your work."}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            ref={evidenceInputRef}
+                            type="file"
+                            accept="image/*,.jpg,.jpeg,.png,.heic,.heif"
+                            className="hidden"
+                            onChange={(e) => {
+                              const f = e.target.files?.[0];
+                              if (f) void handleEvidenceSelected(f);
+                            }}
+                          />
+                          {!activeEvidence ? (
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              disabled={working || evidenceUploading}
+                              onClick={() => evidenceInputRef.current?.click()}
+                            >
+                              {evidenceUploading ? "Uploading…" : "Upload Evidence"}
+                            </Button>
+                          ) : (
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              disabled={working || evidenceUploading}
+                              onClick={removeEvidence}
+                            >
+                              {evidenceUploading ? "Removing…" : "Remove"}
+                            </Button>
+                          )}
+                        </div>
                       </div>
-                      <div className="mt-2 text-sm text-zinc-900">
-                        {followupNeeded && followupPrompt ? followupPrompt : activeQuestion.question_text}
-                      </div>
-                    </div>
 
-                    {isAudioFollowupQuestion && followupNeeded ? (
-                      <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
-                        <div className="text-xs font-semibold uppercase text-emerald-700">AI follow-up prompt</div>
-                        {followupPrompt ? (
-                          <div className="mt-2 text-sm text-emerald-900">{followupPrompt}</div>
-                        ) : (
-                          <div className="mt-2 text-xs text-emerald-800">Generating follow-up question…</div>
-                        )}
-                      </div>
-                    ) : null}
-
-                    {evidenceSetting !== "disabled" ? (
-                      <div className="rounded-md border border-zinc-200 bg-white p-4">
-                        <div className="flex flex-wrap items-start justify-between gap-3">
-                          <div>
-                            <div className="text-sm font-medium text-zinc-900">Evidence</div>
-                            <div className="mt-0.5 text-xs text-zinc-600">
-                              {evidenceSetting === "required"
-                                ? isEvidenceFollowupQuestion
-                                  ? "Required. Upload to generate follow-up questions."
-                                  : "Required before recording."
-                                : "Optional. Upload a photo of your work."}
+                      {evidenceLoading ? <div className="mt-3 text-xs text-zinc-600">Loading evidence…</div> : null}
+                      {evidenceError ? (
+                        <div className="mt-3 text-sm text-red-600" role="alert">
+                          {evidenceError}
+                        </div>
+                      ) : null}
+                      {activeEvidence ? (
+                        <div className="mt-3">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={activeEvidence.signed_url}
+                            alt="Evidence upload preview"
+                            className="max-h-72 w-full rounded-md border border-zinc-200 object-contain"
+                          />
+                          <div className="mt-2 text-xs text-zinc-600">
+                            Uploaded {new Date(activeEvidence.uploaded_at).toLocaleString()}
+                          </div>
+                          {isEvidenceFollowupQuestion ? (
+                            <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
+                              <div className="text-xs font-semibold uppercase text-emerald-700">AI follow-up questions</div>
+                              {evidenceAnalysis ? (
+                                <>
+                                  {evidenceAnalysis.summary ? (
+                                    <div className="mt-1 text-xs text-emerald-800">{evidenceAnalysis.summary}</div>
+                                  ) : null}
+                                  {evidenceAnalysis.questions.length ? (
+                                    <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-emerald-900">
+                                      {evidenceAnalysis.questions.map((item, idx) => (
+                                        <li key={`${activeEvidence.id}-followup-${idx}`}>{item}</li>
+                                      ))}
+                                    </ul>
+                                  ) : (
+                                    <div className="mt-2 text-xs text-emerald-800">No follow-up questions generated.</div>
+                                  )}
+                                </>
+                              ) : (
+                                <div className="mt-2 text-xs text-emerald-800">Generating questions...</div>
+                              )}
                             </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <input
-                              ref={evidenceInputRef}
-                              type="file"
-                              accept="image/*,.jpg,.jpeg,.png,.heic,.heif"
-                              className="hidden"
-                              onChange={(e) => {
-                                const f = e.target.files?.[0];
-                                if (f) void handleEvidenceSelected(f);
-                              }}
-                            />
-                            {!activeEvidence ? (
-                              <Button
-                                type="button"
-                                variant="secondary"
-                                disabled={working || evidenceUploading}
-                                onClick={() => evidenceInputRef.current?.click()}
-                              >
-                                {evidenceUploading ? "Uploading…" : "Upload Evidence"}
-                              </Button>
-                            ) : (
-                              <Button
-                                type="button"
-                                variant="secondary"
-                                disabled={working || evidenceUploading}
-                                onClick={removeEvidence}
-                              >
-                                {evidenceUploading ? "Removing…" : "Remove"}
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-
-                        {evidenceLoading ? <div className="mt-3 text-xs text-zinc-600">Loading evidence…</div> : null}
-                        {evidenceError ? (
-                          <div className="mt-3 text-sm text-red-600" role="alert">
-                            {evidenceError}
-                          </div>
-                        ) : null}
-                        {activeEvidence ? (
-                          <div className="mt-3">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                              src={activeEvidence.signed_url}
-                              alt="Evidence upload preview"
-                              className="max-h-72 w-full rounded-md border border-zinc-200 object-contain"
-                            />
-                            <div className="mt-2 text-xs text-zinc-600">
-                              Uploaded {new Date(activeEvidence.uploaded_at).toLocaleString()}
-                            </div>
-                            {isEvidenceFollowupQuestion ? (
-                              <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
-                                <div className="text-xs font-semibold uppercase text-emerald-700">AI follow-up questions</div>
-                                {evidenceAnalysis ? (
-                                  <>
-                                    {evidenceAnalysis.summary ? (
-                                      <div className="mt-1 text-xs text-emerald-800">{evidenceAnalysis.summary}</div>
-                                    ) : null}
-                                    {evidenceAnalysis.questions.length ? (
-                                      <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-emerald-900">
-                                        {evidenceAnalysis.questions.map((item, idx) => (
-                                          <li key={`${activeEvidence.id}-followup-${idx}`}>{item}</li>
-                                        ))}
-                                      </ul>
-                                    ) : (
-                                      <div className="mt-2 text-xs text-emerald-800">No follow-up questions generated.</div>
-                                    )}
-                                  </>
-                                ) : (
-                                  <div className="mt-2 text-xs text-emerald-800">Generating questions...</div>
-                                )}
-                              </div>
-                            ) : null}
-                          </div>
-                        ) : null}
-                      </div>
-                    ) : null}
-
-                    <div className="rounded-md border border-zinc-200 bg-zinc-50 p-4">
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="text-sm font-medium text-zinc-900">
-                          {followupNeeded ? "Record your follow-up response" : "Record your response"}
-                        </div>
-                        <div className="text-xs text-zinc-600">
-                          {recording ? `Recording: ${recordingSeconds}s / ${recordingLimitSeconds}s` : `Limit: ${recordingLimitSeconds}s`}
-                        </div>
-                      </div>
-                      <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-zinc-200">
-                        <div
-                          className={`h-full ${recording ? "bg-emerald-500" : "bg-zinc-400"}`}
-                          style={{ width: `${recording ? recordingProgress : 0}%` }}
-                        />
-                      </div>
-                      <div className="mt-3 flex flex-wrap items-center gap-2">
-                        {recording ? (
-                          <Button type="button" variant="secondary" disabled={working} onClick={stopRecording}>
-                            Stop
-                          </Button>
-                        ) : (
-                          <div className="text-sm text-[var(--muted)]">
-                            Recording starts automatically when the question appears.
-                          </div>
-                        )}
-                        {working ? <span className="text-sm text-zinc-600">Saving…</span> : null}
-                      </div>
-                      {recordingError ? (
-                        <div className="mt-2 text-sm text-red-600" role="alert">
-                          {recordingError}
+                          ) : null}
                         </div>
                       ) : null}
                     </div>
-                  </CardContent>
-                </Card>
-              ) : (
-                <Card>
-                  <CardHeader>
-                    <CardTitle>All questions answered</CardTitle>
-                    <CardDescription>Submit your assessment to finish.</CardDescription>
-                  </CardHeader>
-                  <CardContent className="flex items-center justify-between gap-3">
-                    <div className="text-sm text-[var(--muted)]">You cannot change responses after submitting.</div>
-                    <Button type="button" disabled={working || !canSubmitAttempt} onClick={submit}>
-                      Submit
-                    </Button>
-                  </CardContent>
-                </Card>
-              )}
+                  ) : null}
+
+                  <div className="rounded-md border border-zinc-200 bg-zinc-50 p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-sm font-medium text-zinc-900">
+                        {followupNeeded ? "Record your follow-up response" : "Record your response"}
+                      </div>
+                      <div className="text-xs text-zinc-600">
+                        {recording ? `Recording: ${recordingSeconds}s / ${recordingLimitSeconds}s` : `Limit: ${recordingLimitSeconds}s`}
+                      </div>
+                    </div>
+                    <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-zinc-200">
+                      <div
+                        className={`h-full ${recording ? "bg-emerald-500" : "bg-zinc-400"}`}
+                        style={{ width: `${recording ? recordingProgress : 0}%` }}
+                      />
+                    </div>
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      {recording ? (
+                        <Button type="button" variant="secondary" disabled={working} onClick={stopRecording}>
+                          Stop
+                        </Button>
+                      ) : (
+                        <div className="text-sm text-[var(--muted)]">
+                          Recording starts automatically when the question appears.
+                        </div>
+                      )}
+                      {working ? <span className="text-sm text-zinc-600">Saving…</span> : null}
+                    </div>
+                    {recordingError ? (
+                      <div className="mt-2 text-sm text-red-600" role="alert">
+                        {recordingError}
+                      </div>
+                    ) : null}
+                  </div>
+                </CardContent>
+              </Card>
+            ) : (
+              <Card>
+                <CardHeader>
+                  <CardTitle>All questions answered</CardTitle>
+                  <CardDescription>Submit your assessment to finish.</CardDescription>
+                </CardHeader>
+                <CardContent className="flex items-center justify-between gap-3">
+                  <div className="text-sm text-[var(--muted)]">You cannot change responses after submitting.</div>
+                  <Button type="button" disabled={working || !canSubmitAttempt} onClick={submit}>
+                    Submit
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
           </div>
         ) : null}
       </div>

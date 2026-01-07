@@ -13,7 +13,7 @@ type ApiLogRow = {
 
 export default async function AdminApiUsagePage() {
   const { admin } = await requirePlatformAdmin();
-  const sinceIso = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const sinceIso = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(); // eslint-disable-line react-hooks/purity
 
   const { data: apiLogs, error: apiLogsError } = await admin
     .from("api_logs")
@@ -70,15 +70,15 @@ export default async function AdminApiUsagePage() {
 
   const providerRows = providerStats.size
     ? Array.from(providerStats.entries())
-        .sort(([, left], [, right]) => right.volume - left.volume)
-        .map(([provider, stats]) => ({
-          provider: formatProviderName(provider),
-          volume: stats.volume,
-          cost: formatCurrency(stats.costCents),
-          latency: stats.latencyCount ? `${Math.round(stats.latencySum / stats.latencyCount)}ms` : "-",
-          status: stats.errorCount > 0 ? "Degraded" : "Healthy",
-          tone: stats.errorCount > 0 ? "warning" : "positive",
-        }))
+      .sort(([, left], [, right]) => right.volume - left.volume)
+      .map(([provider, stats]) => ({
+        provider: formatProviderName(provider),
+        volume: stats.volume,
+        cost: formatCurrency(stats.costCents),
+        latency: stats.latencyCount ? `${Math.round(stats.latencySum / stats.latencyCount)}ms` : "-",
+        status: stats.errorCount > 0 ? "Degraded" : "Healthy",
+        tone: stats.errorCount > 0 ? "warning" : "positive",
+      }))
     : [];
 
   return (
@@ -149,13 +149,12 @@ export default async function AdminApiUsagePage() {
                         <td className="py-4 text-[var(--muted)]">{row.latency}</td>
                         <td className="py-4">
                           <span
-                            className={`rounded-full border px-3 py-1 text-xs font-semibold ${
-                              row.tone === "positive"
-                                ? "border-[rgba(20,184,166,0.4)] bg-[rgba(20,184,166,0.14)] text-[#5eead4]"
-                                : row.tone === "warning"
-                                  ? "border-[rgba(251,191,36,0.4)] bg-[rgba(251,191,36,0.16)] text-[#fde68a]"
-                                  : "border-[rgba(148,163,184,0.4)] bg-[rgba(148,163,184,0.16)] text-[var(--text)]"
-                            }`}
+                            className={`rounded-full border px-3 py-1 text-xs font-semibold ${row.tone === "positive"
+                              ? "border-[rgba(20,184,166,0.4)] bg-[rgba(20,184,166,0.14)] text-[#5eead4]"
+                              : row.tone === "warning"
+                                ? "border-[rgba(251,191,36,0.4)] bg-[rgba(251,191,36,0.16)] text-[#fde68a]"
+                                : "border-[rgba(148,163,184,0.4)] bg-[rgba(148,163,184,0.16)] text-[var(--text)]"
+                              }`}
                           >
                             {row.status}
                           </span>

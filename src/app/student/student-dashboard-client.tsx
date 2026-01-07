@@ -16,19 +16,20 @@ type Student = {
 type AssessmentListItem = {
   id: string;
   title: string;
+  type?: "summative" | "pulse" | "studylab";
   published_at: string | null;
   asset_url: string | null;
   is_practice_mode?: boolean | null;
   latest_submission:
-    | {
-        id: string;
-        status: "started" | "submitted" | "restarted";
-        started_at: string;
-        submitted_at: string | null;
-        review_status?: string | null;
-        published_at?: string | null;
-      }
-    | null;
+  | {
+    id: string;
+    status: "started" | "submitted" | "restarted" | "assigned";
+    started_at: string;
+    submitted_at: string | null;
+    review_status?: string | null;
+    published_at?: string | null;
+  }
+  | null;
 };
 
 function formatDate(d: string | null) {
@@ -75,6 +76,17 @@ export function StudentDashboardClient() {
       }
     })();
   }, []);
+  const [activeTab, setActiveTab] = useState<"assessments" | "pulse" | "studylab">("assessments");
+
+  // ... filtered logic ...
+  const filteredAssessments = useMemo(() => {
+    return assessments.filter((a) => {
+      if (activeTab === "assessments") return a.type === "summative" || !a.type;
+      if (activeTab === "pulse") return a.type === "pulse";
+      if (activeTab === "studylab") return a.type === "studylab";
+      return true;
+    });
+  }, [assessments, activeTab]);
 
   return (
     <div className="min-h-screen bg-zinc-50 px-6 py-10">
@@ -107,31 +119,61 @@ export function StudentDashboardClient() {
           </Card>
         ) : null}
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Practice Space</CardTitle>
-            <CardDescription>Get comfortable with the flow before your first graded assessment.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Link href="/student/practice">
-              <Button type="button">Start practice walkthrough</Button>
-            </Link>
-          </CardContent>
-        </Card>
+        {/* Tab Navigation */}
+        <div className="flex space-x-2 border-b border-zinc-200">
+          <button
+            onClick={() => setActiveTab("assessments")}
+            className={`pb-2 px-4 text-sm font-medium transition-colors border-b-2 ${activeTab === "assessments"
+              ? "border-zinc-900 text-zinc-900"
+              : "border-transparent text-zinc-500 hover:text-zinc-700"
+              }`}
+          >
+            Assessments
+          </button>
+          <button
+            onClick={() => setActiveTab("pulse")}
+            className={`pb-2 px-4 text-sm font-medium transition-colors border-b-2 ${activeTab === "pulse"
+              ? "border-purple-600 text-purple-700"
+              : "border-transparent text-zinc-500 hover:text-zinc-700"
+              }`}
+          >
+            Pulse Checks
+          </button>
+          <button
+            onClick={() => setActiveTab("studylab")}
+            className={`pb-2 px-4 text-sm font-medium transition-colors border-b-2 ${activeTab === "studylab"
+              ? "border-blue-600 text-blue-700"
+              : "border-transparent text-zinc-500 hover:text-zinc-700"
+              }`}
+          >
+            Study Lab
+          </button>
+        </div>
 
-        {!loading && !assessments.length ? (
+        {activeTab === "assessments" && (
           <Card>
             <CardHeader>
-              <CardTitle>No published assessments yet</CardTitle>
-              <CardDescription>Your teacher will publish assessments to your class.</CardDescription>
+              <CardTitle>Practice Space</CardTitle>
+              <CardDescription>Get comfortable with the flow before your first graded assessment.</CardDescription>
             </CardHeader>
-            <CardContent className="text-sm text-[var(--muted)]">
-              If you think this is wrong, confirm you logged in with the correct student code.
+            <CardContent>
+              <Link href="/student/practice">
+                <Button type="button">Start practice walkthrough</Button>
+              </Link>
             </CardContent>
           </Card>
+        )}
+
+        {!loading && !filteredAssessments.length ? (
+          <div className="text-center py-12 text-zinc-500 bg-white rounded-lg border border-dashed border-zinc-200">
+            <span className="text-4xl block mb-2">
+              {activeTab === "assessments" ? "📝" : activeTab === "pulse" ? "💓" : "🧪"}
+            </span>
+            <p>No {activeTab} assigned yet.</p>
+          </div>
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {assessments.map((a) => (
+            {filteredAssessments.map((a) => (
               <Card key={a.id} className="overflow-hidden">
                 {a.asset_url ? (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -150,14 +192,18 @@ export function StudentDashboardClient() {
                 <CardContent>
                   <Link
                     href={
-                      a.latest_submission?.review_status === "published"
-                        ? `/student/assessments/${a.id}/feedback`
-                        : `/student/assessments/${a.id}`
+                      a.type === "studylab"
+                        ? `/student/studylab/${a.id}`
+                        : a.type === "pulse"
+                          ? `/student/formative/${a.id}`
+                          : a.latest_submission?.review_status === "published"
+                            ? `/student/assessments/${a.id}/feedback`
+                            : `/student/assessments/${a.id}`
                     }
                   >
                     <Button type="button" className="w-full">
                       {a.latest_submission?.review_status === "published"
-                        ? "View Feedback"
+                        ? "View Feedback" // Common for both?
                         : a.latest_submission?.status === "started"
                           ? "Continue"
                           : "Open"}

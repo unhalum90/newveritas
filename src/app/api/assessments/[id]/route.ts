@@ -15,6 +15,7 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
     .select(
       `
       id, class_id, title, subject, target_language, instructions, status, authoring_mode, is_practice_mode, selected_asset_id, published_at, created_at, updated_at,
+      assessment_profile, profile_modified, profile_version, profile_override_keys,
       classes(name),
       assessment_integrity(*),
       assessment_questions(id, assessment_id, question_text, question_type, blooms_level, order_index, created_at),
@@ -58,6 +59,11 @@ const patchSchema = z.object({
   instructions: z.string().optional().nullable(),
   authoring_mode: z.enum(["manual", "upload", "ai", "template"]).optional(),
   is_practice_mode: z.boolean().optional(),
+  // Profile fields
+  assessment_profile: z.enum(["k6_formative", "712_formative", "712_summative", "higher_ed_viva", "language_proficiency"]).optional().nullable(),
+  profile_modified: z.boolean().optional(),
+  profile_version: z.number().int().positive().optional(),
+  profile_override_keys: z.array(z.string()).optional(),
 });
 
 export async function PATCH(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
