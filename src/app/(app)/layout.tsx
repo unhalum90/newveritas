@@ -32,15 +32,24 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       .insert({
         user_id: data.user.id,
         email: data.user.email ?? "",
+        onboarding_stage: "0", // New user starts at stage 0
       })
       .select("onboarding_stage, workspace_id, disabled, school_id")
       .single();
     teacher = createdTeacher ?? null;
   }
 
+  // Redirect NEW users (stage "0", "1", "2") to onboarding flow
+  if (teacher && teacher.onboarding_stage !== "COMPLETE") {
+    redirect("/onboarding");
+  }
+
+  // Only auto-provision for LEGACY accounts that completed onboarding
+  // but are missing workspace/school (from before Sprint 2)
   if (
     teacher &&
-    (!teacher.workspace_id || !teacher.school_id || teacher.onboarding_stage !== "COMPLETE")
+    teacher.onboarding_stage === "COMPLETE" &&
+    (!teacher.workspace_id || !teacher.school_id)
   ) {
     try {
       const admin = createSupabaseAdminClient();
@@ -83,7 +92,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         .update({
           school_id: schoolId ?? teacher.school_id,
           workspace_id: workspaceId ?? teacher.workspace_id,
-          onboarding_stage: "COMPLETE",
         })
         .eq("user_id", data.user.id)
         .select("onboarding_stage, workspace_id, disabled, school_id")
