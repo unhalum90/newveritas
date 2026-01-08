@@ -195,3 +195,118 @@ When the student submits, `scoreSubmission()` runs **asynchronously** in the bac
 ---
 
 *Generated from codebase analysis on January 7, 2026*
+
+
+Follow up - edits
+
+Read /mnt/data/assess-module-critical-path-analysis.md. The direction in the doc is correct: the “herky jerky” feeling comes from keeping upload → STT → follow-up generation on the same synchronous request/UX path. The fix is a system setup where the UI can advance immediately and the follow-up arrives asynchronously, reliably, and quickly.
+
+Recommended system setup for smooth summative follow-ups
+
+Target UX (turn-based, but feels continuous)
+	•	Student finishes speaking → immediate advance to “Processing / Next question ready”
+	•	Follow-up appears 1–4 seconds later (streamed text), without blocking navigation
+	•	If follow-up is slow, the student is still not stuck (they can continue; you can enforce “follow-up required before submit” later if needed)
+
+Architecture
+
+Components
+	1.	Client (Next.js)
+
+	•	Records audio
+	•	Uploads audio to Supabase Storage
+	•	Writes a DB record immediately (response_turn with status = processing)
+	•	Subscribes to DB changes (Supabase Realtime) or polls
+
+	2.	API route / Edge Function (fast)
+
+	•	Validates attempt + permissions
+	•	Creates a “job” row and returns immediately (processing: true)
+
+	3.	Background worker / job runner
+
+	•	Inngest (recommended) or Supabase Edge Functions + queue pattern
+	•	Runs:
+	•	STT
+	•	Follow-up selection + generation (deterministic types, capped)
+	•	Optional integrity/off-topic checks
+	•	Writes results back to DB and triggers realtime update
+
+	4.	Realtime delivery
+
+	•	Supabase Realtime subscription on response_turns or question_attempts
+	•	When status flips to ready, client renders follow-up card instantly
+
+Data model (minimum)
+
+You likely already have parts of this; the key is “turn + job status.”
+	•	question_attempts
+	•	id, assessment_attempt_id, question_id, state
+	•	followup_required boolean
+	•	followup_max int (e.g., 2)
+	•	response_turns
+	•	id, question_attempt_id, turn_index
+	•	audio_path, transcript
+	•	role = student|ai
+	•	status = processing|ready|error
+	•	followup_type, evidence_quote (for AI follow-up turns)
+	•	ai_jobs
+	•	id, response_turn_id, job_type (stt, followup)
+	•	status, attempts, started_at, finished_at, error
+
+Critical: make jobs idempotent (if a request retries, it should not create duplicate turns).
+
+Critical-path cuts (what must be async)
+
+Move off the blocking path:
+	•	STT
+	•	Follow-up generation
+	•	Off-topic detection
+	•	Any scoring/summaries
+
+Keep on the fast path:
+	•	Storage upload
+	•	Insert response_turn record (processing)
+	•	Return to UI
+
+Follow-up engine that is fast and defensible
+
+To get both low latency and higher-ed credibility:
+
+Deterministic follow-up types (whitelist)
+
+clarify | justify | transfer | counterexample | citation_check
+
+Required structured output
+
+Force the model to return:
+	•	followup_type
+	•	evidence_quote (verbatim from transcript)
+	•	followup_question (<= 1–2 sentences)
+
+If it cannot produce an evidence_quote, it must fall back to a neutral clarifier.
+
+Precompute candidates (reduces latency further)
+
+At question reveal, generate 3–6 generic follow-up candidates (no transcript yet) and store them.
+After STT finishes, run a tiny “select + tailor” step using the transcript.
+
+Latency hiding (so it doesn’t feel jerky)
+	•	Stream the follow-up text as it’s generated (even if it’s short)
+	•	Show a predictable state:
+	•	“Generating follow-up (1/2)…”
+	•	If it takes too long (e.g., >6–8s), show a safe fallback follow-up immediately (your doc mentions you already have one)
+
+Reliability: refresh/tab close behavior
+
+For summative, assume refresh happens.
+	•	Persist each completed turn immediately.
+	•	On reload, resume from last_completed_turn.
+	•	If refresh happens mid-recording, only that in-progress audio is lost.
+
+Minimal “done” criteria for the setup
+	•	After a student submits an answer, the UI unblocks in <300ms after upload completes.
+	•	Follow-up arrives asynchronously and renders without page reload.
+	•	Follow-up is always one of the allowed types and always includes a transcript quote (or uses safe fallback).
+	•	Jobs retry safely without duplicating turns.
+

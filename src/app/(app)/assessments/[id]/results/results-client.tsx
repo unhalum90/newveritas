@@ -55,21 +55,21 @@ type QuestionWithResponse = {
   blooms_level?: string | null;
   response: { signed_url: string; duration_seconds: number | null; created_at: string; transcript: string | null } | null;
   evidence:
-    | {
-        signed_url: string;
-        mime_type: string | null;
-        file_size_bytes: number | null;
-        width_px: number | null;
-        height_px: number | null;
-        uploaded_at: string;
-      }
-    | null;
+  | {
+    signed_url: string;
+    mime_type: string | null;
+    file_size_bytes: number | null;
+    width_px: number | null;
+    height_px: number | null;
+    uploaded_at: string;
+  }
+  | null;
   scores:
-    | {
-        reasoning: { score: number | null; justification: string | null };
-        evidence: { score: number | null; justification: string | null };
-      }
-    | null;
+  | {
+    reasoning: { score: number | null; justification: string | null };
+    evidence: { score: number | null; justification: string | null };
+  }
+  | null;
 };
 
 type IntegrityEvent = {
@@ -219,6 +219,8 @@ export function AssessmentResultsClient({ assessmentId }: { assessmentId: string
   const [error, setError] = useState<string | null>(null);
   const [releaseComment, setReleaseComment] = useState("");
   const [releaseOverride, setReleaseOverride] = useState("");
+  const [overrideReasonCategory, setOverrideReasonCategory] = useState("");
+  const [overrideReasonNote, setOverrideReasonNote] = useState("");
   const [releaseWorking, setReleaseWorking] = useState(false);
   const [releaseError, setReleaseError] = useState<string | null>(null);
   const [releaseNotice, setReleaseNotice] = useState<string | null>(null);
@@ -300,6 +302,8 @@ export function AssessmentResultsClient({ assessmentId }: { assessmentId: string
     if (!detail) {
       setReleaseComment("");
       setReleaseOverride("");
+      setOverrideReasonCategory("");
+      setOverrideReasonNote("");
       setReleaseError(null);
       setReleaseNotice(null);
       return;
@@ -310,6 +314,8 @@ export function AssessmentResultsClient({ assessmentId }: { assessmentId: string
         ? String(detail.submission.final_score_override)
         : "",
     );
+    setOverrideReasonCategory("");
+    setOverrideReasonNote("");
     setReleaseError(null);
     setReleaseNotice(null);
   }, [detail?.submission.id]);
@@ -380,32 +386,32 @@ export function AssessmentResultsClient({ assessmentId }: { assessmentId: string
             return null;
           }
         }
-      const duration = formatDurationMs(event.duration_ms);
-      const questionIndex = event.question_id ? questionIndexById.get(event.question_id) : null;
-      const parts = [duration, questionIndex ? `Q${questionIndex}` : null].filter(Boolean) as string[];
-      if (event.event_type === "fast_start" && event.question_id) {
-        const context = questionContextById.get(event.question_id);
-        if (!context?.transcript) parts.push("transcript pending");
-      }
-      const label =
-        event.event_type === "fast_start"
-          ? "Started fast"
-          : event.event_type === "tab_switch"
-            ? "Left tab"
-            : event.event_type === "slow_start"
-              ? "Paused too long"
-              : event.event_type === "long_pause"
-                ? "Long pause"
-                : event.event_type === "screenshot_attempt"
-                  ? "Screenshot attempt"
-                  : event.event_type;
+        const duration = formatDurationMs(event.duration_ms);
+        const questionIndex = event.question_id ? questionIndexById.get(event.question_id) : null;
+        const parts = [duration, questionIndex ? `Q${questionIndex}` : null].filter(Boolean) as string[];
+        if (event.event_type === "fast_start" && event.question_id) {
+          const context = questionContextById.get(event.question_id);
+          if (!context?.transcript) parts.push("transcript pending");
+        }
+        const label =
+          event.event_type === "fast_start"
+            ? "Started fast"
+            : event.event_type === "tab_switch"
+              ? "Left tab"
+              : event.event_type === "slow_start"
+                ? "Paused too long"
+                : event.event_type === "long_pause"
+                  ? "Long pause"
+                  : event.event_type === "screenshot_attempt"
+                    ? "Screenshot attempt"
+                    : event.event_type;
 
-      return {
-        id: event.id,
-        label,
-        details: parts.join(" • "),
-        created_at: event.created_at,
-      };
+        return {
+          id: event.id,
+          label,
+          details: parts.join(" • "),
+          created_at: event.created_at,
+        };
       });
 
     return flags.concat(
@@ -488,6 +494,8 @@ export function AssessmentResultsClient({ assessmentId }: { assessmentId: string
         body: JSON.stringify({
           teacher_comment: releaseComment.trim() || null,
           final_score_override: typeof override === "number" ? override : null,
+          override_reason_category: overrideReasonCategory || null,
+          override_reason: overrideReasonNote.trim() || null,
         }),
       });
       const data = (await res.json().catch(() => null)) as { error?: unknown } | null;
@@ -636,9 +644,8 @@ export function AssessmentResultsClient({ assessmentId }: { assessmentId: string
                     key={s.id}
                     type="button"
                     onClick={() => setSelectedSubmissionId(s.id)}
-                    className={`w-full rounded-md border px-3 py-3 text-left transition-colors border-[var(--border)] ${
-                      active ? "ring-1 ring-[var(--primary)]" : "hover:border-[var(--primary)]"
-                    }`}
+                    className={`w-full rounded-md border px-3 py-3 text-left transition-colors border-[var(--border)] ${active ? "ring-1 ring-[var(--primary)]" : "hover:border-[var(--primary)]"
+                      }`}
                   >
                     <div className="flex items-center justify-between gap-3">
                       <div className="text-sm font-semibold text-[var(--text)]">{s.student_name}</div>
@@ -651,13 +658,12 @@ export function AssessmentResultsClient({ assessmentId }: { assessmentId: string
                             </div>
                           ) : (
                             <div
-                              className={`rounded-full border px-2 py-0.5 text-[11px] border-[var(--border)] ${
-                                s.scoring_status === "complete"
+                              className={`rounded-full border px-2 py-0.5 text-[11px] border-[var(--border)] ${s.scoring_status === "complete"
                                   ? "text-[var(--success)]"
                                   : s.scoring_status === "error"
                                     ? "text-[var(--danger)]"
                                     : "text-[var(--muted)]"
-                              }`}
+                                }`}
                               title={s.scoring_status === "error" ? s.scoring_error ?? "Scoring failed." : undefined}
                             >
                               {s.scoring_status === "complete"
@@ -812,6 +818,37 @@ export function AssessmentResultsClient({ assessmentId }: { assessmentId: string
                       onChange={(e) => setReleaseOverride(e.target.value)}
                     />
                   </div>
+                  {releaseOverride.trim() ? (
+                    <>
+                      <div className="mt-3 space-y-2">
+                        <label className="text-xs font-semibold text-[var(--muted)]">Override reason (required when overriding)</label>
+                        <select
+                          className="h-10 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 text-sm text-[var(--text)]"
+                          value={overrideReasonCategory}
+                          onChange={(e) => setOverrideReasonCategory(e.target.value)}
+                        >
+                          <option value="">Select a reason...</option>
+                          <option value="accent_dialect">Accent/dialect variation</option>
+                          <option value="audio_quality">Audio quality (mic noise, poor recording)</option>
+                          <option value="accommodation">Speech impediment/accommodation</option>
+                          <option value="off_task">Off-task response</option>
+                          <option value="other">Other (explain below)</option>
+                        </select>
+                      </div>
+                      <div className="mt-3 space-y-2">
+                        <label className="text-xs font-semibold text-[var(--muted)]">
+                          {overrideReasonCategory === "other" ? "Explanation (required)" : "Additional notes (optional)"}
+                        </label>
+                        <textarea
+                          rows={2}
+                          className="w-full rounded-md border border-[var(--border)] bg-[var(--surface)] p-3 text-sm text-[var(--text)]"
+                          placeholder="Explain why you're adjusting the AI score..."
+                          value={overrideReasonNote}
+                          onChange={(e) => setOverrideReasonNote(e.target.value)}
+                        />
+                      </div>
+                    </>
+                  ) : null}
                   {detail.submission.scoring_status !== "complete" ? (
                     <div className="mt-3 text-xs text-[var(--muted)]">
                       Scoring must complete before you can release feedback.
@@ -902,11 +939,10 @@ export function AssessmentResultsClient({ assessmentId }: { assessmentId: string
                           <div className="flex items-center justify-between">
                             <div className="text-xs font-semibold text-[var(--muted)]">Reasoning</div>
                             <div
-                              className={`rounded-full border px-2 py-0.5 text-xs font-semibold border-[var(--border)] ${
-                                q.scores?.reasoning.score == null
+                              className={`rounded-full border px-2 py-0.5 text-xs font-semibold border-[var(--border)] ${q.scores?.reasoning.score == null
                                   ? "bg-[var(--background)] text-[var(--muted)]"
                                   : "bg-[var(--background)] text-[var(--primary)]"
-                              }`}
+                                }`}
                             >
                               {q.scores?.reasoning.score ?? "—"}/5
                             </div>
@@ -919,11 +955,10 @@ export function AssessmentResultsClient({ assessmentId }: { assessmentId: string
                           <div className="flex items-center justify-between">
                             <div className="text-xs font-semibold text-[var(--muted)]">Evidence</div>
                             <div
-                              className={`rounded-full border px-2 py-0.5 text-xs font-semibold border-[var(--border)] ${
-                                q.scores?.evidence.score == null
+                              className={`rounded-full border px-2 py-0.5 text-xs font-semibold border-[var(--border)] ${q.scores?.evidence.score == null
                                   ? "bg-[var(--background)] text-[var(--muted)]"
                                   : "bg-[var(--background)] text-[var(--primary)]"
-                              }`}
+                                }`}
                             >
                               {q.scores?.evidence.score ?? "—"}/5
                             </div>

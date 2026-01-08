@@ -592,6 +592,66 @@ export default function Home() {
                 </div>
               ))}
             </div>
+
+            {/* AI Transparency Block */}
+            <div className="mt-16 rounded-2xl border border-teal-500/30 bg-gradient-to-br from-teal-900/20 to-transparent p-8">
+              <div className="flex items-center gap-3 mb-6">
+                <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-teal-500/20 text-xl">🤖</span>
+                <h3 className="text-xl font-semibold">AI that supports judgement, not replaces it</h3>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                <div className="flex items-start gap-2">
+                  <span className="text-teal-400">✓</span>
+                  <span className="text-sm text-[var(--muted)]">Human-in-the-loop: teachers retain final authority</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="text-teal-400">✓</span>
+                  <span className="text-sm text-[var(--muted)]">Reviewable evidence: every AI claim links to source</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="text-teal-400">✓</span>
+                  <span className="text-sm text-[var(--muted)]">No advertising: student data is never commercialised</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="text-teal-400">✓</span>
+                  <span className="text-sm text-[var(--muted)]">Limitation transparency: we disclose what AI cannot do</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="text-teal-400">✓</span>
+                  <span className="text-sm text-[var(--muted)]">Teacher override: adjust any AI score with documented reason</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="text-teal-400">✓</span>
+                  <span className="text-sm text-[var(--muted)]">No emotion inference: we focus on content, not tone</span>
+                </div>
+              </div>
+              <div className="mt-8 flex flex-wrap gap-3">
+                <Link
+                  href="/ai-safety"
+                  className="rounded-full border border-teal-500/50 bg-teal-500/10 px-4 py-2 text-sm font-medium text-teal-300 hover:bg-teal-500/20"
+                >
+                  AI Safety & Governance →
+                </Link>
+                <Link
+                  href="/ai-use"
+                  className="rounded-full border border-teal-500/50 bg-teal-500/10 px-4 py-2 text-sm font-medium text-teal-300 hover:bg-teal-500/20"
+                >
+                  How AI is Used →
+                </Link>
+                <Link
+                  href="/evidence-outcomes"
+                  className="rounded-full border border-teal-500/50 bg-teal-500/10 px-4 py-2 text-sm font-medium text-teal-300 hover:bg-teal-500/20"
+                >
+                  Evidence & Outcomes →
+                </Link>
+                <Link
+                  href="/privacy"
+                  className="rounded-full border border-[var(--border)] px-4 py-2 text-sm font-medium text-[var(--muted)] hover:bg-[var(--surface)]"
+                >
+                  Privacy Policy →
+                </Link>
+              </div>
+            </div>
           </div>
         </section>
 

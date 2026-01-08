@@ -7,6 +7,8 @@ import { createRouteSupabaseClient } from "@/lib/supabase/route";
 const releaseSchema = z.object({
   teacher_comment: z.string().trim().max(2000).optional().nullable(),
   final_score_override: z.number().min(0).max(5).optional().nullable(),
+  override_reason_category: z.enum(["accent_dialect", "audio_quality", "accommodation", "off_task", "other"]).optional().nullable(),
+  override_reason: z.string().trim().max(1000).optional().nullable(),
 });
 
 function avg(nums: number[]) {
@@ -26,6 +28,14 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
   const body = await request.json().catch(() => null);
   const parsed = releaseSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: "Invalid payload." }, { status: 400 });
+
+  // Validate override reason is provided when overriding
+  if (typeof parsed.data.final_score_override === "number" && !parsed.data.override_reason_category) {
+    return NextResponse.json({ error: "Override reason category is required when overriding score." }, { status: 400 });
+  }
+  if (parsed.data.override_reason_category === "other" && !parsed.data.override_reason?.trim()) {
+    return NextResponse.json({ error: "Explanation is required when selecting 'other' as override reason." }, { status: 400 });
+  }
 
   const admin = createSupabaseAdminClient();
   const { data: teacher, error: tError } = await admin
@@ -86,6 +96,9 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
 
   const now = new Date().toISOString();
   const comment = parsed.data.teacher_comment?.trim() || null;
+  const overrideReasonCategory = parsed.data.override_reason_category || null;
+  const overrideReason = parsed.data.override_reason?.trim() || null;
+  const isOverride = typeof parsed.data.final_score_override === "number";
 
   const { data: updated, error: updateError } = await admin
     .from("submissions")
@@ -94,12 +107,38 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
       teacher_comment: comment,
       published_at: now,
       final_score_override: finalScore,
+      override_reason_category: isOverride ? overrideReasonCategory : null,
+      override_reason: isOverride ? overrideReason : null,
+      override_timestamp: isOverride ? now : null,
     })
     .eq("id", submissionId)
-    .select("id, review_status, published_at, teacher_comment, final_score_override")
+    .select("id, review_status, published_at, teacher_comment, final_score_override, student_id")
     .single();
 
   if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
+
+  // Log to audit trail
+  try {
+    await admin.rpc("log_assessment_event", {
+      p_submission_id: submissionId,
+      p_assessment_id: submission.assessment_id,
+      p_student_id: updated.student_id,
+      p_event_type: "published",
+      p_actor_id: teacher.id,
+      p_actor_role: "teacher",
+      p_previous_value: null,
+      p_new_value: {
+        final_score: finalScore,
+        is_override: isOverride,
+        override_reason_category: overrideReasonCategory,
+        teacher_comment: comment ? "present" : null,
+      },
+      p_reason: isOverride ? `Override: ${overrideReasonCategory} - ${overrideReason || "(no note)"}` : null,
+    });
+  } catch (auditError) {
+    console.error("Audit log failed:", auditError);
+    // Don't block release on audit failure
+  }
 
   try {
     await admin.from("system_logs").insert({

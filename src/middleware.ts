@@ -17,9 +17,14 @@ const marketingPaths = [
   "/waitlist",
   "/studylab",
   "/pulse",
+  // Oxford Green compliance pages
+  "/ai-safety",
+  "/ai-use",
+  "/evidence-outcomes",
+  "/subprocessors",
 ];
 
-const authPaths = ["/login", "/signup", "/student/login", "/activate"];
+const authPaths = ["/login", "/signup", "/student/login", "/activate", "/auth/callback", "/auth/confirm"];
 
 function isMarketingPath(pathname: string) {
   return marketingPaths.some((path) => (path === "/" ? pathname === "/" : pathname === path || pathname.startsWith(`${path}/`)));

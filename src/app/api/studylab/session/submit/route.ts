@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
         if (authError || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
         const body = await req.json();
-        const { activityId, studentId, history, selfRating } = body;
+        const { activityId, studentId, history, selfRating, imagePath } = body;
 
         if (!activityId || !studentId) {
             return NextResponse.json({ error: "Missing activityId or studentId" }, { status: 400 });
@@ -77,6 +77,7 @@ Return ONLY JSON:
             history,
             grading,
             selfRating, // Save student reflection
+            artifactPath: imagePath || null, // Save artifact for teacher review
             submittedAt: new Date().toISOString()
         };
 

@@ -44,6 +44,7 @@ export default async function StudyLabReviewDetailPage({ params }: Props) {
     // Parse Data
     const history = (submission.submission_data as any)?.history || [];
     const grading = (submission.submission_data as any)?.grading || null;
+    const artifactPath = (submission.submission_data as any)?.artifactPath || null;
 
     // Patch submission object for easier access in JSX
     (submission as any).grading = grading;
@@ -70,6 +71,17 @@ export default async function StudyLabReviewDetailPage({ params }: Props) {
         }
     }
 
+    // Sign Artifact URL if exists
+    let artifactUrl: string | null = null;
+    if (artifactPath) {
+        const { data: artifactData } = await admin.storage
+            .from("studylab-images")
+            .createSignedUrl(artifactPath, 60 * 60); // 1 hour
+        if (artifactData?.signedUrl) {
+            artifactUrl = artifactData.signedUrl;
+        }
+    }
+
     const studentData = submission.student as any;
     const studentName = studentData
         ? `${studentData.first_name || ""} ${studentData.last_name || ""}`.trim() || studentData.email || "Unknown Student"
@@ -82,9 +94,18 @@ export default async function StudyLabReviewDetailPage({ params }: Props) {
                     <h1 className="text-2xl font-semibold text-[var(--text)]">Review Session</h1>
                     <p className="text-[var(--muted)]">Student: {studentName} • Activity: {(submission.activity as any)?.title || (Array.isArray(submission.activity) ? submission.activity[0]?.title : "")}</p>
                 </div>
-                <Link href={`/studylab/${activityId}/review`}>
-                    <Button variant="secondary">Back to List</Button>
-                </Link>
+                <div className="flex gap-2">
+                    {artifactUrl && (
+                        <a href={artifactUrl} target="_blank" rel="noopener noreferrer">
+                            <Button variant="primary">
+                                <span className="mr-2">📷</span> View Student Notes
+                            </Button>
+                        </a>
+                    )}
+                    <Link href={`/studylab/${activityId}/review`}>
+                        <Button variant="secondary">Back to List</Button>
+                    </Link>
+                </div>
             </div>
 
             <Card className="bg-slate-50 min-h-[500px]">

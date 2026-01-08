@@ -1,20 +1,27 @@
 import Link from "next/link";
 import { ContactModal } from "@/components/home/contact-modal";
 
-const resourceLinks = [
+const learningLinks = [
   { label: "Attend Webinar", href: "/webinars" },
   { label: "How It Works", href: "/how-it-works" },
   { label: "Assessment Types", href: "/assessment-types" },
-  { label: "Class Analysis Report (evidence-linked)", href: "/class-analysis-report" },
-  { label: "Use Cases (cross-subject)", href: "/use-cases" },
-  { label: "Security & Privacy / DPA", href: "/security-privacy" },
+  { label: "Class Analysis Report", href: "/class-analysis-report" },
+  { label: "Use Cases", href: "/use-cases" },
   { label: "Roadmap", href: "/roadmap" },
 ] as const;
 
+const complianceLinks = [
+  { label: "AI Safety & Governance", href: "/ai-safety" },
+  { label: "How AI is Used", href: "/ai-use" },
+  { label: "Evidence & Outcomes", href: "/evidence-outcomes" },
+  { label: "Subprocessors", href: "/subprocessors" },
+  { label: "Security & Privacy / DPA", href: "/security-privacy" },
+  { label: "Privacy Policy", href: "/privacy" },
+] as const;
+
 const accessLinks = [
-  { label: "Teacher sign in", href: "/login" },
-  { label: "Student login", href: "/student/login" },
-  { label: "Privacy", href: "/privacy" },
+  { label: "Teacher Sign In", href: "/login" },
+  { label: "Student Login", href: "/student/login" },
 ] as const;
 
 const companyLinks = [
@@ -26,16 +33,26 @@ export function MarketingFooter() {
   return (
     <footer className="border-t border-[var(--border)] bg-[color-mix(in_oklab,var(--background),black_10%)]">
       <div className="mx-auto max-w-6xl px-6 py-10 text-sm text-[var(--muted)]">
-        <div className="grid gap-8 md:grid-cols-[1.1fr_2fr]">
+        <div className="grid gap-8 md:grid-cols-[1fr_3fr]">
           <div>
             <p className="text-base font-semibold text-[var(--text)]">SayVeritas</p>
             <p className="mt-1 text-sm">@chamberlininnovations</p>
           </div>
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--muted)]">Resources</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--muted)]">Learn</p>
               <div className="mt-3 flex flex-col gap-2">
-                {resourceLinks.map((link) => (
+                {learningLinks.map((link) => (
+                  <Link key={link.href} className="hover:text-[var(--text)]" href={link.href}>
+                    {link.label}
+                  </Link>
+                ))}
+              </div>
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--muted)]">Trust & Compliance</p>
+              <div className="mt-3 flex flex-col gap-2">
+                {complianceLinks.map((link) => (
                   <Link key={link.href} className="hover:text-[var(--text)]" href={link.href}>
                     {link.label}
                   </Link>
@@ -69,3 +86,4 @@ export function MarketingFooter() {
     </footer>
   );
 }
+

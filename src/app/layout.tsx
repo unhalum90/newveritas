@@ -4,6 +4,7 @@ import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 import "driver.js/dist/driver.css";
 import { CookieBanner } from "@/components/cookie-banner";
+import { AuthTokenHandler } from "@/components/auth/auth-token-handler";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -31,6 +32,7 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
         suppressHydrationWarning
       >
+        <AuthTokenHandler />
         {children}
         <Analytics />
         <CookieBanner />

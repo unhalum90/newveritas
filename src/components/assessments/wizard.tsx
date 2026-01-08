@@ -27,6 +27,10 @@ type Assessment = {
   status: "draft" | "live" | "closed";
   authoring_mode: AuthoringMode;
   is_practice_mode?: boolean | null;
+  // Agency toggles (Oxford Green compliance)
+  hide_ai_score_from_students?: boolean | null;
+  require_teacher_review_before_release?: boolean | null;
+  disable_ai_feedback?: boolean | null;
   classes?: { name?: string | null } | null;
   // Profile fields
   assessment_profile?: ProfileId | null;
@@ -1887,6 +1891,67 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
                       disabled={readonly || saving}
                       aria-label="Practice Mode"
                     />
+                  </div>
+                </div>
+
+                {/* Agency Toggles - Oxford Green Compliance */}
+                <div className="rounded-md border border-amber-200 bg-amber-50/30 p-4 dark:border-amber-800 dark:bg-amber-900/10">
+                  <div className="text-sm font-medium text-[var(--text)] mb-3">Teacher Controls (Agency)</div>
+                  <div className="space-y-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <div className="text-sm font-medium text-[var(--text)]">Hide AI Scores from Students</div>
+                        <div className="text-xs text-[var(--muted)]">
+                          Students see only teacher-approved feedback, not raw AI scores.
+                        </div>
+                      </div>
+                      <Switch
+                        checked={Boolean(assessment.hide_ai_score_from_students)}
+                        onCheckedChange={(checked) => {
+                          setAssessment({ ...assessment, hide_ai_score_from_students: checked });
+                          setDirty(true);
+                          if (!saving) void persistDraft(true);
+                        }}
+                        disabled={readonly || saving}
+                        aria-label="Hide AI Scores from Students"
+                      />
+                    </div>
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <div className="text-sm font-medium text-[var(--text)]">Require Teacher Review Before Release</div>
+                        <div className="text-xs text-[var(--muted)]">
+                          Results won&apos;t auto-publish. Teacher must explicitly release each submission.
+                        </div>
+                      </div>
+                      <Switch
+                        checked={Boolean(assessment.require_teacher_review_before_release)}
+                        onCheckedChange={(checked) => {
+                          setAssessment({ ...assessment, require_teacher_review_before_release: checked });
+                          setDirty(true);
+                          if (!saving) void persistDraft(true);
+                        }}
+                        disabled={readonly || saving}
+                        aria-label="Require Teacher Review Before Release"
+                      />
+                    </div>
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <div className="text-sm font-medium text-[var(--text)]">Disable AI Feedback</div>
+                        <div className="text-xs text-[var(--muted)]">
+                          Transcript-only mode. Students see their transcript but no AI scoring or suggestions.
+                        </div>
+                      </div>
+                      <Switch
+                        checked={Boolean(assessment.disable_ai_feedback)}
+                        onCheckedChange={(checked) => {
+                          setAssessment({ ...assessment, disable_ai_feedback: checked });
+                          setDirty(true);
+                          if (!saving) void persistDraft(true);
+                        }}
+                        disabled={readonly || saving}
+                        aria-label="Disable AI Feedback"
+                      />
+                    </div>
                   </div>
                 </div>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

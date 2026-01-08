@@ -14,7 +14,7 @@ const sessions: WebinarSession[] = [
   { id: "tuesday", label: "Tuesday", time: "3:00 PM ET" },
 ];
 
-const baseDate = new Date(Date.UTC(2026, 0, 8, 12));
+const baseDate = new Date(Date.UTC(2026, 0, 13, 12));
 const dayMs = 24 * 60 * 60 * 1000;
 const intervals = [5, 9];
 

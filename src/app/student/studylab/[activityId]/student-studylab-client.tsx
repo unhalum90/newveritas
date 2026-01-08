@@ -41,6 +41,7 @@ interface Props {
 export function StudentStudylabClient({ activity, student, initialSubmission }: Props) {
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+    const [imagePath, setImagePath] = useState<string | null>(null);
 
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -153,7 +154,8 @@ export function StudentStudylabClient({ activity, student, initialSubmission }: 
                     activityId: activity.id,
                     studentId: student.id,
                     history: messages,
-                    selfRating // Send rating
+                    selfRating, // Send rating
+                    imagePath // Send artifact path for teacher review
                 })
             });
 
@@ -203,6 +205,9 @@ export function StudentStudylabClient({ activity, student, initialSubmission }: 
             if (data.message) {
                 setMessages([{ role: "ai", content: data.message }]);
                 setIsSessionActive(true);
+                if (data.imagePath) {
+                    setImagePath(data.imagePath);
+                }
             }
         } catch (error) {
             console.error("Start Session Error:", error);
