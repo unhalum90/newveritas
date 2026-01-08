@@ -27,7 +27,7 @@ async function ensureTeacher(
 
   const { data: inserted, error: insertError } = await supabase
     .from("teachers")
-    .insert({ user_id: userId, email: user.email ?? "" })
+    .insert({ user_id: userId, email: user.email ?? "", onboarding_stage: "0" })
     .select("*")
     .single();
 
