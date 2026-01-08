@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { requirePlatformAdmin } from "@/lib/auth/platform-admin";
+import { CreateSchoolForm } from "./components/create-school-form";
 
 export default async function PlatformAdminPage() {
   const { admin } = await requirePlatformAdmin();
@@ -272,10 +273,10 @@ export default async function PlatformAdminPage() {
                           <td className="py-4">
                             <span
                               className={`rounded-full border px-3 py-1 text-xs font-semibold ${row.tone === "positive"
-                                  ? "border-[rgba(20,184,166,0.4)] bg-[rgba(20,184,166,0.14)] text-[#5eead4]"
-                                  : row.tone === "warning"
-                                    ? "border-[rgba(251,191,36,0.4)] bg-[rgba(251,191,36,0.16)] text-[#fde68a]"
-                                    : "border-[rgba(248,113,113,0.4)] bg-[rgba(248,113,113,0.14)] text-[#fecaca]"
+                                ? "border-[rgba(20,184,166,0.4)] bg-[rgba(20,184,166,0.14)] text-[#5eead4]"
+                                : row.tone === "warning"
+                                  ? "border-[rgba(251,191,36,0.4)] bg-[rgba(251,191,36,0.16)] text-[#fde68a]"
+                                  : "border-[rgba(248,113,113,0.4)] bg-[rgba(248,113,113,0.14)] text-[#fecaca]"
                                 }`}
                             >
                               {row.status}
@@ -351,6 +352,22 @@ export default async function PlatformAdminPage() {
             </Link>
           ))}
         </div>
+      </section>
+
+      <section className="space-y-4">
+        <div>
+          <h2 className="text-xl font-semibold text-[var(--text)]">School Provisioning</h2>
+          <p className="text-sm text-[var(--muted)]">Create a new school account and invite an admin.</p>
+        </div>
+        <Card className="border-[rgba(148,163,184,0.18)] bg-[linear-gradient(135deg,#0f172a_0%,#0b0f14_65%)] shadow-[0_12px_30px_rgba(0,0,0,0.35)]">
+          <CardHeader>
+            <CardTitle>Create School & Admin</CardTitle>
+            <CardDescription>Set up a new institution with an admin account. A magic link invite will be sent.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <CreateSchoolForm />
+          </CardContent>
+        </Card>
       </section>
     </div>
   );
