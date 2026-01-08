@@ -26,7 +26,7 @@ export default function SchoolAdminTeachersPage() {
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [creating, setCreating] = useState(false);
-  const [createdPassword, setCreatedPassword] = useState<string | null>(null);
+  const [inviteStatus, setInviteStatus] = useState<{ sent: boolean; message: string } | null>(null);
 
   const filtered = useMemo(() => teachers, [teachers]);
 
@@ -55,7 +55,7 @@ export default function SchoolAdminTeachersPage() {
   async function createTeacher(e: React.FormEvent) {
     e.preventDefault();
     setCreating(true);
-    setCreatedPassword(null);
+    setInviteStatus(null);
     setError(null);
     try {
       const res = await fetch("/api/schools/admin/teachers", {
@@ -64,13 +64,16 @@ export default function SchoolAdminTeachersPage() {
         body: JSON.stringify({ first_name: firstName, last_name: lastName, email }),
       });
       const json = (await res.json().catch(() => null)) as
-        | { teacher?: TeacherRow; temp_password?: string; error?: string }
+        | { teacher?: TeacherRow; invite_sent?: boolean; message?: string; error?: string }
         | null;
       if (!res.ok) {
         setError(json?.error || "Failed to create teacher.");
         return;
       }
-      setCreatedPassword(json?.temp_password ?? null);
+      setInviteStatus({
+        sent: json?.invite_sent ?? false,
+        message: json?.message || (json?.invite_sent ? "Invite sent!" : "Teacher created."),
+      });
       setFirstName("");
       setLastName("");
       setEmail("");
@@ -79,6 +82,8 @@ export default function SchoolAdminTeachersPage() {
       setError("Failed to create teacher.");
     } finally {
       setCreating(false);
+      // Clear success message after 8 seconds
+      setTimeout(() => setInviteStatus(null), 8000);
     }
   }
 
@@ -115,8 +120,8 @@ export default function SchoolAdminTeachersPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Add Teacher</CardTitle>
-          <CardDescription>Creates a teacher login with a temporary password.</CardDescription>
+          <CardTitle>Invite Teacher</CardTitle>
+          <CardDescription>Send a magic link invite to add a teacher to your school.</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={createTeacher} className="grid gap-4 sm:grid-cols-3">
@@ -134,11 +139,11 @@ export default function SchoolAdminTeachersPage() {
             </div>
             <div className="sm:col-span-3 flex items-center justify-between gap-3">
               <Button type="submit" disabled={creating}>
-                {creating ? "Creating..." : "Create Teacher"}
+                {creating ? "Sending Invite..." : "Invite Teacher"}
               </Button>
-              {createdPassword ? (
-                <p className="text-sm text-emerald-700">
-                  Temporary password: <span className="font-mono">{createdPassword}</span>
+              {inviteStatus ? (
+                <p className={`text-sm ${inviteStatus.sent ? "text-emerald-400" : "text-amber-400"}`}>
+                  {inviteStatus.sent ? "✓" : "⚠"} {inviteStatus.message}
                 </p>
               ) : null}
             </div>

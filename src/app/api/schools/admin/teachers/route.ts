@@ -3,19 +3,13 @@ import { z } from "zod";
 
 import { requireSchoolAdminContext } from "@/lib/auth/school-admin";
 import { getSupabaseErrorMessage } from "@/lib/supabase/errors";
+import { sendTeacherInviteEmail } from "@/lib/email/teacher-invite";
 
 const createSchema = z.object({
   first_name: z.string().min(1),
   last_name: z.string().min(1),
   email: z.string().email(),
 });
-
-function randomPassword() {
-  // Simple, copyable temp password (v1). In production, prefer magic-link or reset flow.
-  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%";
-  const bytes = crypto.getRandomValues(new Uint8Array(14));
-  return Array.from(bytes, (b) => alphabet[b % alphabet.length]).join("");
-}
 
 export async function GET(request: NextRequest) {
   const ctx = await requireSchoolAdminContext(request);
@@ -47,16 +41,28 @@ export async function POST(request: NextRequest) {
   if (!parsed.success) return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
 
   try {
-    const tempPassword = randomPassword();
+    // Get school name for the invite email
+    const { data: school } = await ctx.admin
+      .from("schools")
+      .select("name")
+      .eq("id", ctx.schoolId)
+      .single();
+    const schoolName = school?.name || "Your School";
+
+    // Create user WITHOUT password - they'll use magic link
     const { data: created, error: createError } = await ctx.admin.auth.admin.createUser({
       email: parsed.data.email,
-      password: tempPassword,
-      email_confirm: true,
-      user_metadata: { role: "teacher" },
+      email_confirm: false, // Don't auto-confirm, they need to click link
+      user_metadata: {
+        role: "teacher",
+        first_name: parsed.data.first_name,
+        last_name: parsed.data.last_name,
+      },
     });
     if (createError) throw createError;
     if (!created.user) throw new Error("Unable to create teacher user.");
 
+    // Create teacher record
     const { data: teacher, error: teacherError } = await ctx.admin
       .from("teachers")
       .insert({
@@ -66,17 +72,67 @@ export async function POST(request: NextRequest) {
         last_name: parsed.data.last_name,
         school_id: ctx.schoolId,
         workspace_id: ctx.workspaceId,
-        onboarding_stage: "COMPLETE",
+        onboarding_stage: "COMPLETE", // Skip onboarding for school-provisioned teachers
       })
       .select("user_id,email,first_name,last_name,disabled,created_at")
       .single();
     if (teacherError) throw teacherError;
 
-    const res = NextResponse.json({ teacher, temp_password: tempPassword });
+    // Generate magic link for the invite
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://sayveritas.com";
+    const { data: linkData, error: linkError } = await ctx.admin.auth.admin.generateLink({
+      type: "invite",
+      email: parsed.data.email,
+      options: {
+        redirectTo: `${siteUrl}/auth/confirm`,
+      },
+    });
+
+    let inviteSent = false;
+    if (linkError) {
+      console.error("Failed to generate invite link:", linkError);
+      // Fallback: use Supabase's built-in invite
+      try {
+        await ctx.admin.auth.admin.inviteUserByEmail(parsed.data.email, {
+          redirectTo: `${siteUrl}/auth/confirm`,
+        });
+        inviteSent = true;
+      } catch (inviteErr) {
+        console.error("Fallback invite also failed:", inviteErr);
+      }
+    } else if (linkData?.properties?.action_link) {
+      // Use the action_link from generateLink
+      const inviteLink = linkData.properties.action_link;
+
+      // Send branded email via MailerLite
+      const emailResult = await sendTeacherInviteEmail({
+        email: parsed.data.email,
+        firstName: parsed.data.first_name,
+        lastName: parsed.data.last_name,
+        schoolName,
+        inviteLink,
+      });
+      inviteSent = emailResult.success;
+
+      if (!inviteSent) {
+        // Fallback: use Supabase's built-in invite
+        await ctx.admin.auth.admin.inviteUserByEmail(parsed.data.email, {
+          redirectTo: `${siteUrl}/auth/confirm`,
+        });
+        inviteSent = true;
+      }
+    }
+
+    const res = NextResponse.json({
+      teacher,
+      invite_sent: inviteSent,
+      message: inviteSent
+        ? "Teacher created and invite sent!"
+        : "Teacher created. They can use 'forgot password' to get access.",
+    });
     ctx.pendingCookies.forEach(({ name, value, options }) => res.cookies.set(name, value, options));
     return res;
   } catch (e) {
     return NextResponse.json({ error: getSupabaseErrorMessage(e) }, { status: 500 });
   }
 }
-
