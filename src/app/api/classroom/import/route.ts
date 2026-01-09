@@ -187,50 +187,55 @@ export async function POST(request: NextRequest) {
         const studentsData = await studentsRes.json();
         const classroomStudents: ClassroomStudent[] = studentsData.students || [];
 
-        // Create students in SayVeritas
+        // Create students in SayVeritas (Parallelized for performance)
         const createdStudents: { name: string; code: string }[] = [];
         const errors: string[] = [];
 
-        for (const student of classroomStudents) {
-            const firstName = student.profile.name?.givenName || "";
-            const lastName = student.profile.name?.familyName || "";
-            const email = student.profile.emailAddress;
-            const studentCode = generateStudentCode();
+        // Process in chunks of 5 to avoid rate limits but speed up execution
+        const chunkSize = 5;
+        for (let i = 0; i < classroomStudents.length; i += chunkSize) {
+            const chunk = classroomStudents.slice(i, i + chunkSize);
+            await Promise.all(chunk.map(async (student) => {
+                const firstName = student.profile.name?.givenName || "";
+                const lastName = student.profile.name?.familyName || "";
+                const email = student.profile.emailAddress;
+                const studentCode = generateStudentCode();
 
-            try {
-                // Create auth user for student
-                const { data: authData, error: authError } = await admin.auth.admin.createUser({
-                    email: email || `${studentCode.toLowerCase()}@student.sayveritas.local`,
-                    email_confirm: true,
-                    user_metadata: { role: "student" },
-                });
+                try {
+                    // Create auth user for student
+                    const { data: authData, error: authError } = await admin.auth.admin.createUser({
+                        email: email || `${studentCode.toLowerCase()}@student.sayveritas.local`,
+                        email_confirm: true,
+                        user_metadata: { role: "student" },
+                    });
 
-                if (authError) {
-                    // User might already exist
-                    if (authError.message?.includes("already been registered")) {
-                        errors.push(`${firstName} ${lastName} already exists`);
-                        continue;
+                    if (authError) {
+                        // User might already exist
+                        if (authError.message?.includes("already been registered")) {
+                            errors.push(`${firstName} ${lastName} already exists`);
+                            return;
+                        }
+                        throw authError;
                     }
-                    throw authError;
+
+                    // Create student record
+                    await admin.from("students").insert({
+                        class_id: newClass.id,
+                        first_name: firstName,
+                        last_name: lastName,
+                        student_code: studentCode,
+                        auth_user_id: authData.user.id,
+                    });
+
+                    createdStudents.push({
+                        name: `${firstName} ${lastName}`.trim(),
+                        code: studentCode,
+                    });
+                } catch (err) {
+                    console.error(`Failed to create student ${firstName} ${lastName}:`, err);
+                    errors.push(`${firstName} ${lastName}`);
                 }
-
-                // Create student record
-                await admin.from("students").insert({
-                    class_id: newClass.id,
-                    first_name: firstName,
-                    last_name: lastName,
-                    student_code: studentCode,
-                    auth_user_id: authData.user.id,
-                });
-
-                createdStudents.push({
-                    name: `${firstName} ${lastName}`.trim(),
-                    code: studentCode,
-                });
-            } catch (err) {
-                console.error(`Failed to create student ${firstName} ${lastName}:`, err);
-                errors.push(`${firstName} ${lastName}`);
-            }
+            }));
         }
 
         const res = NextResponse.json({
