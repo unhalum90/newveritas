@@ -273,9 +273,9 @@ export default function OnboardingPage() {
             <CardDescription>Quick framing before you enter the dashboard.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="space-y-3 text-sm text-zinc-700">
+            <div className="space-y-3 text-sm text-slate-300">
               <div>
-                <div className="font-medium text-zinc-900">What Veritas is</div>
+                <div className="font-semibold text-white">What Veritas is</div>
                 <ul className="mt-1 list-disc pl-5">
                   <li>Oral assessment tool</li>
                   <li>AI first-pass scoring</li>
@@ -283,7 +283,7 @@ export default function OnboardingPage() {
                 </ul>
               </div>
               <div>
-                <div className="font-medium text-zinc-900">What Veritas is not</div>
+                <div className="font-semibold text-white">What Veritas is not</div>
                 <ul className="mt-1 list-disc pl-5">
                   <li>Essay auto-grading</li>
                   <li>Surveillance</li>
@@ -291,7 +291,7 @@ export default function OnboardingPage() {
                 </ul>
               </div>
               <div>
-                <div className="font-medium text-zinc-900">Integrity</div>
+                <div className="font-semibold text-white">Integrity</div>
                 <ul className="mt-1 list-disc pl-5">
                   <li>Student consent</li>
                   <li>Transparent scoring</li>
