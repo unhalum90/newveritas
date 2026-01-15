@@ -979,11 +979,14 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
     : 0;
 
   return (
-    <div className="min-h-screen bg-zinc-50 px-6 py-10">
+    <div className="relative min-h-screen px-6 py-10 pb-20">
+      {/* Sparkle background */}
+      <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-indigo-50/50 via-white to-white dark:from-indigo-950/20 dark:via-background dark:to-background" />
+
       <div className="mx-auto w-full max-w-4xl space-y-6">
         {consentOpen ? (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6">
-            <div className="w-full max-w-xl rounded-xl border border-zinc-800 bg-zinc-950 p-6 text-zinc-100 shadow-2xl">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6 backdrop-blur-sm">
+            <div className="w-full max-w-xl rounded-xl border border-zinc-800 bg-zinc-950/90 p-6 text-zinc-100 shadow-2xl backdrop-blur-md">
               <div className="text-lg font-semibold">Audio Consent</div>
               <div className="mt-1 text-sm text-zinc-300">
                 We record your response audio to share with your teacher and to provide feedback. You can revoke this consent at any time.
@@ -999,7 +1002,7 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
                 </div>
               ) : null}
               <div className="mt-5 flex items-center justify-end gap-2">
-                <Button type="button" disabled={consentWorking} onClick={acceptConsent}>
+                <Button type="button" disabled={consentWorking} onClick={acceptConsent} className="bg-white text-black hover:bg-zinc-200">
                   {consentWorking ? "Saving…" : "I Agree"}
                 </Button>
               </div>
@@ -1008,8 +1011,8 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
         ) : null}
 
         {assessment?.pledge?.enabled === true && pledgeOpen ? (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6">
-            <div className="w-full max-w-xl rounded-xl border border-zinc-800 bg-zinc-950 p-6 text-zinc-100 shadow-2xl">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6 backdrop-blur-sm">
+            <div className="w-full max-w-xl rounded-xl border border-zinc-800 bg-zinc-950/90 p-6 text-zinc-100 shadow-2xl backdrop-blur-md">
               <div className="text-lg font-semibold">Academic Integrity Pledge</div>
               <div className="mt-1 text-sm text-zinc-300">
                 Please read and accept before starting. You won’t see questions until you agree.
@@ -1025,7 +1028,7 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
                 </div>
               ) : null}
               <div className="mt-5 flex items-center justify-end gap-2">
-                <Button type="button" disabled={pledgeWorking} onClick={acceptPledge}>
+                <Button type="button" disabled={pledgeWorking} onClick={acceptPledge} className="bg-white text-black hover:bg-zinc-200">
                   {pledgeWorking ? "Saving…" : "I Agree"}
                 </Button>
               </div>
@@ -1034,8 +1037,8 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
         ) : null}
 
         {restartPrompt ? (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6">
-            <div className="w-full max-w-xl rounded-xl border border-zinc-800 bg-zinc-950 p-6 text-zinc-100 shadow-2xl">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6 backdrop-blur-sm">
+            <div className="w-full max-w-xl rounded-xl border border-zinc-800 bg-zinc-950/90 p-6 text-zinc-100 shadow-2xl backdrop-blur-md">
               <div className="text-lg font-semibold">Need a restart?</div>
               <div className="mt-1 text-sm text-zinc-300">
                 {restartPrompt.reason === "slow_start"
@@ -1044,10 +1047,10 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
               </div>
               {restartError ? <div className="mt-3 text-sm text-red-300">{restartError}</div> : null}
               <div className="mt-5 flex items-center justify-end gap-2">
-                <Button type="button" variant="secondary" disabled={restartWorking} onClick={dismissRestart}>
+                <Button type="button" variant="secondary" disabled={restartWorking} onClick={dismissRestart} className="border-zinc-700 bg-transparent text-white hover:bg-zinc-800">
                   {restartPrompt.reason === "off_topic" ? "Submit anyway" : "Continue"}
                 </Button>
-                <Button type="button" disabled={restartWorking} onClick={confirmRestart}>
+                <Button type="button" disabled={restartWorking} onClick={confirmRestart} className="bg-white text-black hover:bg-zinc-200">
                   {restartWorking ? "Restarting…" : "Restart assessment"}
                 </Button>
               </div>
@@ -1057,45 +1060,45 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
 
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-semibold text-zinc-900">{assessment?.title ?? "Assessment"}</h1>
-            <p className="mt-1 text-sm text-zinc-600">
+            <h1 className="text-2xl font-light text-[var(--text)]">{assessment?.title ?? "Assessment"}</h1>
+            <p className="mt-1 text-sm text-[var(--muted)]">
               {latest ? `Attempt: ${latest.status}` : "Start when you’re ready."}
               {isPracticeMode ? " • Practice mode" : ""}
             </p>
           </div>
           <div className="flex items-center gap-2">
             <Link href="/student">
-              <Button type="button" variant="secondary">
+              <Button type="button" variant="secondary" className="bg-white/50 backdrop-blur-sm border-[var(--border)]">
                 Back
               </Button>
             </Link>
           </div>
         </div>
 
-        {previewMode ? <div className="text-sm text-[var(--muted)]">Preview mode: student actions are disabled.</div> : null}
+        {previewMode ? <div className="text-sm text-[var(--muted)] bg-amber-50 border border-amber-100 p-2 rounded-md">Preview mode: student actions are disabled.</div> : null}
         {error ? (
-          <div className="text-sm text-red-600" role="alert">
+          <div className="text-sm text-red-600 bg-red-50 border border-red-100 p-3 rounded-md" role="alert">
             {error}
           </div>
         ) : null}
         {accessRestricted ? (
-          <div className="text-sm text-red-600" role="alert">
+          <div className="text-sm text-red-600 bg-red-50 border border-red-100 p-3 rounded-md" role="alert">
             Your access has been restricted. Contact your teacher for help.
           </div>
         ) : null}
-        {loading ? <div className="text-sm text-zinc-600">Loading…</div> : null}
+        {loading ? <div className="text-sm text-[var(--muted)] animate-pulse">Loading assessment...</div> : null}
 
         {assessment ? (
-          <div className="space-y-4">
+          <div className="space-y-6">
             {assessment.asset_url ? (
-              <Card className="overflow-hidden">
+              <Card className="overflow-hidden border-0 shadow-lg">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={assessment.asset_url} alt={`${assessment.title} cover`} className="h-72 w-full object-cover" />
+                <img src={assessment.asset_url} alt={`${assessment.title} cover`} className="h-48 w-full object-cover" />
               </Card>
             ) : null}
 
             {documentPdf ? (
-              <Card className="overflow-hidden">
+              <Card className="overflow-hidden border-[var(--border)] bg-[var(--surface)]/80 backdrop-blur-sm shadow-sm">
                 <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
                     <CardTitle>Reference PDF</CardTitle>
@@ -1133,7 +1136,7 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
 
             {documentPdf && pdfOpen ? (
               <div
-                className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4 py-6"
+                className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4 py-6 backdrop-blur-md"
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby={pdfDialogTitleId}
@@ -1152,6 +1155,7 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
                         type="button"
                         variant="ghost"
                         onClick={() => window.open(documentPdf.asset_url, "_blank", "noopener,noreferrer")}
+                        className="text-white hover:bg-white/10"
                       >
                         Open in new tab
                       </Button>
@@ -1160,6 +1164,7 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
                         variant="secondary"
                         onClick={() => setPdfOpen(false)}
                         ref={pdfCloseRef}
+                        className="bg-white text-black hover:bg-zinc-200 border-0"
                       >
                         Close
                       </Button>
@@ -1172,47 +1177,48 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
               </div>
             ) : null}
 
-            <Card>
+            <Card className="border-[var(--border)] bg-[var(--surface)]/80 backdrop-blur-sm shadow-sm">
               <CardHeader>
                 <CardTitle>Instructions</CardTitle>
                 <CardDescription>This is an assessment. Questions are revealed one at a time after you start.</CardDescription>
               </CardHeader>
-              <CardContent className="text-sm text-[var(--muted)]">
+              <CardContent className="text-sm text-[var(--muted)] leading-relaxed">
                 {assessment.instructions?.trim() ? assessment.instructions : "No instructions provided."}
               </CardContent>
             </Card>
 
             {!started ? (
-              <Card>
+              <Card className="border-[var(--border)] bg-gradient-to-r from-indigo-50/50 to-purple-50/50 backdrop-blur-sm shadow-md">
                 <CardHeader>
-                  <CardTitle>Ready?</CardTitle>
-                  <CardDescription>
+                  <CardTitle className="text-indigo-900">Ready?</CardTitle>
+                  <CardDescription className="text-indigo-700">
                     This assessment has {total} question{total === 1 ? "" : "s"}. Once you start, you will see one question at a time.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="flex items-center justify-between gap-3">
-                  <div className="text-sm text-[var(--muted)]">When you click Start, you should be ready to answer immediately.</div>
+                  <div className="text-sm text-indigo-600/80">When you click Start, you should be ready to answer immediately.</div>
                   <Button
                     type="button"
                     disabled={previewMode || working || (latest?.status === "submitted" && !isPracticeMode) || accessRestricted || consentRequired}
                     onClick={startOrResume}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white border-0 shadow-md"
                   >
                     {working ? "Starting…" : "Start Assessment"}
                   </Button>
                 </CardContent>
               </Card>
             ) : latest?.status === "submitted" ? (
-              <Card>
+              <Card className="border-emerald-100 bg-emerald-50/50 backdrop-blur-sm shadow-sm">
                 <CardHeader>
-                  <CardTitle>{isPracticeMode ? "Practice Complete" : "Submitted"}</CardTitle>
-                  <CardDescription>
+                  <CardTitle className="text-emerald-900">{isPracticeMode ? "Practice Complete" : "Submitted"}</CardTitle>
+                  <CardDescription className="text-emerald-700">
                     {isPracticeMode
                       ? "This was a practice attempt. You can try again whenever you're ready."
                       : "Your responses have been submitted."}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="text-sm text-[var(--muted)]">
+                  <div className="text-sm text-emerald-600/80">
                     {isPracticeMode
                       ? feedbackReady
                         ? "Your practice feedback is ready."
@@ -1223,7 +1229,7 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
                   </div>
                   {feedbackReady ? (
                     <Link href={`/student/assessments/${assessmentId}/feedback`}>
-                      <Button type="button">View Feedback</Button>
+                      <Button type="button" className="bg-emerald-600 hover:bg-emerald-700 text-white border-0">View Feedback</Button>
                     </Link>
                   ) : null}
                   {isPracticeMode ? (
@@ -1231,6 +1237,7 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
                       type="button"
                       disabled={previewMode || working || accessRestricted || consentRequired}
                       onClick={startOrResume}
+                      variant="secondary"
                     >
                       {working ? "Starting…" : "Start Another Attempt"}
                     </Button>
@@ -1238,60 +1245,60 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
                 </CardContent>
               </Card>
             ) : audioGateActive && audioIntro ? (
-              <Card>
+              <Card className="border-[var(--border)] bg-[var(--surface)]/80 backdrop-blur-sm shadow-sm">
                 <CardHeader>
                   <CardTitle>Audio Intro</CardTitle>
                   <CardDescription>Listen to the full audio before your questions appear.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-zinc-700">
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-[var(--text)]">
                     <span>{audioIntro.original_filename?.trim() || "Audio intro"}</span>
                     <span>{formatDuration(audioIntro.duration_seconds)}</span>
                   </div>
                   <audio
                     controls
                     src={audioIntro.asset_url}
-                    className="w-full"
+                    className="w-full rounded-md shadow-sm"
                     onEnded={() => setAudioIntroCompleted(true)}
                   />
-                  <div className="text-xs text-zinc-600">Once the audio finishes, your first question will appear.</div>
+                  <div className="text-xs text-[var(--muted)]">Once the audio finishes, your first question will appear.</div>
                 </CardContent>
               </Card>
             ) : activeQuestion ? (
-              <Card>
+              <Card className="border-[var(--border)] bg-gradient-to-br from-white to-indigo-50/30 backdrop-blur-sm shadow-xl ring-1 ring-black/5">
                 <CardHeader>
                   <CardTitle>
                     Question {activeQuestion.order_index} of {total}
                   </CardTitle>
                   <CardDescription>Progress: {attempted}/{total} completed</CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="rounded-md border border-zinc-200 bg-white p-4">
-                    <div className="text-xs font-semibold uppercase text-zinc-500">
+                <CardContent className="space-y-6">
+                  <div className="rounded-xl border border-indigo-100 bg-white p-6 shadow-sm">
+                    <div className="text-xs font-semibold uppercase tracking-wider text-indigo-500">
                       {followupNeeded ? "Follow-up question" : "Question"}
                     </div>
-                    <div className="mt-2 text-sm text-zinc-900">
+                    <div className="mt-3 text-lg font-medium text-[var(--text)] leading-relaxed">
                       {followupNeeded && followupPrompt ? followupPrompt : activeQuestion.question_text}
                     </div>
                   </div>
 
                   {isAudioFollowupQuestion && followupNeeded ? (
-                    <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
-                      <div className="text-xs font-semibold uppercase text-emerald-700">AI follow-up prompt</div>
+                    <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-4 text-sm text-emerald-900 animate-in fade-in slide-in-from-top-2">
+                      <div className="text-xs font-semibold uppercase text-emerald-700 tracking-wider">AI follow-up prompt</div>
                       {followupPrompt ? (
-                        <div className="mt-2 text-sm text-emerald-900">{followupPrompt}</div>
+                        <div className="mt-2 text-base text-emerald-900 font-medium">{followupPrompt}</div>
                       ) : (
-                        <div className="mt-2 text-xs text-emerald-800">Generating follow-up question…</div>
+                        <div className="mt-2 text-sm text-emerald-700 italic">Generating follow-up question…</div>
                       )}
                     </div>
                   ) : null}
 
                   {evidenceSetting !== "disabled" ? (
-                    <div className="rounded-md border border-zinc-200 bg-white p-4">
+                    <div className="rounded-xl border border-[var(--border)] bg-white/50 p-4">
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div>
-                          <div className="text-sm font-medium text-zinc-900">Evidence</div>
-                          <div className="mt-0.5 text-xs text-zinc-600">
+                          <div className="text-sm font-medium text-[var(--text)]">Evidence</div>
+                          <div className="mt-0.5 text-xs text-[var(--muted)]">
                             {evidenceSetting === "required"
                               ? isEvidenceFollowupQuestion
                                 ? "Required. Upload to generate follow-up questions."
@@ -1316,6 +1323,7 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
                               variant="secondary"
                               disabled={working || evidenceUploading}
                               onClick={() => evidenceInputRef.current?.click()}
+                              className="bg-white border-[var(--border)]"
                             >
                               {evidenceUploading ? "Uploading…" : "Upload Evidence"}
                             </Button>
@@ -1325,6 +1333,7 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
                               variant="secondary"
                               disabled={working || evidenceUploading}
                               onClick={removeEvidence}
+                              className="bg-white border-[var(--border)]"
                             >
                               {evidenceUploading ? "Removing…" : "Remove"}
                             </Button>
@@ -1332,43 +1341,43 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
                         </div>
                       </div>
 
-                      {evidenceLoading ? <div className="mt-3 text-xs text-zinc-600">Loading evidence…</div> : null}
+                      {evidenceLoading ? <div className="mt-3 text-xs text-[var(--muted)] animate-pulse">Loading evidence…</div> : null}
                       {evidenceError ? (
-                        <div className="mt-3 text-sm text-red-600" role="alert">
+                        <div className="mt-3 text-sm text-red-600 bg-red-50 p-2 rounded border border-red-100" role="alert">
                           {evidenceError}
                         </div>
                       ) : null}
                       {activeEvidence ? (
-                        <div className="mt-3">
+                        <div className="mt-4">
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
                             src={activeEvidence.signed_url}
                             alt="Evidence upload preview"
-                            className="max-h-72 w-full rounded-md border border-zinc-200 object-contain"
+                            className="max-h-80 w-full rounded-lg border border-[var(--border)] object-contain bg-white shadow-sm"
                           />
-                          <div className="mt-2 text-xs text-zinc-600">
+                          <div className="mt-2 text-xs text-[var(--muted)] text-right">
                             Uploaded {new Date(activeEvidence.uploaded_at).toLocaleString()}
                           </div>
                           {isEvidenceFollowupQuestion ? (
-                            <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
-                              <div className="text-xs font-semibold uppercase text-emerald-700">AI follow-up questions</div>
+                            <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50/50 p-4 text-sm text-emerald-900">
+                              <div className="text-xs font-semibold uppercase text-emerald-700 tracking-wider">AI Analysis</div>
                               {evidenceAnalysis ? (
                                 <>
                                   {evidenceAnalysis.summary ? (
-                                    <div className="mt-1 text-xs text-emerald-800">{evidenceAnalysis.summary}</div>
+                                    <div className="mt-2 text-sm text-emerald-800">{evidenceAnalysis.summary}</div>
                                   ) : null}
                                   {evidenceAnalysis.questions.length ? (
-                                    <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-emerald-900">
+                                    <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-emerald-900 font-medium">
                                       {evidenceAnalysis.questions.map((item, idx) => (
                                         <li key={`${activeEvidence.id}-followup-${idx}`}>{item}</li>
                                       ))}
                                     </ul>
                                   ) : (
-                                    <div className="mt-2 text-xs text-emerald-800">No follow-up questions generated.</div>
+                                    <div className="mt-2 text-xs text-emerald-700 italic">No follow-up questions generated.</div>
                                   )}
                                 </>
                               ) : (
-                                <div className="mt-2 text-xs text-emerald-800">Generating questions...</div>
+                                <div className="mt-2 text-xs text-emerald-700 italic animate-pulse">Analyzing image...</div>
                               )}
                             </div>
                           ) : null}
@@ -1377,35 +1386,46 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
                     </div>
                   ) : null}
 
-                  <div className="rounded-md border border-zinc-200 bg-zinc-50 p-4">
+                  <div className="rounded-xl border border-[var(--border)] bg-white p-6 shadow-sm">
                     <div className="flex items-center justify-between gap-3">
-                      <div className="text-sm font-medium text-zinc-900">
+                      <div className="text-sm font-medium text-[var(--text)]">
                         {followupNeeded ? "Record your follow-up response" : "Record your response"}
                       </div>
-                      <div className="text-xs text-zinc-600">
-                        {recording ? `Recording: ${recordingSeconds}s / ${recordingLimitSeconds}s` : `Limit: ${recordingLimitSeconds}s`}
+                      <div className="text-xs font-mono text-[var(--muted)] bg-[var(--surface)] px-2 py-1 rounded">
+                        {recording ? `${recordingSeconds}s / ${recordingLimitSeconds}s` : `Limit: ${recordingLimitSeconds}s`}
                       </div>
                     </div>
-                    <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-zinc-200">
+                    <div className="mt-4 h-3 w-full overflow-hidden rounded-full bg-zinc-100 shadow-inner">
                       <div
-                        className={`h-full ${recording ? "bg-emerald-500" : "bg-zinc-400"}`}
+                        className={`h-full transition-all duration-300 ${recording ? "bg-gradient-to-r from-emerald-400 to-emerald-600 shadow-[0_0_10px_rgba(16,185,129,0.5)]" : "bg-zinc-300"}`}
                         style={{ width: `${recording ? recordingProgress : 0}%` }}
                       />
                     </div>
-                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <div className="mt-6 flex flex-wrap items-center justify-between gap-4">
                       {recording ? (
-                        <Button type="button" variant="secondary" disabled={working} onClick={stopRecording}>
-                          Stop
-                        </Button>
+                        <div className="flex items-center gap-2">
+                          <span className="flex h-3 w-3 relative">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                          </span>
+                          <span className="text-sm text-red-600 font-medium animate-pulse">Recording...</span>
+                        </div>
                       ) : (
                         <div className="text-sm text-[var(--muted)]">
                           Recording starts automatically when the question appears.
                         </div>
                       )}
-                      {working ? <span className="text-sm text-zinc-600">Saving…</span> : null}
+
+                      {recording ? (
+                        <Button type="button" variant="secondary" disabled={working} onClick={stopRecording} className="bg-red-600 text-white hover:bg-red-700 border-0 shadow-md">
+                          Stop Recording
+                        </Button>
+                      ) : null}
+
+                      {working ? <span className="text-sm text-zinc-600">Saving response...</span> : null}
                     </div>
                     {recordingError ? (
-                      <div className="mt-2 text-sm text-red-600" role="alert">
+                      <div className="mt-4 text-sm text-red-600 bg-red-50 p-3 rounded-md border border-red-100" role="alert">
                         {recordingError}
                       </div>
                     ) : null}
@@ -1413,15 +1433,15 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
                 </CardContent>
               </Card>
             ) : (
-              <Card>
+              <Card className="border-indigo-100 bg-indigo-50/50 backdrop-blur-sm shadow-md text-center py-8">
                 <CardHeader>
-                  <CardTitle>All questions answered</CardTitle>
-                  <CardDescription>Submit your assessment to finish.</CardDescription>
+                  <CardTitle className="text-indigo-900 text-2xl">All questions answered!</CardTitle>
+                  <CardDescription className="text-indigo-700 text-lg">You're ready to submit.</CardDescription>
                 </CardHeader>
-                <CardContent className="flex items-center justify-between gap-3">
-                  <div className="text-sm text-[var(--muted)]">You cannot change responses after submitting.</div>
-                  <Button type="button" disabled={working || !canSubmitAttempt} onClick={submit}>
-                    Submit
+                <CardContent className="flex flex-col items-center gap-6">
+                  <div className="text-sm text-indigo-600/80 max-w-md">You cannot change responses after submitting. Make sure you are happy with your answers.</div>
+                  <Button type="button" disabled={working || !canSubmitAttempt} onClick={submit} className="bg-indigo-600 hover:bg-indigo-700 text-white text-lg px-8 py-6 h-auto shadow-lg hover:shadow-xl transition-all hover:-translate-y-1">
+                    Submit Assessment
                   </Button>
                 </CardContent>
               </Card>

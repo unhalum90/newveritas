@@ -25,11 +25,26 @@ function normalizeEvidenceSetting(value: unknown) {
   return null;
 }
 
-function isAllowedImage(file: File) {
+function isAllowedEvidence(file: File) {
   const type = (file.type || "").toLowerCase();
-  if (type === "image/jpeg" || type === "image/jpg" || type === "image/png" || type === "image/heic" || type === "image/heif") return true;
+  if (
+    type === "image/jpeg" ||
+    type === "image/jpg" ||
+    type === "image/png" ||
+    type === "image/heic" ||
+    type === "image/heif" ||
+    type === "application/pdf"
+  )
+    return true;
   const name = (file.name || "").toLowerCase();
-  return name.endsWith(".jpg") || name.endsWith(".jpeg") || name.endsWith(".png") || name.endsWith(".heic") || name.endsWith(".heif");
+  return (
+    name.endsWith(".jpg") ||
+    name.endsWith(".jpeg") ||
+    name.endsWith(".png") ||
+    name.endsWith(".heic") ||
+    name.endsWith(".heif") ||
+    name.endsWith(".pdf")
+  );
 }
 
 async function processImageToJpeg(input: Uint8Array) {
@@ -137,7 +152,7 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
   const file = form.get("file");
   if (!questionId) return NextResponse.json({ error: "Missing question_id." }, { status: 400 });
   if (!(file instanceof File)) return NextResponse.json({ error: "Missing file." }, { status: 400 });
-  if (!isAllowedImage(file)) return NextResponse.json({ error: "Invalid format. Use JPG, PNG, or HEIC." }, { status: 415 });
+  if (!isAllowedEvidence(file)) return NextResponse.json({ error: "Invalid format. Use JPG, PNG, HEIC, or PDF." }, { status: 415 });
   if (file.size > 10 * 1024 * 1024) return NextResponse.json({ error: "File too large (max 10MB)." }, { status: 413 });
 
   const admin = createSupabaseAdminClient();
@@ -223,11 +238,27 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
   await ensureBucket(admin, bucket);
 
   const bytes = new Uint8Array(await file.arrayBuffer());
-  const processed = await processImageToJpeg(bytes);
-  const out = processed.buffer;
+  const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+
+  let out: Buffer;
+  let width: number | null = null;
+  let height: number | null = null;
+  let mimeType = "image/jpeg";
+
+  if (isPdf) {
+    out = Buffer.from(bytes);
+    mimeType = "application/pdf";
+  } else {
+    const processed = await processImageToJpeg(bytes);
+    out = processed.buffer;
+    width = processed.width;
+    height = processed.height;
+    mimeType = "image/jpeg";
+  }
 
   const safeName = (file.name || "").replace(/[^\w.\- ]+/g, "_").slice(0, 160);
-  const path = `${submission.assessment_id}/${student.id}/${questionId}_${Date.now()}.jpg`;
+  const ext = isPdf ? "pdf" : "jpg";
+  const path = `${submission.assessment_id}/${student.id}/${questionId}_${Date.now()}.${ext}`;
 
   // If replacing, delete the previous object to avoid unbounded storage growth.
   const { data: existing } = await admin
@@ -255,9 +286,9 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
     storage_bucket: bucket,
     storage_path: path,
     file_size_bytes: out.byteLength,
-    mime_type: "image/jpeg",
-    width_px: processed.width,
-    height_px: processed.height,
+    mime_type: mimeType,
+    width_px: width,
+    height_px: height,
     uploaded_at: new Date().toISOString(),
     deleted_at: null,
     ai_description: null,
@@ -276,9 +307,10 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
 
   let analysis = row.ai_description ? row.ai_description : null;
   let analyzedAt = row.analyzed_at ? row.analyzed_at : null;
-  if (isEvidenceFollowup(q.question_type) && process.env.OPENAI_API_KEY) {
+  if (isEvidenceFollowup(q.question_type) && (process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY)) {
     const ai = await analyzeEvidenceImage({
       image: out,
+      mimeType,
       questionText: q.question_text,
       context: {
         assessmentId: submission.assessment_id,

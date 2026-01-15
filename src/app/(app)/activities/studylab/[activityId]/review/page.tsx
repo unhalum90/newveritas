@@ -24,7 +24,7 @@ export default async function StudyLabReviewPage({ params }: Props) {
         .eq("id", activityId)
         .maybeSingle();
 
-    if (!activity || activity.teacher_id !== user.id) redirect("/studylab");
+    if (!activity || activity.teacher_id !== user.id) redirect("/activities/studylab");
 
     // Fetch Submissions
     const { data: submissions } = await supabase
@@ -51,10 +51,10 @@ export default async function StudyLabReviewPage({ params }: Props) {
                     <p className="text-[var(--muted)]">Activity: {activity.title}</p>
                 </div>
                 <div className="flex gap-2">
-                    <Link href={`/studylab/${activityId}/analytics`}>
+                    <Link href={`/activities/studylab/${activityId}/analytics`}>
                         <Button variant="secondary">Class Analytics</Button>
                     </Link>
-                    <Link href={`/studylab/${activityId}`}>
+                    <Link href={`/activities/studylab/${activityId}`}>
                         <Button variant="secondary">Back to Details</Button>
                     </Link>
                 </div>
@@ -68,7 +68,7 @@ export default async function StudyLabReviewPage({ params }: Props) {
                         : "Unknown Student";
 
                     return (
-                        <Link key={sub.id} href={`/studylab/${activityId}/review/${sub.id}`}>
+                        <Link key={sub.id} href={`/activities/studylab/${activityId}/review/${sub.id}`}>
                             <Card className="hover:border-[var(--primary)] transition-colors cursor-pointer">
                                 <CardHeader>
                                     <div className="flex justify-between items-start">

@@ -144,13 +144,14 @@ export function AssessmentsClient({
               placeholder="Search by title or class"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
+              className="bg-[var(--surface)]/80 backdrop-blur-sm border-[var(--border)] focus:ring-[var(--primary)]"
             />
           </div>
           <div className="space-y-1">
             <Label htmlFor="assessment-status">Status</Label>
             <select
               id="assessment-status"
-              className="h-10 rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 text-sm text-[var(--text)]"
+              className="h-10 rounded-md border border-[var(--border)] bg-[var(--surface)]/80 backdrop-blur-sm px-3 text-sm text-[var(--text)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
             >
@@ -164,7 +165,7 @@ export function AssessmentsClient({
             <Label htmlFor="assessment-sort">Sort by</Label>
             <select
               id="assessment-sort"
-              className="h-10 rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 text-sm text-[var(--text)]"
+              className="h-10 rounded-md border border-[var(--border)] bg-[var(--surface)]/80 backdrop-blur-sm px-3 text-sm text-[var(--text)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
               value={sortKey}
               onChange={(e) => setSortKey(e.target.value)}
             >
@@ -183,7 +184,7 @@ export function AssessmentsClient({
         const canDelete = a.status === "draft";
         const stats = submissionStatsById[a.id] ?? { completed: 0, needsReview: 0 };
         return (
-          <Card key={a.id}>
+          <Card key={a.id} className="border-[var(--border)] bg-[var(--surface)]/80 backdrop-blur-sm shadow-sm transition-all hover:shadow-md hover:border-[var(--primary)]/50">
             <CardHeader>
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
@@ -209,12 +210,12 @@ export function AssessmentsClient({
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
                   <Link href={`/assessments/${a.id}?step=1`}>
-                    <Button type="button" variant="ghost" size="sm" className="underline underline-offset-4">
+                    <Button type="button" variant="ghost" size="sm" className="hover:text-[var(--primary)] text-[var(--muted)]">
                       Edit
                     </Button>
                   </Link>
                   <Link href={`/assessments/${a.id}/results`}>
-                    <Button type="button" variant="ghost" size="sm" className="underline underline-offset-4">
+                    <Button type="button" variant="ghost" size="sm" className="hover:text-[var(--primary)] text-[var(--muted)]">
                       Reports
                     </Button>
                   </Link>
@@ -222,7 +223,7 @@ export function AssessmentsClient({
                     type="button"
                     variant="ghost"
                     size="sm"
-                    className="underline underline-offset-4"
+                    className="hover:text-[var(--primary)] text-[var(--muted)]"
                     disabled={duplicatingId === a.id}
                     onClick={() => void handleDuplicate(a.id)}
                   >
@@ -232,7 +233,7 @@ export function AssessmentsClient({
                     type="button"
                     variant="ghost"
                     size="sm"
-                    className="underline underline-offset-4"
+                    className="hover:text-[var(--primary)] text-[var(--muted)]"
                     onClick={() => void handleShare(a.id)}
                   >
                     Share
@@ -241,7 +242,7 @@ export function AssessmentsClient({
                     type="button"
                     variant="ghost"
                     size="sm"
-                    className={canDelete ? "text-[var(--danger)] underline underline-offset-4" : undefined}
+                    className={canDelete ? "text-[var(--danger)] hover:bg-red-50 dark:hover:bg-red-950/20" : "text-[var(--muted)]"}
                     disabled={!canDelete || deletingId === a.id}
                     onClick={() => setDeleteConfirmId(a.id)}
                   >
@@ -251,7 +252,7 @@ export function AssessmentsClient({
                     type="button"
                     variant="ghost"
                     size="sm"
-                    className="underline underline-offset-4"
+                    className="hover:text-[var(--primary)] text-[var(--muted)]"
                     disabled={archivingId === a.id || a.status === "closed"}
                     onClick={() => void handleArchive(a.id)}
                   >

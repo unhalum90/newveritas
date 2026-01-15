@@ -213,7 +213,10 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const rawStep = Number(searchParams.get("step") ?? "1") || 1;
+
   const step = (steps.some((s) => s.n === rawStep) ? rawStep : 1) as StepNumber;
+
+
 
   const [assessment, setAssessment] = useState<Assessment | null>(null);
   const [classes, setClasses] = useState<ClassRow[]>([]);
@@ -281,6 +284,22 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
   const [validationOpen, setValidationOpen] = useState(false);
   const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
   const [reviewOpen, setReviewOpen] = useState(false);
+
+  // Compute completion status for stepper
+  const hasTitle = Boolean(assessment?.title?.trim());
+  const hasClass = Boolean(assessment?.class_id);
+  const hasAsset = Boolean(assetUrl || assetPrompt || audioIntro || documentAsset);
+  const hasQuestions = questionsCount > 0;
+  const hasRubrics = Boolean(rubrics.reasoning && rubrics.evidence);
+
+  const stepStatus = useMemo(() => ({
+    1: hasTitle && hasClass,
+    2: true, // General Info is mostly optional or implicitly done if Step 1 is done
+    3: hasAsset, // Assets are optional but nice to track
+    4: hasQuestions,
+    5: hasRubrics,
+    6: false // Preview is the final step
+  }), [hasTitle, hasClass, hasAsset, hasQuestions, hasRubrics]);
   const audioInputRef = useRef<HTMLInputElement | null>(null);
   const documentInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -1243,1571 +1262,444 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
   }
 
   return (
-    <div className="min-h-[calc(100vh-120px)]">
-      <AssessmentReviewDialog
-        open={reviewOpen}
-        stages={reviewStages}
-        loading={saving}
-        onClose={() => setReviewOpen(false)}
-        onConfirm={() => {
-          setReviewOpen(false);
-          void publishAssessment();
-        }}
-        onEditStep={(stepToEdit) => {
-          setReviewOpen(false);
-          goToStep(stepToEdit as StepNumber);
-        }}
-      />
-      <ValidationDialog open={validationOpen} errors={validationErrors} onClose={() => setValidationOpen(false)} />
-      <div className="mb-6 flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold text-[var(--text)]">Veritas Assess Builder</h1>
-          <p className="mt-1 text-sm text-[var(--muted)]">
-            Create high-integrity oral assessments{className ? ` for ${className}` : ""} • Status:{" "}
-            {assessment.status.toUpperCase()} • Questions: {questionsCount}
-            {lastSavedAt ? ` • Saved ${new Date(lastSavedAt).toLocaleTimeString()}` : ""}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button type="button" variant="secondary" disabled={saving} onClick={() => router.push("/assessments")}>
-            Back
-          </Button>
-          <Button type="button" variant="secondary" onClick={() => window.open(studentPreviewUrl, "_blank")}>
-            Preview as Student
-          </Button>
-          <Button type="button" variant="secondary" disabled={saving || assignmentSaving || readonly} onClick={saveDraft}>
-            {saving || assignmentSaving ? "Saving…" : "Save Draft"}
-          </Button>
-          <Button type="button" disabled={!canPublish} onClick={() => setReviewOpen(true)}>
-            Publish to Class
-          </Button>
-        </div>
-      </div>
+    <div className="relative min-h-screen pb-20">
+      {/* Sparkle background */}
+      <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-indigo-50/50 via-white to-white dark:from-indigo-950/20 dark:via-background dark:to-background" />
 
-      {error ? (
-        <div className="mb-4 text-sm text-[var(--danger)]" role="alert">
-          {error}
-        </div>
-      ) : null}
-
-      <div className={`grid grid-cols-1 gap-6 ${step === 6 ? "lg:grid-cols-[800px_350px]" : ""}`}>
+      <div className="mx-auto max-w-5xl space-y-4 px-4 py-2">
+        {/* Header & Stepper */}
         <div className="space-y-4">
-          <div className="rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-3">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div className="text-sm font-medium text-[var(--text)]">Builder Steps</div>
-              <div className="text-xs text-[var(--muted)]">Completed steps stay clickable. Unfinished steps are disabled.</div>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-light text-[var(--text)]">
+                Lesson <span className="font-semibold text-transparent bg-clip-text bg-gradient-to-r from-[var(--primary)] to-indigo-500">Builder</span>
+              </h1>
+              <p className="text-sm text-[var(--muted)]">Create a new assessment for your students.</p>
             </div>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {steps.map((s) => {
-                const active = s.n === step;
-                const disabled = s.n > maxEnabledStep;
-                return (
-                  <button
-                    key={s.n}
-                    type="button"
-                    disabled={disabled}
-                    onClick={() => goToStep(s.n)}
-                    className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm transition-colors border-[var(--border)] ${active ? "bg-[var(--border)] text-[var(--text)]" : "bg-transparent text-[var(--muted)]"
-                      } ${disabled ? "opacity-40 cursor-not-allowed" : "hover:border-[var(--primary)] hover:text-[var(--text)]"
-                      }`}
-                  >
-                    <span
-                      className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold ${active
-                        ? "bg-[var(--primary-strong)] text-white"
-                        : "bg-[var(--surface)] text-[var(--muted)] border border-[var(--border)]"
-                        }`}
-                    >
-                      {s.n}
-                    </span>
-                    <span className="whitespace-nowrap">{s.label}</span>
-                  </button>
-                );
-              })}
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-[var(--muted)]">
+                {dirty || assignmentDirty ? "Unsaved changes..." : lastSavedAt ? "Saved" : ""}
+              </span>
+              <Button variant="ghost" size="sm" onClick={() => router.push("/dashboard")}>
+                Exit
+              </Button>
             </div>
           </div>
 
-          {step === 1 ? (
-            <Card>
-              <CardHeader>
-                <CardTitle>Start</CardTitle>
-                <CardDescription>Choose your assessment type, how to create it, then set the basics.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                {/* Assessment Profile Selector */}
-                <div className="space-y-3">
-                  <Label>Assessment Profile</Label>
-                  <p className="text-xs text-[var(--muted)]">
-                    Select the type of assessment you're creating. This sets recommended defaults for timing, integrity, and follow-ups.
-                  </p>
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
-                    {PROFILE_LIST.map((profile) => {
-                      const isSelected = assessment.assessment_profile === profile.id;
-                      return (
-                        <button
-                          key={profile.id}
-                          type="button"
-                          disabled={readonly}
-                          onClick={() => {
-                            // Apply profile defaults
-                            const result = applyProfile(profile.id, {
-                              recording_limit_seconds: assessment.assessment_integrity?.recording_limit_seconds,
-                              viewing_timer_seconds: assessment.assessment_integrity?.viewing_timer_seconds,
-                              tab_switch_monitor: assessment.assessment_integrity?.tab_switch_monitor,
-                              shuffle_questions: assessment.assessment_integrity?.shuffle_questions,
-                              pledge_enabled: assessment.assessment_integrity?.pledge_enabled,
-                              pause_threshold_seconds: assessment.assessment_integrity?.pause_threshold_seconds,
-                              allow_grace_restart: assessment.assessment_integrity?.allow_grace_restart,
-                              socratic_enabled: undefined, // Will be applied from defaults
-                              is_practice_mode: assessment.is_practice_mode ?? false,
-                            }, { resetToDefaults: true });
+          <nav aria-label="Progress">
+            <ol role="list" className="divide-y divide-[var(--border)] rounded-md border border-[var(--border)] bg-[var(--surface)] md:flex md:divide-y-0">
+              {steps.map((s, stepIdx) => {
+                const isCurrent = step === s.n;
+                const isCompleted = s.n < step || stepStatus[s.n as keyof typeof stepStatus];
 
-                            setAssessment({
-                              ...assessment,
-                              assessment_profile: profile.id,
-                              profile_modified: false,
-                              profile_version: 1,
-                              profile_override_keys: [],
-                            });
-                            setDirty(true);
-
-                            // Update integrity settings with profile defaults
-                            void updateIntegrity({
-                              recording_limit_seconds: result.newState.recording_limit_seconds,
-                              viewing_timer_seconds: result.newState.viewing_timer_seconds,
-                              tab_switch_monitor: result.newState.tab_switch_monitor,
-                              shuffle_questions: result.newState.shuffle_questions,
-                              pledge_enabled: result.newState.pledge_enabled,
-                              pause_threshold_seconds: result.newState.pause_threshold_seconds,
-                              allow_grace_restart: result.newState.allow_grace_restart,
-                            });
-                          }}
-                          className={`p-4 text-left rounded-lg border transition-all ${isSelected
-                            ? "border-[var(--primary)] bg-[var(--primary)]/5 ring-1 ring-[var(--primary)]"
-                            : "border-[var(--border)] hover:border-[var(--primary)]/50"
-                            } ${readonly ? "opacity-60 cursor-not-allowed" : ""}`}
-                        >
-                          <div className="font-medium text-sm">{profile.label}</div>
-                          <div className="text-xs text-[var(--muted)] mt-1">{profile.description}</div>
-                          <div className="text-xs text-[var(--muted)] mt-2 flex items-center gap-2">
-                            <span className="inline-block px-1.5 py-0.5 bg-[var(--surface)] rounded text-[10px] uppercase tracking-wide">
-                              {profile.gradeRange}
-                            </span>
-                            {isSelected && (
-                              <span className="text-[var(--primary)] font-medium">✓ Selected</span>
-                            )}
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                  {assessment.assessment_profile && assessment.profile_modified && (
-                    <div className="text-xs text-[var(--warning)] flex items-center gap-1">
-                      <span>⚠</span>
-                      <span>Settings have been modified from profile defaults</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Authoring Mode */}
-                <div className="space-y-3">
-                  <Label>Authoring Mode</Label>
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                    {(
-                      [
-                        { key: "manual", title: "Start from scratch", desc: "Fill out the wizard step-by-step." },
-                        { key: "upload", title: "Upload existing material", desc: "Upload a PDF; we extract text and generate a draft." },
-                        { key: "ai", title: "Generate with AI", desc: "Describe what you want; we generate a draft to review." },
-                        { key: "template", title: "Use a template", desc: "Browse pre-built questions by subject." },
-                      ] as const
-                    ).map((m) => (
-                      <Card key={m.key} className={assessment.authoring_mode === m.key ? "ring-1 ring-[var(--primary)]" : ""}>
-                        <CardHeader>
-                          <CardTitle className="text-base">{m.title}</CardTitle>
-                          <CardDescription>{m.desc}</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                          <Button
-                            type="button"
-                            variant={assessment.authoring_mode === m.key ? "primary" : "secondary"}
-                            onClick={() => {
-                              setAssessment({ ...assessment, authoring_mode: m.key });
-                              if (m.key !== "ai") setStartAiPrompt("");
-                              if (m.key !== "upload") setStartPdfFile(null);
-                              if (m.key !== "template") setSelectedTemplateId(null);
-                              setDirty(true);
-                            }}
-                            disabled={readonly}
-                          >
-                            {assessment.authoring_mode === m.key ? "Selected" : "Select"}
-                          </Button>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="class">Class</Label>
-                  <select
-                    id="class"
-                    className="h-10 w-full rounded-md border bg-[var(--surface)] px-3 text-sm text-[var(--text)] border-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] disabled:opacity-60"
-                    value={assessment.class_id ?? ""}
-                    onChange={(e) => {
-                      setAssessment({ ...assessment, class_id: e.target.value || null });
-                      setDirty(true);
-                      setAssignmentMode("all");
-                      setAssignmentStudentIds(new Set());
-                      setAssignmentDirty(true);
-                      setAssignmentTouched(false);
-                      setAssignmentError(null);
-                    }}
-                    onBlur={() => setClassTouched(true)}
-                    disabled={readonly}
-                  >
-                    <option value="">Select…</option>
-                    {classes.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                  {!classes.length ? <div className="text-xs text-[var(--muted)]">No classes found. Create one first.</div> : null}
-                  {classError ? (
-                    <div className="flex items-center gap-2 text-sm text-[var(--danger)]">
-                      <span aria-hidden="true">⛔</span>
-                      <span>{classError}</span>
-                    </div>
-                  ) : null}
-                </div>
-
-                <div className="space-y-3">
-                  <Label>Assign to</Label>
-                  <div className="flex flex-wrap gap-2">
-                    <Button
+                return (
+                  <li key={s.label} className="relative md:flex md:flex-1">
+                    <button
                       type="button"
-                      variant={assignmentMode === "all" ? "primary" : "secondary"}
-                      disabled={assignmentDisabled}
-                      onClick={() => {
-                        if (assignmentDisabled) return;
-                        setAssignmentMode("all");
-                        setAssignmentStudentIds(new Set());
-                        setAssignmentDirty(true);
-                        setAssignmentTouched(true);
-                        setAssignmentError(null);
-                      }}
+                      onClick={() => s.n <= maxEnabledStep && goToStep(s.n)}
+                      disabled={s.n > maxEnabledStep}
+                      className={`group flex w-full items-center ${stepIdx !== steps.length - 1 ? 'pr-4' : ''}`}
                     >
-                      Entire class
-                    </Button>
-                    <Button
-                      type="button"
-                      variant={assignmentMode === "selected" ? "primary" : "secondary"}
-                      disabled={assignmentDisabled}
-                      onClick={() => {
-                        if (assignmentDisabled) return;
-                        setAssignmentMode("selected");
-                        setAssignmentDirty(true);
-                        setAssignmentTouched(true);
-                        setAssignmentError(null);
-                      }}
-                    >
-                      Selected students
-                    </Button>
-                  </div>
-                  <p className="text-xs text-[var(--muted)]">Choose everyone or a subgroup within this class.</p>
-
-                  {assignmentMode === "selected" ? (
-                    <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-3">
-                      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--muted)]">
-                        <span>{selectedCount} selected</span>
-                        <div className="flex items-center gap-2">
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            size="sm"
-                            disabled={assignmentDisabled || !classStudents.length}
-                            onClick={selectAllStudents}
-                          >
-                            Select all
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            size="sm"
-                            disabled={assignmentDisabled || selectedCount === 0}
-                            onClick={clearSelectedStudents}
-                          >
-                            Clear
-                          </Button>
-                        </div>
+                      <span className="flex items-center px-6 py-4 text-sm font-medium">
+                        <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${isCurrent
+                          ? "border-[var(--primary)] bg-indigo-50 text-[var(--primary)] dark:bg-indigo-950/30"
+                          : isCompleted
+                            ? "border-[var(--primary)] bg-[var(--primary)] text-white"
+                            : "border-[var(--border)] text-[var(--muted)] group-hover:border-gray-400"
+                          }`}>
+                          {isCompleted && !isCurrent ? (
+                            <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                            </svg>
+                          ) : (
+                            <span>{s.n}</span>
+                          )}
+                        </span>
+                        <span className={`ml-4 text-sm font-medium ${isCurrent ? 'text-[var(--primary)]' : 'text-[var(--text)] opacity-70'}`}>
+                          {s.label}
+                        </span>
+                      </span>
+                    </button>
+                    {stepIdx !== steps.length - 1 ? (
+                      <div className="absolute right-0 top-0 hidden h-full w-5 md:block" aria-hidden="true">
+                        <svg className="h-full w-full text-[var(--border)]" viewBox="0 0 22 80" fill="none" preserveAspectRatio="none">
+                          <path d="M0 -2L20 40L0 82" vectorEffect="non-scaling-stroke" stroke="currentcolor" strokeLinejoin="round" />
+                        </svg>
                       </div>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ol>
+          </nav>
+        </div>
 
-                      {studentsLoading ? (
-                        <div className="mt-3 text-xs text-[var(--muted)]">Loading students...</div>
-                      ) : classStudents.length ? (
-                        <div className="mt-3 max-h-56 space-y-2 overflow-y-auto pr-2 text-sm">
-                          {classStudents.map((student) => (
-                            <label key={student.id} className="flex items-center gap-2">
-                              <input
-                                type="checkbox"
-                                checked={assignmentStudentIds.has(student.id)}
-                                onChange={() => toggleAssignmentStudent(student.id)}
-                                disabled={assignmentDisabled}
-                                aria-label={`Select ${student.first_name} ${student.last_name}`}
-                              />
-                              <span>
-                                {student.first_name} {student.last_name}
-                              </span>
-                            </label>
-                          ))}
+        {/* Wizard Content */}
+        <div className="relative">
+          <AssessmentReviewDialog
+            open={reviewOpen}
+            stages={reviewStages}
+            loading={saving}
+            onClose={() => setReviewOpen(false)}
+            onConfirm={() => {
+              setReviewOpen(false);
+              void publishAssessment();
+            }}
+            onEditStep={(stepToEdit) => {
+              setReviewOpen(false);
+              goToStep(stepToEdit as StepNumber);
+            }}
+          />
+          <ValidationDialog open={validationOpen} errors={validationErrors} onClose={() => setValidationOpen(false)} />
+          <div className="mb-6 flex items-start justify-between gap-4">
+            <div>
+              <h1 className="text-2xl font-semibold text-[var(--text)]">Veritas Assess Builder</h1>
+              <p className="mt-1 text-sm text-[var(--muted)]">
+                Create high-integrity oral assessments{className ? ` for ${className}` : ""} • Status:{" "}
+                {assessment.status.toUpperCase()} • Questions: {questionsCount}
+                {lastSavedAt ? ` • Saved ${new Date(lastSavedAt).toLocaleTimeString()}` : ""}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button type="button" variant="secondary" disabled={saving} onClick={() => router.push("/assessments")}>
+                Back
+              </Button>
+              <Button type="button" variant="secondary" onClick={() => window.open(studentPreviewUrl, "_blank")}>
+                Preview as Student
+              </Button>
+              <Button type="button" variant="secondary" disabled={saving || assignmentSaving || readonly} onClick={saveDraft}>
+                {saving || assignmentSaving ? "Saving…" : "Save Draft"}
+              </Button>
+              <Button type="button" disabled={!canPublish} onClick={() => setReviewOpen(true)}>
+                Publish to Class
+              </Button>
+            </div>
+          </div>
+
+          {error ? (
+            <div className="mb-4 text-sm text-[var(--danger)]" role="alert">
+              {error}
+            </div>
+          ) : null}
+
+          <div className={`grid grid-cols-1 gap-6 ${step === 6 ? "lg:grid-cols-[800px_350px]" : ""}`}>
+            <div className="space-y-4">
+
+              {step === 1 ? (
+                <Card className="border-[var(--border)] bg-[var(--surface)]/80 backdrop-blur-sm shadow-sm">
+                  <CardHeader>
+                    <CardTitle>Start</CardTitle>
+                    <CardDescription>Choose your assessment type, how to create it, then set the basics.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    {/* Assessment Profile Selector */}
+                    <div className="space-y-3">
+                      <Label>Assessment Profile</Label>
+                      <p className="text-xs text-[var(--muted)]">
+                        Select the type of assessment you're creating. This sets recommended defaults for timing, integrity, and follow-ups.
+                      </p>
+                      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+                        {PROFILE_LIST.map((profile) => {
+                          const isSelected = assessment.assessment_profile === profile.id;
+                          return (
+                            <button
+                              key={profile.id}
+                              type="button"
+                              disabled={readonly}
+                              onClick={() => {
+                                // Apply profile defaults
+                                const result = applyProfile(profile.id, {
+                                  recording_limit_seconds: assessment.assessment_integrity?.recording_limit_seconds,
+                                  viewing_timer_seconds: assessment.assessment_integrity?.viewing_timer_seconds,
+                                  tab_switch_monitor: assessment.assessment_integrity?.tab_switch_monitor,
+                                  shuffle_questions: assessment.assessment_integrity?.shuffle_questions,
+                                  pledge_enabled: assessment.assessment_integrity?.pledge_enabled,
+                                  pause_threshold_seconds: assessment.assessment_integrity?.pause_threshold_seconds,
+                                  allow_grace_restart: assessment.assessment_integrity?.allow_grace_restart,
+                                  socratic_enabled: undefined, // Will be applied from defaults
+                                  is_practice_mode: assessment.is_practice_mode ?? false,
+                                }, { resetToDefaults: true });
+
+                                setAssessment({
+                                  ...assessment,
+                                  assessment_profile: profile.id,
+                                  profile_modified: false,
+                                  profile_version: 1,
+                                  profile_override_keys: [],
+                                });
+                                setDirty(true);
+
+                                // Update integrity settings with profile defaults
+                                void updateIntegrity({
+                                  recording_limit_seconds: result.newState.recording_limit_seconds,
+                                  viewing_timer_seconds: result.newState.viewing_timer_seconds,
+                                  tab_switch_monitor: result.newState.tab_switch_monitor,
+                                  shuffle_questions: result.newState.shuffle_questions,
+                                  pledge_enabled: result.newState.pledge_enabled,
+                                  pause_threshold_seconds: result.newState.pause_threshold_seconds,
+                                  allow_grace_restart: result.newState.allow_grace_restart,
+                                });
+                              }}
+                              className={`p-4 text-left rounded-lg border transition-all ${isSelected
+                                ? "border-[var(--primary)] bg-[var(--primary)]/5 ring-1 ring-[var(--primary)]"
+                                : "border-[var(--border)] hover:border-[var(--primary)]/50"
+                                } ${readonly ? "opacity-60 cursor-not-allowed" : ""}`}
+                            >
+                              <div className="font-medium text-sm">{profile.label}</div>
+                              <div className="text-xs text-[var(--muted)] mt-1">{profile.description}</div>
+                              <div className="text-xs text-[var(--muted)] mt-2 flex items-center gap-2">
+                                <span className="inline-block px-1.5 py-0.5 bg-[var(--surface)] rounded text-[10px] uppercase tracking-wide">
+                                  {profile.gradeRange}
+                                </span>
+                                {isSelected && (
+                                  <span className="text-[var(--primary)] font-medium">✓ Selected</span>
+                                )}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {assessment.assessment_profile && assessment.profile_modified && (
+                        <div className="text-xs text-[var(--warning)] flex items-center gap-1">
+                          <span>⚠</span>
+                          <span>Settings have been modified from profile defaults</span>
                         </div>
-                      ) : (
-                        <div className="mt-3 text-xs text-[var(--muted)]">No students found. Add students first.</div>
                       )}
+                    </div>
 
-                      {assignmentSelectionError ? (
-                        <div className="mt-3 flex items-center gap-2 text-sm text-[var(--danger)]" role="alert">
+                    {/* Authoring Mode */}
+                    <div className="space-y-3">
+                      <Label>Authoring Mode</Label>
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                        {(
+                          [
+                            { key: "manual", title: "Start from scratch", desc: "Fill out the wizard step-by-step." },
+                            { key: "upload", title: "Upload existing material", desc: "Upload a PDF; we extract text and generate a draft." },
+                            { key: "ai", title: "Generate with AI", desc: "Describe what you want; we generate a draft to review." },
+                            { key: "template", title: "Use a template", desc: "Browse pre-built questions by subject." },
+                          ] as const
+                        ).map((m) => (
+                          <Card key={m.key} className={assessment.authoring_mode === m.key ? "ring-1 ring-[var(--primary)]" : ""}>
+                            <CardHeader>
+                              <CardTitle className="text-base">{m.title}</CardTitle>
+                              <CardDescription>{m.desc}</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                              <Button
+                                type="button"
+                                variant={assessment.authoring_mode === m.key ? "primary" : "secondary"}
+                                onClick={() => {
+                                  setAssessment({ ...assessment, authoring_mode: m.key });
+                                  if (m.key !== "ai") setStartAiPrompt("");
+                                  if (m.key !== "upload") setStartPdfFile(null);
+                                  if (m.key !== "template") setSelectedTemplateId(null);
+                                  setDirty(true);
+                                }}
+                                disabled={readonly}
+                              >
+                                {assessment.authoring_mode === m.key ? "Selected" : "Select"}
+                              </Button>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="class">Class</Label>
+                      <select
+                        id="class"
+                        className="h-10 w-full rounded-md border bg-[var(--surface)] px-3 text-sm text-[var(--text)] border-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] disabled:opacity-60"
+                        value={assessment.class_id ?? ""}
+                        onChange={(e) => {
+                          setAssessment({ ...assessment, class_id: e.target.value || null });
+                          setDirty(true);
+                          setAssignmentMode("all");
+                          setAssignmentStudentIds(new Set());
+                          setAssignmentDirty(true);
+                          setAssignmentTouched(false);
+                          setAssignmentError(null);
+                        }}
+                        onBlur={() => setClassTouched(true)}
+                        disabled={readonly}
+                      >
+                        <option value="">Select…</option>
+                        {classes.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
+                          </option>
+                        ))}
+                      </select>
+                      {!classes.length ? <div className="text-xs text-[var(--muted)]">No classes found. Create one first.</div> : null}
+                      {classError ? (
+                        <div className="flex items-center gap-2 text-sm text-[var(--danger)]">
                           <span aria-hidden="true">⛔</span>
-                          <span>{assignmentSelectionError}</span>
+                          <span>{classError}</span>
                         </div>
                       ) : null}
-                      {assignmentError ? (
-                        <div className="mt-3 text-sm text-[var(--danger)]" role="alert">
+                    </div>
+
+                    <div className="space-y-3">
+                      <Label>Assign to</Label>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          variant={assignmentMode === "all" ? "primary" : "secondary"}
+                          disabled={assignmentDisabled}
+                          onClick={() => {
+                            if (assignmentDisabled) return;
+                            setAssignmentMode("all");
+                            setAssignmentStudentIds(new Set());
+                            setAssignmentDirty(true);
+                            setAssignmentTouched(true);
+                            setAssignmentError(null);
+                          }}
+                        >
+                          Entire class
+                        </Button>
+                        <Button
+                          type="button"
+                          variant={assignmentMode === "selected" ? "primary" : "secondary"}
+                          disabled={assignmentDisabled}
+                          onClick={() => {
+                            if (assignmentDisabled) return;
+                            setAssignmentMode("selected");
+                            setAssignmentDirty(true);
+                            setAssignmentTouched(true);
+                            setAssignmentError(null);
+                          }}
+                        >
+                          Selected students
+                        </Button>
+                      </div>
+                      <p className="text-xs text-[var(--muted)]">Choose everyone or a subgroup within this class.</p>
+
+                      {assignmentMode === "selected" ? (
+                        <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-3">
+                          <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--muted)]">
+                            <span>{selectedCount} selected</span>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                size="sm"
+                                disabled={assignmentDisabled || !classStudents.length}
+                                onClick={selectAllStudents}
+                              >
+                                Select all
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                size="sm"
+                                disabled={assignmentDisabled || selectedCount === 0}
+                                onClick={clearSelectedStudents}
+                              >
+                                Clear
+                              </Button>
+                            </div>
+                          </div>
+
+                          {studentsLoading ? (
+                            <div className="mt-3 text-xs text-[var(--muted)]">Loading students...</div>
+                          ) : classStudents.length ? (
+                            <div className="mt-3 max-h-56 space-y-2 overflow-y-auto pr-2 text-sm">
+                              {classStudents.map((student) => (
+                                <label key={student.id} className="flex items-center gap-2">
+                                  <input
+                                    type="checkbox"
+                                    checked={assignmentStudentIds.has(student.id)}
+                                    onChange={() => toggleAssignmentStudent(student.id)}
+                                    disabled={assignmentDisabled}
+                                    aria-label={`Select ${student.first_name} ${student.last_name}`}
+                                  />
+                                  <span>
+                                    {student.first_name} {student.last_name}
+                                  </span>
+                                </label>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="mt-3 text-xs text-[var(--muted)]">No students found. Add students first.</div>
+                          )}
+
+                          {assignmentSelectionError ? (
+                            <div className="mt-3 flex items-center gap-2 text-sm text-[var(--danger)]" role="alert">
+                              <span aria-hidden="true">⛔</span>
+                              <span>{assignmentSelectionError}</span>
+                            </div>
+                          ) : null}
+                          {assignmentError ? (
+                            <div className="mt-3 text-sm text-[var(--danger)]" role="alert">
+                              {assignmentError}
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : assignmentError ? (
+                        <div className="text-sm text-[var(--danger)]" role="alert">
                           {assignmentError}
                         </div>
                       ) : null}
                     </div>
-                  ) : assignmentError ? (
-                    <div className="text-sm text-[var(--danger)]" role="alert">
-                      {assignmentError}
-                    </div>
-                  ) : null}
-                </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="title">Assessment title</Label>
-                  <Input
-                    id="title"
-                    maxLength={100}
-                    value={assessment.title}
-                    onChange={(e) => {
-                      setAssessment({ ...assessment, title: e.target.value });
-                      setDirty(true);
-                    }}
-                    onBlur={() => {
-                      setTitleTouched(true);
-                      if (dirty && !saving) void persistDraft(true);
-                    }}
-                    disabled={readonly}
-                  />
-                  {titleError ? (
-                    <div className="flex items-center gap-2 text-sm text-[var(--danger)]">
-                      <span aria-hidden="true">⛔</span>
-                      <span>{titleError}</span>
-                    </div>
-                  ) : null}
-                </div>
-
-                {assessment.authoring_mode === "upload" ? (
-                  <div className="space-y-3 rounded-md border border-[var(--border)] bg-[var(--surface)] p-4">
                     <div className="space-y-2">
-                      <Label htmlFor="pdfUpload">Upload PDF</Label>
-                      <input
-                        id="pdfUpload"
-                        type="file"
-                        accept="application/pdf"
-                        className="block w-full text-sm text-[var(--muted)] file:mr-4 file:rounded-md file:border-0 file:bg-[var(--border)] file:px-4 file:py-2 file:text-sm file:font-semibold file:text-[var(--text)] hover:file:bg-[var(--primary-strong)] hover:file:text-white"
-                        disabled={readonly || saving}
+                      <Label htmlFor="title">Assessment title</Label>
+                      <Input
+                        id="title"
+                        maxLength={100}
+                        value={assessment.title}
                         onChange={(e) => {
-                          const f = e.target.files?.[0] ?? null;
-                          setStartPdfFile(f);
+                          setAssessment({ ...assessment, title: e.target.value });
+                          setDirty(true);
                         }}
+                        onBlur={() => {
+                          setTitleTouched(true);
+                          if (dirty && !saving) void persistDraft(true);
+                        }}
+                        disabled={readonly}
                       />
-                      <div className="text-xs text-[var(--muted)]">
-                        We do not store the PDF; only generated questions and rubrics are saved.
-                      </div>
-                      {startPdfFile ? (
-                        <div className="text-xs text-[var(--muted)]">
-                          Selected: <span className="text-[var(--text)]">{startPdfFile.name}</span> (
-                          {(startPdfFile.size / (1024 * 1024)).toFixed(2)}MB)
+                      {titleError ? (
+                        <div className="flex items-center gap-2 text-sm text-[var(--danger)]">
+                          <span aria-hidden="true">⛔</span>
+                          <span>{titleError}</span>
                         </div>
                       ) : null}
                     </div>
 
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      <div className="space-y-2">
-                        <Label htmlFor="pdfQCount">Number of questions</Label>
-                        <select
-                          id="pdfQCount"
-                          className="h-10 w-full rounded-md border bg-[var(--surface)] px-3 text-sm text-[var(--text)] border-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] disabled:opacity-60"
-                          value={startQuestionCount}
-                          onChange={(e) => setStartQuestionCount(Number(e.target.value))}
-                          disabled={readonly || saving}
-                        >
-                          {[1, 2, 3, 4, 5].map((v) => (
-                            <option key={v} value={v}>
-                              {v}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="flex items-end justify-end">
-                        <div className="text-xs text-[var(--muted)]">We&apos;ll generate title, questions, and both rubrics.</div>
-                      </div>
-                    </div>
-                  </div>
-                ) : null}
-
-                {assessment.authoring_mode === "ai" ? (
-                  <div className="space-y-3">
-                    <div className="space-y-2">
-                      <Label htmlFor="aiPrompt">Describe the assessment you want</Label>
-                      <textarea
-                        id="aiPrompt"
-                        className="min-h-32 w-full rounded-md border bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] border-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] disabled:opacity-60"
-                        placeholder='Example: “Create a 3-question oral assessment for 10th grade US History on causes of the Civil War. Include an image-based prompt, and rubrics for reasoning and evidence.”'
-                        value={startAiPrompt}
-                        onChange={(e) => setStartAiPrompt(e.target.value)}
-                        disabled={readonly || saving}
-                      />
-                      <div className="text-xs text-[var(--muted)]">Minimum 20 characters.</div>
-                    </div>
-
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      <div className="space-y-2">
-                        <Label htmlFor="qCount">Number of questions</Label>
-                        <select
-                          id="qCount"
-                          className="h-10 w-full rounded-md border bg-[var(--surface)] px-3 text-sm text-[var(--text)] border-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] disabled:opacity-60"
-                          value={startQuestionCount}
-                          onChange={(e) => setStartQuestionCount(Number(e.target.value))}
-                          disabled={readonly || saving}
-                        >
-                          {[1, 2, 3, 4, 5].map((v) => (
-                            <option key={v} value={v}>
-                              {v}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="flex items-end justify-end">
-                        <div className="text-xs text-[var(--muted)]">
-                          We&apos;ll generate title, questions, and both rubrics (plus an image prompt).
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ) : null}
-
-                {assessment.authoring_mode === "template" ? (
-                  <div className="space-y-3 rounded-md border border-[var(--border)] bg-[var(--surface)] p-4">
-                    <div className="text-sm font-medium text-[var(--text)]">Choose a template</div>
-                    <div className="text-xs text-[var(--muted)]">Pick a starting point and customize it in the next steps.</div>
-                    {templateError ? <div className="text-sm text-[var(--danger)]">{templateError}</div> : null}
-                    {templatesLoading ? <div className="text-sm text-[var(--muted)]">Loading templates…</div> : null}
-                    {!templatesLoading && !templates.length ? (
-                      <div className="text-sm text-[var(--muted)]">No templates are available yet.</div>
-                    ) : null}
-                    <div className="grid grid-cols-1 gap-3">
-                      {templates.map((t) => {
-                        const selected = selectedTemplateId === t.id;
-                        return (
-                          <button
-                            key={t.id}
-                            type="button"
-                            onClick={() => setSelectedTemplateId(t.id)}
-                            className={`rounded-md border p-4 text-left transition-colors border-[var(--border)] ${selected ? "ring-2 ring-[var(--primary)]" : "hover:border-[var(--primary)]"
-                              }`}
-                            disabled={readonly}
-                          >
-                            <div className="flex items-start justify-between gap-3">
-                              <div>
-                                <div className="text-sm font-semibold text-[var(--text)]">{t.title}</div>
-                                <div className="mt-1 text-xs text-[var(--muted)]">
-                                  {[t.subject, t.grade_band, t.blooms_level_avg ? `Bloom's: ${t.blooms_level_avg}` : null]
-                                    .filter(Boolean)
-                                    .join(" • ")}
-                                </div>
-                                {t.description ? <div className="mt-2 text-sm text-[var(--muted)]">{t.description}</div> : null}
-                              </div>
-                              <div className="text-xs text-[var(--muted)]">{t.question_count} questions</div>
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ) : null}
-
-                <div className="flex flex-col items-end gap-2">
-                  <Button
-                    type="button"
-                    disabled={readonly || !canContinue || generationWorking}
-                    onClick={() => {
-                      setTitleTouched(true);
-                      setClassTouched(true);
-                      if (generationWorking) return;
-                      if (!assessment.title.trim() || !assessment.class_id) return;
-                      if (assessment.authoring_mode === "upload") {
-                        if (!startPdfFile) return;
-                        void (async () => {
-                          setGenerationWorking(true);
-                          setSaving(true);
-                          setError(null);
-                          try {
-                            await persistDraft(true);
-                            const form = new FormData();
-                            form.set("file", startPdfFile);
-                            form.set("question_count", String(startQuestionCount));
-                            const res = await fetch(`/api/assessments/${assessmentId}/upload`, { method: "POST", body: form });
-                            const payload: unknown = await res.json().catch(() => null);
-                            if (!res.ok) throw new Error(getErrorMessage(payload));
-                            setStartPdfFile(null);
-                            await load();
-                            goToStep(2);
-                          } catch (e) {
-                            setError(e instanceof Error ? e.message : "Upload generation failed.");
-                          } finally {
-                            setSaving(false);
-                            setGenerationWorking(false);
-                          }
-                        })();
-                        return;
-                      }
-
-                      if (assessment.authoring_mode === "ai") {
-                        const prompt = startAiPrompt.trim();
-                        if (prompt.length < 20) return;
-                        void (async () => {
-                          setGenerationWorking(true);
-                          setSaving(true);
-                          setError(null);
-                          try {
-                            await persistDraft(true);
-                            await jsonFetch(`/api/assessments/${assessmentId}/generate`, {
-                              method: "POST",
-                              headers: { "content-type": "application/json" },
-                              body: JSON.stringify({ prompt, question_count: startQuestionCount }),
-                            });
-                            await load();
-                            goToStep(2);
-                          } catch (e) {
-                            setError(e instanceof Error ? e.message : "AI generation failed.");
-                          } finally {
-                            setSaving(false);
-                            setGenerationWorking(false);
-                          }
-                        })();
-                        return;
-                      }
-
-                      if (assessment.authoring_mode === "template") {
-                        if (!selectedTemplateId) return;
-                        void (async () => {
-                          setGenerationWorking(true);
-                          setSaving(true);
-                          setError(null);
-                          try {
-                            await persistDraft(true);
-                            await jsonFetch(`/api/assessments/${assessmentId}/template`, {
-                              method: "POST",
-                              headers: { "content-type": "application/json" },
-                              body: JSON.stringify({ template_id: selectedTemplateId }),
-                            });
-                            await load();
-                            goToStep(2);
-                          } catch (e) {
-                            setError(e instanceof Error ? e.message : "Template apply failed.");
-                          } finally {
-                            setSaving(false);
-                            setGenerationWorking(false);
-                          }
-                        })();
-                        return;
-                      }
-
-                      if (dirty && !saving) void persistDraft(true);
-                      goToStep(2);
-                    }}
-                  >
-                    {assessment.authoring_mode === "ai" || assessment.authoring_mode === "upload" || assessment.authoring_mode === "template"
-                      ? generationWorking
-                        ? assessment.authoring_mode === "template"
-                          ? "Applying…"
-                          : "Generating…"
-                        : assessment.authoring_mode === "template"
-                          ? "Apply Template"
-                          : "Generate Draft"
-                      : "Continue →"}
-                  </Button>
-                  {generationWorking ? (
-                    <div className="flex items-center gap-2 text-xs text-[var(--muted)]">
-                      <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-[var(--primary)] border-t-transparent" />
-                      <span>{assessment.authoring_mode === "template" ? "Applying template…" : "Generating draft…"}</span>
-                    </div>
-                  ) : null}
-                </div>
-              </CardContent>
-            </Card>
-          ) : step === 2 ? (
-            <Card>
-              <CardHeader>
-                <CardTitle>General Info</CardTitle>
-                <CardDescription>Draft saves on blur (and every 3 seconds while typing).</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="instructions">Student instructions</Label>
-                  <textarea
-                    id="instructions"
-                    maxLength={500}
-                    className="min-h-28 w-full rounded-md border bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] border-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] disabled:opacity-60"
-                    placeholder="Explain what students should do and how to respond."
-                    value={assessment.instructions ?? ""}
-                    onChange={(e) => {
-                      setAssessment({ ...assessment, instructions: e.target.value || null });
-                      setDirty(true);
-                    }}
-                    onBlur={() => {
-                      if (dirty && !saving) void persistDraft(true);
-                    }}
-                    disabled={readonly}
-                  />
-                </div>
-                <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-4">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <div className="text-sm font-medium text-[var(--text)]">Practice Mode</div>
-                      <div className="text-xs text-[var(--muted)]">
-                        Practice assessments do not record scores. Students can retry multiple times.
-                      </div>
-                    </div>
-                    <Switch
-                      checked={Boolean(assessment.is_practice_mode)}
-                      onCheckedChange={(checked) => {
-                        setAssessment({ ...assessment, is_practice_mode: checked });
-                        setDirty(true);
-                        if (!saving) void persistDraft(true);
-                      }}
-                      disabled={readonly || saving}
-                      aria-label="Practice Mode"
-                    />
-                  </div>
-                </div>
-
-                {/* Agency Toggles - Oxford Green Compliance */}
-                <div className="rounded-md border border-amber-200 bg-amber-50/30 p-4 dark:border-amber-800 dark:bg-amber-900/10">
-                  <div className="text-sm font-medium text-[var(--text)] mb-3">Teacher Controls (Agency)</div>
-                  <div className="space-y-4">
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <div className="text-sm font-medium text-[var(--text)]">Hide AI Scores from Students</div>
-                        <div className="text-xs text-[var(--muted)]">
-                          Students see only teacher-approved feedback, not raw AI scores.
-                        </div>
-                      </div>
-                      <Switch
-                        checked={Boolean(assessment.hide_ai_score_from_students)}
-                        onCheckedChange={(checked) => {
-                          setAssessment({ ...assessment, hide_ai_score_from_students: checked });
-                          setDirty(true);
-                          if (!saving) void persistDraft(true);
-                        }}
-                        disabled={readonly || saving}
-                        aria-label="Hide AI Scores from Students"
-                      />
-                    </div>
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <div className="text-sm font-medium text-[var(--text)]">Require Teacher Review Before Release</div>
-                        <div className="text-xs text-[var(--muted)]">
-                          Results won&apos;t auto-publish. Teacher must explicitly release each submission.
-                        </div>
-                      </div>
-                      <Switch
-                        checked={Boolean(assessment.require_teacher_review_before_release)}
-                        onCheckedChange={(checked) => {
-                          setAssessment({ ...assessment, require_teacher_review_before_release: checked });
-                          setDirty(true);
-                          if (!saving) void persistDraft(true);
-                        }}
-                        disabled={readonly || saving}
-                        aria-label="Require Teacher Review Before Release"
-                      />
-                    </div>
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <div className="text-sm font-medium text-[var(--text)]">Disable AI Feedback</div>
-                        <div className="text-xs text-[var(--muted)]">
-                          Transcript-only mode. Students see their transcript but no AI scoring or suggestions.
-                        </div>
-                      </div>
-                      <Switch
-                        checked={Boolean(assessment.disable_ai_feedback)}
-                        onCheckedChange={(checked) => {
-                          setAssessment({ ...assessment, disable_ai_feedback: checked });
-                          setDirty(true);
-                          if (!saving) void persistDraft(true);
-                        }}
-                        disabled={readonly || saving}
-                        aria-label="Disable AI Feedback"
-                      />
-                    </div>
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="subject">Subject</Label>
-                    <select
-                      id="subject"
-                      className="h-10 w-full rounded-md border bg-[var(--surface)] px-3 text-sm text-[var(--text)] border-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] disabled:opacity-60"
-                      value={assessment.subject ?? ""}
-                      onChange={(e) => {
-                        setAssessment({ ...assessment, subject: e.target.value || null });
-                        setDirty(true);
-                      }}
-                      onBlur={() => {
-                        if (dirty && !saving) void persistDraft(true);
-                      }}
-                      disabled={readonly}
-                    >
-                      <option value="">Select…</option>
-                      {["History", "Science", "Literature", "Math", "Language Arts", "World Languages", "Other"].map((v) => (
-                        <option key={v} value={v}>
-                          {v}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="lang">Target language</Label>
-                    <select
-                      id="lang"
-                      className="h-10 w-full rounded-md border bg-[var(--surface)] px-3 text-sm text-[var(--text)] border-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] disabled:opacity-60"
-                      value={assessment.target_language ?? ""}
-                      onChange={(e) => {
-                        setAssessment({ ...assessment, target_language: e.target.value || null });
-                        setDirty(true);
-                      }}
-                      onBlur={() => {
-                        if (dirty && !saving) void persistDraft(true);
-                      }}
-                      disabled={readonly}
-                    >
-                      <option value="">Select…</option>
-                      {["English US", "Spanish", "French", "Mandarin", "Arabic", "Other"].map((v) => (
-                        <option key={v} value={v}>
-                          {v}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-                <div className="flex items-center justify-between gap-3">
-                  <Button type="button" variant="secondary" disabled={saving} onClick={() => goToStep(1)}>
-                    ← Back
-                  </Button>
-                  <Button type="button" disabled={saving || readonly} onClick={() => goToStep(3)}>
-                    Continue →
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ) : step === 3 ? (
-            <Card>
-              <CardHeader>
-                <CardTitle>Assets</CardTitle>
-                <CardDescription>
-                  Generate options or paste a URL. Add an optional audio intro and PDF reference for students.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="assetPrompt">Image description (optional)</Label>
-                  <textarea
-                    id="assetPrompt"
-                    maxLength={1000}
-                    className="min-h-24 w-full rounded-md border bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] border-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] disabled:opacity-60"
-                    placeholder="e.g., “A factory floor during the 1850s…”"
-                    value={assetPrompt}
-                    onChange={(e) => setAssetPrompt(e.target.value)}
-                    disabled={readonly}
-                  />
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="text-xs text-[var(--muted)]">
-                      Use this prompt to generate an image, or paste your own URL below.
-                    </div>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      disabled={assetBusy || readonly || !assetPrompt.trim()}
-                      onClick={generateAssetFromPrompt}
-                    >
-                      {saving ? "Generating…" : "Generate 3 Options"}
-                    </Button>
-                  </div>
-                </div>
-
-                {assetOptions.length ? (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="text-sm font-medium text-[var(--text)]">Choose an option</div>
-                      <div className="text-xs text-[var(--muted)]">Click to select</div>
-                    </div>
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                      {assetOptions.map((url) => {
-                        const selected = url === assetUrl.trim();
-                        return (
-                          <button
-                            key={url}
-                            type="button"
-                            onClick={() => setAssetUrl(url)}
-                            className={`overflow-hidden rounded-md border transition-colors border-[var(--border)] ${selected ? "ring-2 ring-[var(--primary)]" : "hover:border-[var(--primary)]"
-                              }`}
-                          >
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={url} alt="Generated option" className="h-40 w-full object-cover" />
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ) : null}
-
-                <div className="space-y-2">
-                  <Label htmlFor="assetUrl">Image URL</Label>
-                  <Input
-                    id="assetUrl"
-                    value={assetUrl}
-                    onChange={(e) => setAssetUrl(e.target.value)}
-                    placeholder="https://…"
-                    disabled={readonly}
-                  />
-                  <p className="text-xs text-[var(--muted)]">
-                    If you generate an image, this will auto-fill. You can also paste a public image URL.
-                  </p>
-                </div>
-
-                {assetUrl.trim() ? (
-                  <div className="space-y-2">
-                    <div className="text-sm font-medium text-[var(--text)]">Preview</div>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={assetUrl.trim()}
-                      alt="Selected assessment asset"
-                      className="max-h-72 w-full rounded-md border border-[var(--border)] object-cover"
-                    />
-                  </div>
-                ) : null}
-
-                <div className="space-y-3 rounded-md border border-[var(--border)] bg-[var(--surface)] p-4">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <div className="text-sm font-medium text-[var(--text)]">Audio intro (optional)</div>
-                      <div className="text-xs text-[var(--muted)]">
-                        MP3 or WAV. Max length 3 minutes. If provided, students must listen before questions appear.
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <input
-                        ref={audioInputRef}
-                        type="file"
-                        accept="audio/mpeg,audio/mp3,audio/wav,.mp3,.wav"
-                        className="hidden"
-                        onChange={(e) => {
-                          const f = e.target.files?.[0];
-                          if (f) void handleAudioSelected(f);
-                        }}
-                        disabled={readonly}
-                      />
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        disabled={assetBusy || readonly}
-                        onClick={() => audioInputRef.current?.click()}
-                      >
-                        {audioUploading ? "Uploading…" : audioIntro ? "Replace audio" : "Upload audio"}
-                      </Button>
-                    </div>
-                  </div>
-
-                  {audioIntro ? (
-                    <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-3">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div className="text-sm text-[var(--text)]">
-                          {audioIntro.original_filename?.trim() || "Audio intro"}
-                        </div>
-                        <div className="text-xs text-[var(--muted)]">{formatSeconds(audioIntro.duration_seconds)}</div>
-                      </div>
-                      <audio controls src={audioIntro.asset_url} className="mt-2 w-full" />
-                      <div className="mt-3 flex items-center justify-end">
-                        <Button type="button" variant="secondary" disabled={assetBusy || readonly} onClick={removeAudioIntro}>
-                          Remove audio
-                        </Button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="text-xs text-[var(--muted)]">No audio uploaded yet.</div>
-                  )}
-                  {audioError ? <div className="text-xs text-red-500">{audioError}</div> : null}
-                </div>
-
-                <div className="space-y-3 rounded-md border border-[var(--border)] bg-[var(--surface)] p-4">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <div className="text-sm font-medium text-[var(--text)]">PDF reference (optional)</div>
-                      <div className="text-xs text-[var(--muted)]">PDF only. Max size 20MB. Preview inline or open full size.</div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <input
-                        ref={documentInputRef}
-                        type="file"
-                        accept="application/pdf,.pdf"
-                        className="hidden"
-                        onChange={(e) => {
-                          const f = e.target.files?.[0];
-                          if (f) void handleDocumentSelected(f);
-                        }}
-                        disabled={readonly}
-                      />
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        disabled={assetBusy || readonly}
-                        onClick={() => documentInputRef.current?.click()}
-                      >
-                        {documentUploading ? "Uploading…" : documentAsset ? "Replace PDF" : "Upload PDF"}
-                      </Button>
-                    </div>
-                  </div>
-
-                  {documentAsset ? (
-                    <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-3">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div className="text-sm text-[var(--text)]">
-                          {documentAsset.original_filename?.trim() || "PDF document"}
-                        </div>
-                        <a
-                          href={documentAsset.asset_url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-xs text-[var(--primary)] hover:underline"
-                        >
-                          Open full size
-                        </a>
-                      </div>
-                      <div className="mt-3 h-[420px] overflow-hidden rounded-md border border-[var(--border)] bg-[var(--background)]">
-                        <iframe
-                          title={documentAsset.original_filename?.trim() || "PDF document"}
-                          src={documentAsset.asset_url}
-                          className="h-full w-full"
-                        />
-                      </div>
-                      <div className="mt-3 flex items-center justify-end">
-                        <Button type="button" variant="secondary" disabled={assetBusy || readonly} onClick={removeDocument}>
-                          Remove PDF
-                        </Button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="text-xs text-[var(--muted)]">No PDF uploaded yet.</div>
-                  )}
-                  {documentError ? <div className="text-xs text-red-500">{documentError}</div> : null}
-                </div>
-
-                <div className="text-xs text-[var(--muted)]">
-                  Assets are optional for publishing. Add an image, audio intro, or PDF if they help frame the questions.
-                </div>
-
-                <div className="flex items-center justify-between gap-3">
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    disabled={assetBusy || readonly}
-                    onClick={async () => {
-                      setSaving(true);
-                      setError(null);
-                      try {
-                        await jsonFetch(`/api/assessments/${assessmentId}/asset`, {
-                          method: "PUT",
-                          headers: { "content-type": "application/json" },
-                          body: JSON.stringify({ asset_url: null, generation_prompt: null }),
-                        });
-                        await load();
-                        setAssetOptions([]);
-                      } catch (e) {
-                        setError(e instanceof Error ? e.message : "Save failed.");
-                      } finally {
-                        setSaving(false);
-                      }
-                    }}
-                  >
-                    Clear image
-                  </Button>
-                  <div className="flex items-center gap-2">
-                    <Button type="button" variant="secondary" disabled={assetBusy} onClick={() => goToStep(2)}>
-                      ← Back
-                    </Button>
-                    <Button
-                      type="button"
-                      disabled={assetBusy}
-                      onClick={() => {
-                        if (!assetUrl.trim()) {
-                          goToStep(4);
-                          return;
-                        }
-                        void saveAssetAndContinue();
-                      }}
-                    >
-                      {assetUrl.trim() ? "Save & Continue →" : "Continue →"}
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ) : step === 4 ? (
-            <Card>
-              <CardHeader>
-                <CardTitle>Questions</CardTitle>
-                <CardDescription>Add at least one question. You can edit later.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="text-sm font-medium text-[var(--text)]">Question list</div>
-                    <div className="text-xs text-[var(--muted)]">{questionsCount} total</div>
-                  </div>
-
-                  {questions.length ? (
-                    <div className="space-y-3">
-                      {questions.map((q) => {
-                        const editing = editingQuestionId === q.id;
-                        const evidenceUpload = q.evidence_upload ?? "optional";
-                        return (
-                          <div key={q.id} className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-4">
-                            <div className="flex items-center justify-between gap-3">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <span className="rounded-full border border-[var(--border)] bg-[var(--background)] px-2 py-1 text-xs font-semibold text-[var(--muted)]">
-                                  QUESTION {q.order_index}
-                                </span>
-                                <span className="text-xs text-[var(--muted)]">{getQuestionTypeLabel(q.question_type)}</span>
-                                <span className="text-xs text-[var(--muted)]">• {getBloomsLabel(q.blooms_level)}</span>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                {editing ? (
-                                  <>
-                                    <Button
-                                      type="button"
-                                      variant="secondary"
-                                      disabled={saving}
-                                      onClick={() => {
-                                        setEditingQuestionId(null);
-                                        setEditingQuestionStandards([]);
-                                      }}
-                                    >
-                                      Cancel
-                                    </Button>
-                                    <Button type="button" disabled={saving || !editingQuestionText.trim()} onClick={saveEditedQuestion}>
-                                      Save
-                                    </Button>
-                                  </>
-                                ) : (
-                                  <Button type="button" variant="secondary" disabled={saving || readonly} onClick={() => startEditQuestion(q)}>
-                                    Edit
-                                  </Button>
-                                )}
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  disabled={saving || readonly}
-                                  onClick={() => deleteQuestion(q.id)}
-                                >
-                                  Delete
-                                </Button>
-                              </div>
-                            </div>
-
-                            <div className="mt-3 space-y-3">
-                              {editing ? (
-                                <>
-                                  <div className="space-y-2">
-                                    <Label htmlFor={`q-${q.id}`}>Question text</Label>
-                                    <textarea
-                                      id={`q-${q.id}`}
-                                      maxLength={500}
-                                      className="min-h-20 w-full rounded-md border bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] border-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] disabled:opacity-60"
-                                      value={editingQuestionText}
-                                      onChange={(e) => setEditingQuestionText(e.target.value)}
-                                      disabled={saving}
-                                    />
-                                  </div>
-                                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                                    <div className="space-y-2">
-                                      <Label htmlFor={`bl-${q.id}`}>Bloom&apos;s level</Label>
-                                      <select
-                                        id={`bl-${q.id}`}
-                                        className="h-10 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 text-sm text-[var(--text)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] disabled:opacity-60"
-                                        value={editingQuestionBloom}
-                                        disabled={saving}
-                                        onChange={(e) => setEditingQuestionBloom(e.target.value)}
-                                      >
-                                        {BLOOMS_OPTIONS.map((option) => (
-                                          <option key={option.value} value={option.value}>
-                                            {option.label}
-                                          </option>
-                                        ))}
-                                      </select>
-                                      <p className="text-xs text-[var(--muted)]">Tag cognitive demand for scaffolding.</p>
-                                    </div>
-                                    <div className="space-y-2">
-                                      <Label htmlFor={`qt-${q.id}`}>Question type</Label>
-                                      <select
-                                        id={`qt-${q.id}`}
-                                        className="h-10 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 text-sm text-[var(--text)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] disabled:opacity-60"
-                                        value={editingQuestionTypePreset}
-                                        disabled={saving}
-                                        onChange={(e) => setEditingQuestionTypePreset(e.target.value)}
-                                      >
-                                        {QUESTION_TYPE_OPTIONS.map((option) => (
-                                          <option key={option.value} value={option.value}>
-                                            {option.label}
-                                          </option>
-                                        ))}
-                                        <option value={CUSTOM_QUESTION_TYPE}>Custom…</option>
-                                      </select>
-                                      {editingQuestionTypePreset === CUSTOM_QUESTION_TYPE ? (
-                                        <Input
-                                          value={editingQuestionTypeCustom}
-                                          onChange={(e) => setEditingQuestionTypeCustom(e.target.value)}
-                                          disabled={saving}
-                                          placeholder="Type a custom question type"
-                                        />
-                                      ) : (
-                                        <p className="text-xs text-[var(--muted)]">Choose a labeled type or switch to custom.</p>
-                                      )}
-                                    </div>
-                                    <div className="space-y-2">
-                                      <Label htmlFor={`eu-${q.id}`}>Evidence upload</Label>
-                                      <select
-                                        id={`eu-${q.id}`}
-                                        className="h-10 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 text-sm text-[var(--text)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] disabled:opacity-60"
-                                        value={evidenceUpload}
-                                        disabled={saving || readonly}
-                                        onChange={(e) => void updateEvidenceUpload(q.id, e.target.value as "disabled" | "optional" | "required")}
-                                      >
-                                        <option value="disabled">Disabled</option>
-                                        <option value="optional">Optional</option>
-                                        <option value="required">Required</option>
-                                      </select>
-                                      <p className="text-xs text-[var(--muted)]">Students can upload a photo of their work before recording.</p>
-                                    </div>
-                                  </div>
-                                  {standardsEnabled ? (
-                                    <div className="space-y-2">
-                                      <div className="text-sm font-medium text-[var(--text)]">Standards</div>
-                                      {enabledStandardsSets.length ? (
-                                        <>
-                                          {editingQuestionStandards.length ? (
-                                            <div className="flex flex-wrap gap-2">
-                                              {editingQuestionStandards.map((standard) => (
-                                                <button
-                                                  key={standard.id}
-                                                  type="button"
-                                                  className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--background)] px-3 py-1 text-xs text-[var(--text)]"
-                                                  onClick={() => removeStandard("edit", standard.id)}
-                                                >
-                                                  <span>{standard.code}</span>
-                                                  <span className="text-[var(--muted)]">×</span>
-                                                </button>
-                                              ))}
-                                            </div>
-                                          ) : (
-                                            <div className="text-xs text-[var(--muted)]">No standards selected.</div>
-                                          )}
-                                          <div className="flex flex-wrap items-center gap-2">
-                                            <Input
-                                              value={standardsSearch}
-                                              onChange={(event) => setStandardsSearch(event.target.value)}
-                                              placeholder="Search standards (e.g., L.K.1 or grammar)"
-                                            />
-                                            <Button type="button" variant="secondary" disabled={standardsLoading} onClick={searchStandards}>
-                                              {standardsLoading ? "Searching…" : "Search"}
-                                            </Button>
-                                          </div>
-                                          {standardsSubjectFilter ? (
-                                            <div className="text-xs text-[var(--muted)]">
-                                              Filtered by subject: {standardsSubjectFilter}
-                                            </div>
-                                          ) : (
-                                            <div className="text-xs text-[var(--muted)]">Select a subject in Step 2 to filter standards.</div>
-                                          )}
-                                          {standardsResults.length ? (
-                                            <div className="max-h-48 space-y-2 overflow-auto rounded-md border border-[var(--border)] bg-[var(--surface)] p-2">
-                                              {standardsResults.map((standard) => (
-                                                <div key={standard.id} className="flex items-start justify-between gap-3">
-                                                  <div>
-                                                    <div className="text-xs font-semibold text-[var(--text)]">{standard.code}</div>
-                                                    <div className="text-xs text-[var(--muted)]">{standard.description}</div>
-                                                  </div>
-                                                  <Button type="button" variant="secondary" onClick={() => addStandard("edit", standard)}>
-                                                    Add
-                                                  </Button>
-                                                </div>
-                                              ))}
-                                            </div>
-                                          ) : (
-                                            <div className="text-xs text-[var(--muted)]">
-                                              Search to find standards in your enabled frameworks.
-                                            </div>
-                                          )}
-                                        </>
-                                      ) : (
-                                        <div className="text-xs text-[var(--muted)]">Enable at least one standards set in Settings.</div>
-                                      )}
-                                      {standardsError ? (
-                                        <div className="text-xs text-[var(--danger)]" role="alert">
-                                          {standardsError}
-                                        </div>
-                                      ) : null}
-                                    </div>
-                                  ) : null}
-                                </>
-                              ) : (
-                                <div className="space-y-2">
-                                  <div className="text-sm italic text-[var(--text)]">“{q.question_text}”</div>
-                                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                                    <div className="space-y-1">
-                                      <div className="text-xs text-[var(--muted)]">Evidence upload</div>
-                                      <div className="text-sm text-[var(--text)] capitalize">{evidenceUpload}</div>
-                                    </div>
-                                    <div className="space-y-1">
-                                      <div className="text-xs text-[var(--muted)]">Bloom&apos;s level</div>
-                                      <div className="text-sm text-[var(--text)]">{getBloomsLabel(q.blooms_level)}</div>
-                                    </div>
-                                    <div className="flex items-end justify-end sm:justify-start">
-                                      <Button
-                                        type="button"
-                                        variant={evidenceUpload === "required" ? "secondary" : "primary"}
-                                        disabled={saving || readonly}
-                                        onClick={() => void updateEvidenceUpload(q.id, evidenceUpload === "required" ? "optional" : "required")}
-                                      >
-                                        {evidenceUpload === "required" ? "Make Optional" : "Require Evidence"}
-                                      </Button>
-                                    </div>
-                                  </div>
-                                  {standardsEnabled ? (
-                                    <div className="space-y-1">
-                                      <div className="text-xs text-[var(--muted)]">Standards</div>
-                                      {q.standards && q.standards.length ? (
-                                        <div className="flex flex-wrap gap-2">
-                                          {q.standards.map((standard) => (
-                                            <span
-                                              key={standard.id}
-                                              className="rounded-full border border-[var(--border)] bg-[var(--background)] px-2 py-1 text-xs text-[var(--text)]"
-                                            >
-                                              {standard.code}
-                                            </span>
-                                          ))}
-                                        </div>
-                                      ) : (
-                                        <div className="text-xs text-[var(--muted)]">No standards selected.</div>
-                                      )}
-                                    </div>
-                                  ) : null}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="text-sm text-[var(--muted)]">No questions yet.</div>
-                  )}
-                </div>
-
-                {addingQuestion ? (
-                  <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-4">
-                    <div className="text-sm font-medium text-[var(--text)]">Add Question to Bank</div>
-                    <div className="mt-3 space-y-3">
-                      <div className="space-y-2">
-                        <Label htmlFor="newQuestionText">Question text</Label>
-                        <textarea
-                          id="newQuestionText"
-                          maxLength={500}
-                          className="min-h-24 w-full rounded-md border bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] border-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] disabled:opacity-60"
-                          value={newQuestionText}
-                          onChange={(e) => setNewQuestionText(e.target.value)}
-                          disabled={readonly || saving}
-                          placeholder="Type the question prompt students will see…"
-                        />
-                      </div>
-                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    {assessment.authoring_mode === "upload" ? (
+                      <div className="space-y-3 rounded-md border border-[var(--border)] bg-[var(--surface)] p-4">
                         <div className="space-y-2">
-                          <Label htmlFor="newQuestionBloom">Bloom&apos;s level</Label>
-                          <select
-                            id="newQuestionBloom"
-                            className="h-10 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 text-sm text-[var(--text)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] disabled:opacity-60"
-                            value={newQuestionBloom}
-                            onChange={(e) => setNewQuestionBloom(e.target.value)}
+                          <Label htmlFor="pdfUpload">Upload PDF</Label>
+                          <input
+                            id="pdfUpload"
+                            type="file"
+                            accept="application/pdf"
+                            className="block w-full text-sm text-[var(--muted)] file:mr-4 file:rounded-md file:border-0 file:bg-[var(--border)] file:px-4 file:py-2 file:text-sm file:font-semibold file:text-[var(--text)] hover:file:bg-[var(--primary-strong)] hover:file:text-white"
                             disabled={readonly || saving}
-                          >
-                            {BLOOMS_OPTIONS.map((option) => (
-                              <option key={option.value} value={option.value}>
-                                {option.label}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="newQuestionType">Question type</Label>
-                          <select
-                            id="newQuestionType"
-                            className="h-10 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 text-sm text-[var(--text)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] disabled:opacity-60"
-                            value={newQuestionTypePreset}
-                            onChange={(e) => setNewQuestionTypePreset(e.target.value)}
-                            disabled={readonly || saving}
-                          >
-                            {QUESTION_TYPE_OPTIONS.map((option) => (
-                              <option key={option.value} value={option.value}>
-                                {option.label}
-                              </option>
-                            ))}
-                            <option value={CUSTOM_QUESTION_TYPE}>Custom…</option>
-                          </select>
-                          {newQuestionTypePreset === CUSTOM_QUESTION_TYPE ? (
-                            <Input
-                              value={newQuestionTypeCustom}
-                              onChange={(e) => setNewQuestionTypeCustom(e.target.value)}
-                              disabled={readonly || saving}
-                              placeholder="Type a custom question type"
-                            />
-                          ) : (
-                            <p className="text-xs text-[var(--muted)]">Use a labeled type or switch to custom.</p>
-                          )}
-                        </div>
-                        <div className="flex items-end justify-end gap-2">
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            disabled={saving}
-                            onClick={() => {
-                              setAddingQuestion(false);
-                              setNewQuestionStandards([]);
+                            onChange={(e) => {
+                              const f = e.target.files?.[0] ?? null;
+                              setStartPdfFile(f);
                             }}
-                          >
-                            Cancel
-                          </Button>
-                          <Button
-                            type="button"
-                            disabled={readonly || saving || !newQuestionText.trim()}
-                            onClick={async () => {
-                              await addQuestion();
-                              setAddingQuestion(false);
-                            }}
-                          >
-                            Add
-                          </Button>
-                        </div>
-                      </div>
-                      {standardsEnabled ? (
-                        <div className="space-y-2">
-                          <div className="text-sm font-medium text-[var(--text)]">Standards</div>
-                          {enabledStandardsSets.length ? (
-                            <>
-                              {newQuestionStandards.length ? (
-                                <div className="flex flex-wrap gap-2">
-                                  {newQuestionStandards.map((standard) => (
-                                    <button
-                                      key={standard.id}
-                                      type="button"
-                                      className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--background)] px-3 py-1 text-xs text-[var(--text)]"
-                                      onClick={() => removeStandard("new", standard.id)}
-                                    >
-                                      <span>{standard.code}</span>
-                                      <span className="text-[var(--muted)]">×</span>
-                                    </button>
-                                  ))}
-                                </div>
-                              ) : (
-                                <div className="text-xs text-[var(--muted)]">No standards selected.</div>
-                              )}
-                              <div className="flex flex-wrap items-center gap-2">
-                                <Input
-                                  value={standardsSearch}
-                                  onChange={(event) => setStandardsSearch(event.target.value)}
-                                  placeholder="Search standards (e.g., L.K.1 or grammar)"
-                                />
-                                <Button type="button" variant="secondary" disabled={standardsLoading} onClick={searchStandards}>
-                                  {standardsLoading ? "Searching…" : "Search"}
-                                </Button>
-                              </div>
-                              {standardsSubjectFilter ? (
-                                <div className="text-xs text-[var(--muted)]">
-                                  Filtered by subject: {standardsSubjectFilter}
-                                </div>
-                              ) : (
-                                <div className="text-xs text-[var(--muted)]">Select a subject in Step 2 to filter standards.</div>
-                              )}
-                              {standardsResults.length ? (
-                                <div className="max-h-48 space-y-2 overflow-auto rounded-md border border-[var(--border)] bg-[var(--surface)] p-2">
-                                  {standardsResults.map((standard) => (
-                                    <div key={standard.id} className="flex items-start justify-between gap-3">
-                                      <div>
-                                        <div className="text-xs font-semibold text-[var(--text)]">{standard.code}</div>
-                                        <div className="text-xs text-[var(--muted)]">{standard.description}</div>
-                                      </div>
-                                      <Button type="button" variant="secondary" onClick={() => addStandard("new", standard)}>
-                                        Add
-                                      </Button>
-                                    </div>
-                                  ))}
-                                </div>
-                              ) : (
-                                <div className="text-xs text-[var(--muted)]">
-                                  Search to find standards in your enabled frameworks.
-                                </div>
-                              )}
-                            </>
-                          ) : (
-                            <div className="text-xs text-[var(--muted)]">Enable at least one standards set in Settings.</div>
-                          )}
-                          {standardsError ? (
-                            <div className="text-xs text-[var(--danger)]" role="alert">
-                              {standardsError}
-                            </div>
-                          ) : null}
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    disabled={readonly || saving}
-                    onClick={() => setAddingQuestion(true)}
-                    className="w-full rounded-md border border-dashed border-[var(--border)] bg-transparent px-4 py-4 text-sm text-[var(--muted)] hover:border-[var(--primary)] hover:text-[var(--text)] disabled:opacity-50"
-                  >
-                    + Add Question to Bank
-                  </button>
-                )}
-
-                {questionRequiredError ? (
-                  <div className="flex items-center gap-2 text-sm text-[var(--danger)]">
-                    <span aria-hidden="true">⛔</span>
-                    <span>{questionRequiredError}</span>
-                  </div>
-                ) : null}
-
-                <div className="flex items-center justify-between gap-3">
-                  <Button type="button" variant="secondary" disabled={saving} onClick={() => goToStep(3)}>
-                    ← Back
-                  </Button>
-                  <Button
-                    type="button"
-                    disabled={saving || readonly || questionsCount < 1}
-                    onClick={() => goToStep(5)}
-                  >
-                    Continue →
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ) : step === 5 ? (
-            <Card>
-              <CardHeader>
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <CardTitle>Rubrics & Dual Scorer</CardTitle>
-                    <CardDescription>Define instructions for both scorers (Reasoning + Evidence).</CardDescription>
-                  </div>
-                  <div className="rounded-full border border-[var(--border)] bg-[var(--background)] px-3 py-1 text-xs font-semibold text-[var(--primary)]">
-                    Consensus Active
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                {(["reasoning", "evidence"] as const).map((type) => {
-                  const draft = rubricDrafts[type];
-                  const touched = rubricTouched[type];
-                  const hasError = touched && !draft.instructions.trim();
-                  return (
-                    <div key={type} className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-4">
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <div className="text-sm font-semibold text-[var(--text)]">
-                            {type === "reasoning" ? "Scorer 1: Reasoning & Synthesis" : "Scorer 2: Evidence & Factual Accuracy"}
-                          </div>
-                          <div className="text-xs text-[var(--muted)]">
-                            {type === "reasoning"
-                              ? "Evaluates logic, critical thinking, and connectivity."
-                              : "Evaluates recall, accuracy, and specific evidence."}
-                          </div>
-                        </div>
-                        <div className="text-xs text-[var(--muted)]">{type === "reasoning" ? "AGENT ALPHA" : "AGENT BETA"}</div>
-                      </div>
-
-                      <div className="mt-3 space-y-3">
-                        <div className="space-y-2">
-                          <Label htmlFor={`rubric-${type}`}>Instructions</Label>
-                          <textarea
-                            id={`rubric-${type}`}
-                            maxLength={500}
-                            className="min-h-24 w-full rounded-md border bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] border-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] disabled:opacity-60"
-                            placeholder={
-                              type === "reasoning"
-                                ? "What should a strong reasoning response include?"
-                                : "What counts as strong evidence in the response?"
-                            }
-                            value={draft.instructions}
-                            onChange={(e) =>
-                              setRubricDrafts((prev) => ({ ...prev, [type]: { ...prev[type], instructions: e.target.value } }))
-                            }
-                            onBlur={() => {
-                              setRubricTouched((prev) => ({ ...prev, [type]: true }));
-                              if (draft.instructions.trim()) void saveRubric(type);
-                            }}
-                            disabled={readonly || saving}
                           />
-                          {hasError ? (
-                            <div className="flex items-center gap-2 text-sm text-[var(--danger)]">
-                              <span aria-hidden="true">⛔</span>
-                              <span>Instructions are required.</span>
+                          <div className="text-xs text-[var(--muted)]">
+                            We do not store the PDF; only generated questions and rubrics are saved.
+                          </div>
+                          {startPdfFile ? (
+                            <div className="text-xs text-[var(--muted)]">
+                              Selected: <span className="text-[var(--text)]">{startPdfFile.name}</span> (
+                              {(startPdfFile.size / (1024 * 1024)).toFixed(2)}MB)
                             </div>
                           ) : null}
                         </div>
 
-                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                           <div className="space-y-2">
-                            <Label>Scale min</Label>
+                            <Label htmlFor="pdfQCount">Number of questions</Label>
                             <select
-                              className="h-10 w-full rounded-md border bg-[var(--surface)] px-3 text-sm text-[var(--text)] border-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
-                              value={draft.scale_min}
-                              onChange={(e) =>
-                                setRubricDrafts((prev) => ({
-                                  ...prev,
-                                  [type]: { ...prev[type], scale_min: Number(e.target.value) },
-                                }))
-                              }
-                              disabled={readonly || saving}
-                            >
-                              {[1, 2, 3, 4, 5].map((v) => (
-                                <option key={v} value={v}>
-                                  {v}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                          <div className="space-y-2">
-                            <Label>Scale max</Label>
-                            <select
-                              className="h-10 w-full rounded-md border bg-[var(--surface)] px-3 text-sm text-[var(--text)] border-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
-                              value={draft.scale_max}
-                              onChange={(e) =>
-                                setRubricDrafts((prev) => ({
-                                  ...prev,
-                                  [type]: { ...prev[type], scale_max: Number(e.target.value) },
-                                }))
-                              }
+                              id="pdfQCount"
+                              className="h-10 w-full rounded-md border bg-[var(--surface)] px-3 text-sm text-[var(--text)] border-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] disabled:opacity-60"
+                              value={startQuestionCount}
+                              onChange={(e) => setStartQuestionCount(Number(e.target.value))}
                               disabled={readonly || saving}
                             >
                               {[1, 2, 3, 4, 5].map((v) => (
@@ -2818,380 +1710,1288 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
                             </select>
                           </div>
                           <div className="flex items-end justify-end">
-                            <Button type="button" disabled={saving || readonly || !draft.instructions.trim()} onClick={() => saveRubric(type)}>
-                              Save {type === "reasoning" ? "Reasoning" : "Evidence"}
-                            </Button>
+                            <div className="text-xs text-[var(--muted)]">We&apos;ll generate title, questions, and both rubrics.</div>
                           </div>
                         </div>
-
-                        <div className="pt-2">
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="text-xs font-semibold text-[var(--muted)]">GRADING SCALE (1–5)</div>
-                            <button type="button" className="text-xs text-[var(--primary)] hover:underline" disabled>
-                              Edit Descriptors
-                            </button>
-                          </div>
-                          <div className="mt-2 grid grid-cols-5 gap-2">
-                            {[1, 2, 3, 4, 5].map((v) => (
-                              <div
-                                key={v}
-                                className="rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-4 text-center"
-                              >
-                                <div className="text-lg font-semibold text-[var(--text)]">{v}</div>
-                                <div className="mt-1 text-[10px] uppercase tracking-wide text-[var(--muted)]">
-                                  {v === 1 ? "Poor" : v === 3 ? "Average" : v === 5 ? "Elite" : ""}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-
-                <div className="flex items-center justify-between gap-3">
-                  <Button type="button" variant="secondary" disabled={saving} onClick={() => goToStep(4)}>
-                    ← Back
-                  </Button>
-                  <div className="flex items-center gap-3">
-                    <div className="text-sm text-[var(--muted)]">
-                      {rubricsComplete ? "Review settings before publishing." : "Complete both rubrics to continue."}
-                    </div>
-                    <Button type="button" disabled={saving || readonly || !rubricsComplete} onClick={() => goToStep(6)}>
-                      Continue →
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ) : step === 6 ? (
-            <Card>
-              <CardHeader>
-                <CardTitle>Assessment Preview</CardTitle>
-                <CardDescription>Review the student experience, then confirm integrity settings.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="text-xs font-semibold text-[var(--muted)]">STUDENT PREVIEW</div>
-                    <a
-                      className="text-xs text-[var(--primary)] hover:underline"
-                      href={studentPreviewUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      Open full size
-                    </a>
-                  </div>
-                  <div className="overflow-hidden rounded-md border border-[var(--border)] bg-[var(--surface)]">
-                    <iframe
-                      title="Student preview"
-                      src={studentPreviewUrl}
-                      className="h-[55vh] min-h-[360px] w-full sm:h-[70vh] sm:min-h-[520px]"
-                      loading="lazy"
-                    />
-                  </div>
-                  <div className="text-xs text-[var(--muted)]">
-                    This preview mirrors the student experience. Actions stay disabled for teachers.
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <div className="text-xs font-semibold text-[var(--muted)]">STUDENT INSTRUCTIONS</div>
-                  <div className="rounded-md border border-[var(--border)] bg-[var(--background)] p-4 text-sm text-[var(--text)]">
-                    {assessment.instructions?.trim() || "No instructions provided."}
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  <div className="text-xs font-semibold text-[var(--muted)]">ASSETS</div>
-                  <div className="space-y-3">
-                    {assetUrl.trim() ? (
-                      <img
-                        src={assetUrl.trim()}
-                        alt="Assessment asset"
-                        className="w-full rounded-md border border-[var(--border)] object-cover"
-                      />
-                    ) : (
-                      <div className="text-sm text-[var(--muted)]">No image selected.</div>
-                    )}
-
-                    {audioIntro ? (
-                      <div className="rounded-md border border-[var(--border)] bg-[var(--background)] p-3">
-                        <div className="text-sm font-medium text-[var(--text)]">Audio intro</div>
-                        <div className="text-xs text-[var(--muted)]">
-                          {(audioIntro.original_filename || "Audio intro").trim()} • {formatSeconds(audioIntro.duration_seconds)}
-                        </div>
-                        <audio className="mt-2 w-full" controls src={audioIntro.asset_url} />
                       </div>
                     ) : null}
 
-                    {documentAsset ? (
-                      <div className="rounded-md border border-[var(--border)] bg-[var(--background)] p-3">
-                        <div className="text-sm font-medium text-[var(--text)]">PDF document</div>
-                        <div className="text-xs text-[var(--muted)]">
-                          {(documentAsset.original_filename || "Document").trim()}
+                    {assessment.authoring_mode === "ai" ? (
+                      <div className="space-y-3">
+                        <div className="space-y-2">
+                          <Label htmlFor="aiPrompt">Describe the assessment you want</Label>
+                          <textarea
+                            id="aiPrompt"
+                            className="min-h-32 w-full rounded-md border bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] border-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] disabled:opacity-60"
+                            placeholder='Example: “Create a 3-question oral assessment for 10th grade US History on causes of the Civil War. Include an image-based prompt, and rubrics for reasoning and evidence.”'
+                            value={startAiPrompt}
+                            onChange={(e) => setStartAiPrompt(e.target.value)}
+                            disabled={readonly || saving}
+                          />
+                          <div className="text-xs text-[var(--muted)]">Minimum 20 characters.</div>
                         </div>
-                        <a
-                          className="mt-2 inline-flex text-sm text-[var(--primary)] hover:underline"
-                          href={documentAsset.asset_url}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          Open full size
-                        </a>
-                        <div className="mt-3 h-[420px] overflow-hidden rounded-md border border-[var(--border)] bg-[var(--surface)]">
-                          <iframe
-                            title={(documentAsset.original_filename || "Document").trim()}
-                            src={documentAsset.asset_url}
-                            className="h-full w-full"
+
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                          <div className="space-y-2">
+                            <Label htmlFor="qCount">Number of questions</Label>
+                            <select
+                              id="qCount"
+                              className="h-10 w-full rounded-md border bg-[var(--surface)] px-3 text-sm text-[var(--text)] border-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] disabled:opacity-60"
+                              value={startQuestionCount}
+                              onChange={(e) => setStartQuestionCount(Number(e.target.value))}
+                              disabled={readonly || saving}
+                            >
+                              {[1, 2, 3, 4, 5].map((v) => (
+                                <option key={v} value={v}>
+                                  {v}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="flex items-end justify-end">
+                            <div className="text-xs text-[var(--muted)]">
+                              We&apos;ll generate title, questions, and both rubrics (plus an image prompt).
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {assessment.authoring_mode === "template" ? (
+                      <div className="space-y-3 rounded-md border border-[var(--border)] bg-[var(--surface)] p-4">
+                        <div className="text-sm font-medium text-[var(--text)]">Choose a template</div>
+                        <div className="text-xs text-[var(--muted)]">Pick a starting point and customize it in the next steps.</div>
+                        {templateError ? <div className="text-sm text-[var(--danger)]">{templateError}</div> : null}
+                        {templatesLoading ? <div className="text-sm text-[var(--muted)]">Loading templates…</div> : null}
+                        {!templatesLoading && !templates.length ? (
+                          <div className="text-sm text-[var(--muted)]">No templates are available yet.</div>
+                        ) : null}
+                        <div className="grid grid-cols-1 gap-3">
+                          {templates.map((t) => {
+                            const selected = selectedTemplateId === t.id;
+                            return (
+                              <button
+                                key={t.id}
+                                type="button"
+                                onClick={() => setSelectedTemplateId(t.id)}
+                                className={`rounded-md border p-4 text-left transition-colors border-[var(--border)] ${selected ? "ring-2 ring-[var(--primary)]" : "hover:border-[var(--primary)]"
+                                  }`}
+                                disabled={readonly}
+                              >
+                                <div className="flex items-start justify-between gap-3">
+                                  <div>
+                                    <div className="text-sm font-semibold text-[var(--text)]">{t.title}</div>
+                                    <div className="mt-1 text-xs text-[var(--muted)]">
+                                      {[t.subject, t.grade_band, t.blooms_level_avg ? `Bloom's: ${t.blooms_level_avg}` : null]
+                                        .filter(Boolean)
+                                        .join(" • ")}
+                                    </div>
+                                    {t.description ? <div className="mt-2 text-sm text-[var(--muted)]">{t.description}</div> : null}
+                                  </div>
+                                  <div className="text-xs text-[var(--muted)]">{t.question_count} questions</div>
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    <div className="flex flex-col items-end gap-2">
+                      <Button
+                        type="button"
+                        disabled={readonly || !canContinue || generationWorking}
+                        onClick={() => {
+                          setTitleTouched(true);
+                          setClassTouched(true);
+                          if (generationWorking) return;
+                          if (!assessment.title.trim() || !assessment.class_id) return;
+                          if (assessment.authoring_mode === "upload") {
+                            if (!startPdfFile) return;
+                            void (async () => {
+                              setGenerationWorking(true);
+                              setSaving(true);
+                              setError(null);
+                              try {
+                                await persistDraft(true);
+                                const form = new FormData();
+                                form.set("file", startPdfFile);
+                                form.set("question_count", String(startQuestionCount));
+                                const res = await fetch(`/api/assessments/${assessmentId}/upload`, { method: "POST", body: form });
+                                const payload: unknown = await res.json().catch(() => null);
+                                if (!res.ok) throw new Error(getErrorMessage(payload));
+                                setStartPdfFile(null);
+                                await load();
+                                goToStep(2);
+                              } catch (e) {
+                                setError(e instanceof Error ? e.message : "Upload generation failed.");
+                              } finally {
+                                setSaving(false);
+                                setGenerationWorking(false);
+                              }
+                            })();
+                            return;
+                          }
+
+                          if (assessment.authoring_mode === "ai") {
+                            const prompt = startAiPrompt.trim();
+                            if (prompt.length < 20) return;
+                            void (async () => {
+                              setGenerationWorking(true);
+                              setSaving(true);
+                              setError(null);
+                              try {
+                                await persistDraft(true);
+                                await jsonFetch(`/api/assessments/${assessmentId}/generate`, {
+                                  method: "POST",
+                                  headers: { "content-type": "application/json" },
+                                  body: JSON.stringify({ prompt, question_count: startQuestionCount }),
+                                });
+                                await load();
+                                goToStep(2);
+                              } catch (e) {
+                                setError(e instanceof Error ? e.message : "AI generation failed.");
+                              } finally {
+                                setSaving(false);
+                                setGenerationWorking(false);
+                              }
+                            })();
+                            return;
+                          }
+
+                          if (assessment.authoring_mode === "template") {
+                            if (!selectedTemplateId) return;
+                            void (async () => {
+                              setGenerationWorking(true);
+                              setSaving(true);
+                              setError(null);
+                              try {
+                                await persistDraft(true);
+                                await jsonFetch(`/api/assessments/${assessmentId}/template`, {
+                                  method: "POST",
+                                  headers: { "content-type": "application/json" },
+                                  body: JSON.stringify({ template_id: selectedTemplateId }),
+                                });
+                                await load();
+                                goToStep(2);
+                              } catch (e) {
+                                setError(e instanceof Error ? e.message : "Template apply failed.");
+                              } finally {
+                                setSaving(false);
+                                setGenerationWorking(false);
+                              }
+                            })();
+                            return;
+                          }
+
+                          if (dirty && !saving) void persistDraft(true);
+                          goToStep(2);
+                        }}
+                      >
+                        {assessment.authoring_mode === "ai" || assessment.authoring_mode === "upload" || assessment.authoring_mode === "template"
+                          ? generationWorking
+                            ? assessment.authoring_mode === "template"
+                              ? "Applying…"
+                              : "Generating…"
+                            : assessment.authoring_mode === "template"
+                              ? "Apply Template"
+                              : "Generate Draft"
+                          : "Continue →"}
+                      </Button>
+                      {generationWorking ? (
+                        <div className="flex items-center gap-2 text-xs text-[var(--muted)]">
+                          <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-[var(--primary)] border-t-transparent" />
+                          <span>{assessment.authoring_mode === "template" ? "Applying template…" : "Generating draft…"}</span>
+                        </div>
+                      ) : null}
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : step === 2 ? (
+                <Card className="border-[var(--border)] bg-[var(--surface)]/80 backdrop-blur-sm shadow-sm">
+                  <CardHeader>
+                    <CardTitle>General Info</CardTitle>
+                    <CardDescription>Draft saves on blur (and every 3 seconds while typing).</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="instructions">Student instructions</Label>
+                      <textarea
+                        id="instructions"
+                        maxLength={500}
+                        className="min-h-28 w-full rounded-md border bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] border-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] disabled:opacity-60"
+                        placeholder="Explain what students should do and how to respond."
+                        value={assessment.instructions ?? ""}
+                        onChange={(e) => {
+                          setAssessment({ ...assessment, instructions: e.target.value || null });
+                          setDirty(true);
+                        }}
+                        onBlur={() => {
+                          if (dirty && !saving) void persistDraft(true);
+                        }}
+                        disabled={readonly}
+                      />
+                    </div>
+                    <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-4">
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <div className="text-sm font-medium text-[var(--text)]">Practice Mode</div>
+                          <div className="text-xs text-[var(--muted)]">
+                            Practice assessments do not record scores. Students can retry multiple times.
+                          </div>
+                        </div>
+                        <Switch
+                          checked={Boolean(assessment.is_practice_mode)}
+                          onCheckedChange={(checked) => {
+                            setAssessment({ ...assessment, is_practice_mode: checked });
+                            setDirty(true);
+                            if (!saving) void persistDraft(true);
+                          }}
+                          disabled={readonly || saving}
+                          aria-label="Practice Mode"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Agency Toggles - Oxford Green Compliance */}
+                    <div className="rounded-md border border-amber-200 bg-amber-50/30 p-4 dark:border-amber-800 dark:bg-amber-900/10">
+                      <div className="text-sm font-medium text-[var(--text)] mb-3">Teacher Controls (Agency)</div>
+                      <div className="space-y-4">
+                        <div className="flex items-start justify-between gap-4">
+                          <div>
+                            <div className="text-sm font-medium text-[var(--text)]">Hide AI Scores from Students</div>
+                            <div className="text-xs text-[var(--muted)]">
+                              Students see only teacher-approved feedback, not raw AI scores.
+                            </div>
+                          </div>
+                          <Switch
+                            checked={Boolean(assessment.hide_ai_score_from_students)}
+                            onCheckedChange={(checked) => {
+                              setAssessment({ ...assessment, hide_ai_score_from_students: checked });
+                              setDirty(true);
+                              if (!saving) void persistDraft(true);
+                            }}
+                            disabled={readonly || saving}
+                            aria-label="Hide AI Scores from Students"
+                          />
+                        </div>
+                        <div className="flex items-start justify-between gap-4">
+                          <div>
+                            <div className="text-sm font-medium text-[var(--text)]">Require Teacher Review Before Release</div>
+                            <div className="text-xs text-[var(--muted)]">
+                              Results won&apos;t auto-publish. Teacher must explicitly release each submission.
+                            </div>
+                          </div>
+                          <Switch
+                            checked={Boolean(assessment.require_teacher_review_before_release)}
+                            onCheckedChange={(checked) => {
+                              setAssessment({ ...assessment, require_teacher_review_before_release: checked });
+                              setDirty(true);
+                              if (!saving) void persistDraft(true);
+                            }}
+                            disabled={readonly || saving}
+                            aria-label="Require Teacher Review Before Release"
+                          />
+                        </div>
+                        <div className="flex items-start justify-between gap-4">
+                          <div>
+                            <div className="text-sm font-medium text-[var(--text)]">Disable AI Feedback</div>
+                            <div className="text-xs text-[var(--muted)]">
+                              Transcript-only mode. Students see their transcript but no AI scoring or suggestions.
+                            </div>
+                          </div>
+                          <Switch
+                            checked={Boolean(assessment.disable_ai_feedback)}
+                            onCheckedChange={(checked) => {
+                              setAssessment({ ...assessment, disable_ai_feedback: checked });
+                              setDirty(true);
+                              if (!saving) void persistDraft(true);
+                            }}
+                            disabled={readonly || saving}
+                            aria-label="Disable AI Feedback"
                           />
                         </div>
                       </div>
-                    ) : null}
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  <div className="text-xs font-semibold text-[var(--muted)]">QUESTIONS</div>
-                  {questions.length ? (
+                    </div>
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label htmlFor="subject">Subject</Label>
+                        <select
+                          id="subject"
+                          className="h-10 w-full rounded-md border bg-[var(--surface)] px-3 text-sm text-[var(--text)] border-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] disabled:opacity-60"
+                          value={assessment.subject ?? ""}
+                          onChange={(e) => {
+                            setAssessment({ ...assessment, subject: e.target.value || null });
+                            setDirty(true);
+                          }}
+                          onBlur={() => {
+                            if (dirty && !saving) void persistDraft(true);
+                          }}
+                          disabled={readonly}
+                        >
+                          <option value="">Select…</option>
+                          {["History", "Science", "Literature", "Math", "Language Arts", "World Languages", "Other"].map((v) => (
+                            <option key={v} value={v}>
+                              {v}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="lang">Target language</Label>
+                        <select
+                          id="lang"
+                          className="h-10 w-full rounded-md border bg-[var(--surface)] px-3 text-sm text-[var(--text)] border-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] disabled:opacity-60"
+                          value={assessment.target_language ?? ""}
+                          onChange={(e) => {
+                            setAssessment({ ...assessment, target_language: e.target.value || null });
+                            setDirty(true);
+                          }}
+                          onBlur={() => {
+                            if (dirty && !saving) void persistDraft(true);
+                          }}
+                          disabled={readonly}
+                        >
+                          <option value="">Select…</option>
+                          {["English US", "Spanish", "French", "Mandarin", "Arabic", "Other"].map((v) => (
+                            <option key={v} value={v}>
+                              {v}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <Button type="button" variant="secondary" disabled={saving} onClick={() => goToStep(1)}>
+                        ← Back
+                      </Button>
+                      <Button type="button" disabled={saving || readonly} onClick={() => goToStep(3)}>
+                        Continue →
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : step === 3 ? (
+                <Card className="border-[var(--border)] bg-[var(--surface)]/80 backdrop-blur-sm shadow-sm">
+                  <CardHeader>
+                    <CardTitle>Assets</CardTitle>
+                    <CardDescription>
+                      Generate options or paste a URL. Add an optional audio intro and PDF reference for students.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
                     <div className="space-y-2">
-                      {questions.map((q, idx) => (
-                        <div
-                          key={q.id}
-                          className="rounded-md border border-[var(--border)] bg-[var(--background)] p-3 text-sm text-[var(--text)]"
-                        >
-                          <span className="font-semibold">Q{idx + 1}.</span> {q.question_text}
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-sm text-[var(--muted)]">No questions added yet.</div>
-                  )}
-                </div>
-
-                <div className="space-y-3">
-                  <div className="text-xs font-semibold text-[var(--muted)]">RUBRICS</div>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="rounded-md border border-[var(--border)] bg-[var(--background)] p-3">
-                      <div className="text-sm font-medium text-[var(--text)]">Reasoning</div>
-                      <div className="mt-2 text-sm text-[var(--muted)]">
-                        {rubricDrafts.reasoning.instructions.trim() || "No rubric instructions."}
-                      </div>
-                    </div>
-                    <div className="rounded-md border border-[var(--border)] bg-[var(--background)] p-3">
-                      <div className="text-sm font-medium text-[var(--text)]">Evidence</div>
-                      <div className="mt-2 text-sm text-[var(--muted)]">
-                        {rubricDrafts.evidence.instructions.trim() || "No rubric instructions."}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between gap-3">
-                  <Button type="button" variant="secondary" disabled={saving} onClick={() => goToStep(5)}>
-                    ← Back
-                  </Button>
-                  <div className="text-sm text-[var(--muted)]">Finalize integrity settings on the right.</div>
-                </div>
-              </CardContent>
-            </Card>
-          ) : (
-            <Card>
-              <CardHeader>
-                <CardTitle>{steps.find((s) => s.n === step)?.label}</CardTitle>
-                <CardDescription>Coming next as we implement Sprint 2/3.</CardDescription>
-              </CardHeader>
-              <CardContent className="text-sm text-[var(--muted)]">
-                Step {step} is scaffolded. Preview and settings live in Step 6.
-              </CardContent>
-            </Card>
-          )}
-        </div>
-
-        {step === 6 ? (
-          <div className="space-y-4">
-            <div className="sticky top-6 space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Integrity Shields</CardTitle>
-                  <CardDescription>Review settings before publishing.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <div className="flex items-center gap-2 text-sm font-medium text-[var(--text)]">
-                        <span>Pausing Guardrail</span>
-                        <span
-                          className="cursor-help text-xs text-[var(--muted)]"
-                          title="Flags long pauses (silence) while the student is responding."
-                        >
-                          (?)
-                        </span>
-                      </div>
-                      <div className="text-xs text-[var(--muted)]">Flag silence &gt; 2.5s</div>
-                    </div>
-                    <Switch
-                      checked={pausingEnabled}
-                      onCheckedChange={(checked) =>
-                        updateIntegrity({ pause_threshold_seconds: checked ? 2.5 : null })
-                      }
-                      disabled={saving || readonly}
-                      aria-label="Pausing Guardrail"
-                    />
-                  </div>
-
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <div className="flex items-center gap-2 text-sm font-medium text-[var(--text)]">
-                        <span>Focus Monitor</span>
-                        <span
-                          className="cursor-help text-xs text-[var(--muted)]"
-                          title="Tracks when students switch tabs or leave the assessment."
-                        >
-                          (?)
-                        </span>
-                      </div>
-                      <div className="text-xs text-[var(--muted)]">Track browser tab switching</div>
-                    </div>
-                    <Switch
-                      checked={integrity.tab_switch_monitor}
-                      onCheckedChange={(checked) => updateIntegrity({ tab_switch_monitor: checked })}
-                      disabled={saving || readonly}
-                      aria-label="Focus Monitor"
-                    />
-                  </div>
-
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <div className="flex items-center gap-2 text-sm font-medium text-[var(--text)]">
-                        <span>Dynamic Shuffle</span>
-                        <span
-                          className="cursor-help text-xs text-[var(--muted)]"
-                          title="Randomizes question order per student to reduce sharing answers."
-                        >
-                          (?)
-                        </span>
-                      </div>
-                      <div className="text-xs text-[var(--muted)]">Randomize question order</div>
-                    </div>
-                    <Switch
-                      checked={integrity.shuffle_questions}
-                      onCheckedChange={(checked) => updateIntegrity({ shuffle_questions: checked })}
-                      disabled={saving || readonly}
-                      aria-label="Dynamic Shuffle"
-                    />
-                  </div>
-
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <div className="flex items-center gap-2 text-sm font-medium text-[var(--text)]">
-                        <span>Grace Restart</span>
-                        <span
-                          className="cursor-help text-xs text-[var(--muted)]"
-                          title="Allows one restart if a student pauses too long before speaking or gives an off-topic response."
-                        >
-                          (?)
-                        </span>
-                      </div>
-                      <div className="text-xs text-[var(--muted)]">Allow a single restart per student</div>
-                    </div>
-                    <Switch
-                      checked={integrity.allow_grace_restart}
-                      onCheckedChange={(checked) => updateIntegrity({ allow_grace_restart: checked })}
-                      disabled={saving || readonly}
-                      aria-label="Grace Restart"
-                    />
-                  </div>
-
-                  <div className="border-t border-[var(--border)] pt-4">
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <div className="flex items-center gap-2 text-sm font-medium text-[var(--text)]">
-                          <span>Academic Integrity Pledge</span>
-                          <span
-                            className="cursor-help text-xs text-[var(--muted)]"
-                            title="Shows a pledge modal before the student can start the assessment."
-                          >
-                            (?)
-                          </span>
-                        </div>
-                        <div className="text-xs text-[var(--muted)]">Require students to agree before seeing questions</div>
-                      </div>
-                      <Switch
-                        checked={integrity.pledge_enabled}
-                        onCheckedChange={(checked) => updateIntegrity({ pledge_enabled: checked })}
-                        disabled={saving || readonly}
-                        aria-label="Academic Integrity Pledge"
+                      <Label htmlFor="assetPrompt">Image description (optional)</Label>
+                      <textarea
+                        id="assetPrompt"
+                        maxLength={1000}
+                        className="min-h-24 w-full rounded-md border bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] border-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] disabled:opacity-60"
+                        placeholder="e.g., “A factory floor during the 1850s…”"
+                        value={assetPrompt}
+                        onChange={(e) => setAssetPrompt(e.target.value)}
+                        disabled={readonly}
                       />
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="text-xs text-[var(--muted)]">
+                          Use this prompt to generate an image, or paste your own URL below.
+                        </div>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          disabled={assetBusy || readonly || !assetPrompt.trim()}
+                          onClick={generateAssetFromPrompt}
+                        >
+                          {saving ? "Generating…" : "Generate 3 Options"}
+                        </Button>
+                      </div>
                     </div>
 
-                    {integrity.pledge_enabled ? (
-                      <div className="mt-3 space-y-2">
-                        <Label>Pledge text (optional)</Label>
-                        <textarea
-                          className="min-h-[120px] w-full resize-y rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--muted)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
-                          value={pledgeDraft}
-                          onChange={(e) => setPledgeDraft(e.target.value)}
-                          onBlur={() => updateIntegrity({ pledge_text: pledgeDraft.trim() ? pledgeDraft : null })}
-                          placeholder={[
-                            "I have studied the material and am ready to demonstrate my understanding.",
-                            "I will not use notes, websites, or other people during this assessment.",
-                            "I understand this assessment measures what I know, not what I can look up.",
-                            "My responses will be in my own words based on my learning.",
-                          ].join("\n")}
-                          disabled={saving || readonly}
-                        />
-                        <div className="text-xs text-[var(--muted)]">Leave blank to use the default pledge.</div>
+                    {assetOptions.length ? (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="text-sm font-medium text-[var(--text)]">Choose an option</div>
+                          <div className="text-xs text-[var(--muted)]">Click to select</div>
+                        </div>
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                          {assetOptions.map((url) => {
+                            const selected = url === assetUrl.trim();
+                            return (
+                              <button
+                                key={url}
+                                type="button"
+                                onClick={() => setAssetUrl(url)}
+                                className={`overflow-hidden rounded-md border transition-colors border-[var(--border)] ${selected ? "ring-2 ring-[var(--primary)]" : "hover:border-[var(--primary)]"
+                                  }`}
+                              >
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={url} alt="Generated option" className="h-40 w-full object-cover" />
+                              </button>
+                            );
+                          })}
+                        </div>
                       </div>
                     ) : null}
-                  </div>
-                </CardContent>
-              </Card>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>Recording Limits</CardTitle>
-                  <CardDescription>Global response timers.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="space-y-2">
-                    <Label>Recording limit</Label>
-                    <select
-                      className="h-10 w-full rounded-md border bg-[var(--surface)] px-3 text-sm text-[var(--text)] border-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
-                      value={integrity.recording_limit_seconds}
-                      onChange={(e) => updateIntegrity({ recording_limit_seconds: Number(e.target.value) })}
-                      disabled={saving || readonly}
-                    >
-                      {[30, 60, 90, 120, 180].map((v) => (
-                        <option key={v} value={v}>
-                          {v}s
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="assetUrl">Image URL</Label>
+                      <Input
+                        id="assetUrl"
+                        value={assetUrl}
+                        onChange={(e) => setAssetUrl(e.target.value)}
+                        placeholder="https://…"
+                        disabled={readonly}
+                      />
+                      <p className="text-xs text-[var(--muted)]">
+                        If you generate an image, this will auto-fill. You can also paste a public image URL.
+                      </p>
+                    </div>
 
-                  <div className="space-y-2">
-                    <Label>Viewing timer (Retell)</Label>
-                    <select
-                      className="h-10 w-full rounded-md border bg-[var(--surface)] px-3 text-sm text-[var(--text)] border-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
-                      value={integrity.viewing_timer_seconds}
-                      onChange={(e) => updateIntegrity({ viewing_timer_seconds: Number(e.target.value) })}
-                      disabled={saving || readonly}
-                    >
-                      {[10, 15, 20, 30].map((v) => (
-                        <option key={v} value={v}>
-                          {v}s
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </CardContent>
-              </Card>
+                    {assetUrl.trim() ? (
+                      <div className="space-y-2">
+                        <div className="text-sm font-medium text-[var(--text)]">Preview</div>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={assetUrl.trim()}
+                          alt="Selected assessment asset"
+                          className="max-h-72 w-full rounded-md border border-[var(--border)] object-cover"
+                        />
+                      </div>
+                    ) : null}
+
+                    <div className="space-y-3 rounded-md border border-[var(--border)] bg-[var(--surface)] p-4">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <div className="text-sm font-medium text-[var(--text)]">Audio intro (optional)</div>
+                          <div className="text-xs text-[var(--muted)]">
+                            MP3 or WAV. Max length 3 minutes. If provided, students must listen before questions appear.
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            ref={audioInputRef}
+                            type="file"
+                            accept="audio/mpeg,audio/mp3,audio/wav,.mp3,.wav"
+                            className="hidden"
+                            onChange={(e) => {
+                              const f = e.target.files?.[0];
+                              if (f) void handleAudioSelected(f);
+                            }}
+                            disabled={readonly}
+                          />
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            disabled={assetBusy || readonly}
+                            onClick={() => audioInputRef.current?.click()}
+                          >
+                            {audioUploading ? "Uploading…" : audioIntro ? "Replace audio" : "Upload audio"}
+                          </Button>
+                        </div>
+                      </div>
+
+                      {audioIntro ? (
+                        <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-3">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="text-sm text-[var(--text)]">
+                              {audioIntro.original_filename?.trim() || "Audio intro"}
+                            </div>
+                            <div className="text-xs text-[var(--muted)]">{formatSeconds(audioIntro.duration_seconds)}</div>
+                          </div>
+                          <audio controls src={audioIntro.asset_url} className="mt-2 w-full" />
+                          <div className="mt-3 flex items-center justify-end">
+                            <Button type="button" variant="secondary" disabled={assetBusy || readonly} onClick={removeAudioIntro}>
+                              Remove audio
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-xs text-[var(--muted)]">No audio uploaded yet.</div>
+                      )}
+                      {audioError ? <div className="text-xs text-red-500">{audioError}</div> : null}
+                    </div>
+
+                    <div className="space-y-3 rounded-md border border-[var(--border)] bg-[var(--surface)] p-4">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <div className="text-sm font-medium text-[var(--text)]">PDF reference (optional)</div>
+                          <div className="text-xs text-[var(--muted)]">PDF only. Max size 20MB. Preview inline or open full size.</div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            ref={documentInputRef}
+                            type="file"
+                            accept="application/pdf,.pdf"
+                            className="hidden"
+                            onChange={(e) => {
+                              const f = e.target.files?.[0];
+                              if (f) void handleDocumentSelected(f);
+                            }}
+                            disabled={readonly}
+                          />
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            disabled={assetBusy || readonly}
+                            onClick={() => documentInputRef.current?.click()}
+                          >
+                            {documentUploading ? "Uploading…" : documentAsset ? "Replace PDF" : "Upload PDF"}
+                          </Button>
+                        </div>
+                      </div>
+
+                      {documentAsset ? (
+                        <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-3">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="text-sm text-[var(--text)]">
+                              {documentAsset.original_filename?.trim() || "PDF document"}
+                            </div>
+                            <a
+                              href={documentAsset.asset_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-xs text-[var(--primary)] hover:underline"
+                            >
+                              Open full size
+                            </a>
+                          </div>
+                          <div className="mt-3 h-[420px] overflow-hidden rounded-md border border-[var(--border)] bg-[var(--background)]">
+                            <iframe
+                              title={documentAsset.original_filename?.trim() || "PDF document"}
+                              src={documentAsset.asset_url}
+                              className="h-full w-full"
+                            />
+                          </div>
+                          <div className="mt-3 flex items-center justify-end">
+                            <Button type="button" variant="secondary" disabled={assetBusy || readonly} onClick={removeDocument}>
+                              Remove PDF
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-xs text-[var(--muted)]">No PDF uploaded yet.</div>
+                      )}
+                      {documentError ? <div className="text-xs text-red-500">{documentError}</div> : null}
+                    </div>
+
+                    <div className="text-xs text-[var(--muted)]">
+                      Assets are optional for publishing. Add an image, audio intro, or PDF if they help frame the questions.
+                    </div>
+
+                    <div className="flex items-center justify-between gap-3">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        disabled={assetBusy || readonly}
+                        onClick={async () => {
+                          setSaving(true);
+                          setError(null);
+                          try {
+                            await jsonFetch(`/api/assessments/${assessmentId}/asset`, {
+                              method: "PUT",
+                              headers: { "content-type": "application/json" },
+                              body: JSON.stringify({ asset_url: null, generation_prompt: null }),
+                            });
+                            await load();
+                            setAssetOptions([]);
+                          } catch (e) {
+                            setError(e instanceof Error ? e.message : "Save failed.");
+                          } finally {
+                            setSaving(false);
+                          }
+                        }}
+                      >
+                        Clear image
+                      </Button>
+                      <div className="flex items-center gap-2">
+                        <Button type="button" variant="secondary" disabled={assetBusy} onClick={() => goToStep(2)}>
+                          ← Back
+                        </Button>
+                        <Button
+                          type="button"
+                          disabled={assetBusy}
+                          onClick={() => {
+                            if (!assetUrl.trim()) {
+                              goToStep(4);
+                              return;
+                            }
+                            void saveAssetAndContinue();
+                          }}
+                        >
+                          {assetUrl.trim() ? "Save & Continue →" : "Continue →"}
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : step === 4 ? (
+                <Card className="border-[var(--border)] bg-[var(--surface)]/80 backdrop-blur-sm shadow-sm">
+                  <CardHeader>
+                    <CardTitle>Questions</CardTitle>
+                    <CardDescription>Add at least one question. You can edit later.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="text-sm font-medium text-[var(--text)]">Question list</div>
+                        <div className="text-xs text-[var(--muted)]">{questionsCount} total</div>
+                      </div>
+
+                      {questions.length ? (
+                        <div className="space-y-3">
+                          {questions.map((q) => {
+                            const editing = editingQuestionId === q.id;
+                            const evidenceUpload = q.evidence_upload ?? "optional";
+                            return (
+                              <div key={q.id} className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-4">
+                                <div className="flex items-center justify-between gap-3">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <span className="rounded-full border border-[var(--border)] bg-[var(--background)] px-2 py-1 text-xs font-semibold text-[var(--muted)]">
+                                      QUESTION {q.order_index}
+                                    </span>
+                                    <span className="text-xs text-[var(--muted)]">{getQuestionTypeLabel(q.question_type)}</span>
+                                    <span className="text-xs text-[var(--muted)]">• {getBloomsLabel(q.blooms_level)}</span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    {editing ? (
+                                      <>
+                                        <Button
+                                          type="button"
+                                          variant="secondary"
+                                          disabled={saving}
+                                          onClick={() => {
+                                            setEditingQuestionId(null);
+                                            setEditingQuestionStandards([]);
+                                          }}
+                                        >
+                                          Cancel
+                                        </Button>
+                                        <Button type="button" disabled={saving || !editingQuestionText.trim()} onClick={saveEditedQuestion}>
+                                          Save
+                                        </Button>
+                                      </>
+                                    ) : (
+                                      <Button type="button" variant="secondary" disabled={saving || readonly} onClick={() => startEditQuestion(q)}>
+                                        Edit
+                                      </Button>
+                                    )}
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      disabled={saving || readonly}
+                                      onClick={() => deleteQuestion(q.id)}
+                                    >
+                                      Delete
+                                    </Button>
+                                  </div>
+                                </div>
+
+                                <div className="mt-3 space-y-3">
+                                  {editing ? (
+                                    <>
+                                      <div className="space-y-2">
+                                        <Label htmlFor={`q-${q.id}`}>Question text</Label>
+                                        <textarea
+                                          id={`q-${q.id}`}
+                                          maxLength={500}
+                                          className="min-h-20 w-full rounded-md border bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] border-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] disabled:opacity-60"
+                                          value={editingQuestionText}
+                                          onChange={(e) => setEditingQuestionText(e.target.value)}
+                                          disabled={saving}
+                                        />
+                                      </div>
+                                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                                        <div className="space-y-2">
+                                          <Label htmlFor={`bl-${q.id}`}>Bloom&apos;s level</Label>
+                                          <select
+                                            id={`bl-${q.id}`}
+                                            className="h-10 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 text-sm text-[var(--text)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] disabled:opacity-60"
+                                            value={editingQuestionBloom}
+                                            disabled={saving}
+                                            onChange={(e) => setEditingQuestionBloom(e.target.value)}
+                                          >
+                                            {BLOOMS_OPTIONS.map((option) => (
+                                              <option key={option.value} value={option.value}>
+                                                {option.label}
+                                              </option>
+                                            ))}
+                                          </select>
+                                          <p className="text-xs text-[var(--muted)]">Tag cognitive demand for scaffolding.</p>
+                                        </div>
+                                        <div className="space-y-2">
+                                          <Label htmlFor={`qt-${q.id}`}>Question type</Label>
+                                          <select
+                                            id={`qt-${q.id}`}
+                                            className="h-10 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 text-sm text-[var(--text)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] disabled:opacity-60"
+                                            value={editingQuestionTypePreset}
+                                            disabled={saving}
+                                            onChange={(e) => setEditingQuestionTypePreset(e.target.value)}
+                                          >
+                                            {QUESTION_TYPE_OPTIONS.map((option) => (
+                                              <option key={option.value} value={option.value}>
+                                                {option.label}
+                                              </option>
+                                            ))}
+                                            <option value={CUSTOM_QUESTION_TYPE}>Custom…</option>
+                                          </select>
+                                          {editingQuestionTypePreset === CUSTOM_QUESTION_TYPE ? (
+                                            <Input
+                                              value={editingQuestionTypeCustom}
+                                              onChange={(e) => setEditingQuestionTypeCustom(e.target.value)}
+                                              disabled={saving}
+                                              placeholder="Type a custom question type"
+                                            />
+                                          ) : (
+                                            <p className="text-xs text-[var(--muted)]">Choose a labeled type or switch to custom.</p>
+                                          )}
+                                        </div>
+                                        <div className="space-y-2">
+                                          <Label htmlFor={`eu-${q.id}`}>Evidence upload</Label>
+                                          <select
+                                            id={`eu-${q.id}`}
+                                            className="h-10 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 text-sm text-[var(--text)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] disabled:opacity-60"
+                                            value={evidenceUpload}
+                                            disabled={saving || readonly}
+                                            onChange={(e) => void updateEvidenceUpload(q.id, e.target.value as "disabled" | "optional" | "required")}
+                                          >
+                                            <option value="disabled">Disabled</option>
+                                            <option value="optional">Optional</option>
+                                            <option value="required">Required</option>
+                                          </select>
+                                          <p className="text-xs text-[var(--muted)]">Students can upload a photo of their work before recording.</p>
+                                        </div>
+                                      </div>
+                                      {standardsEnabled ? (
+                                        <div className="space-y-2">
+                                          <div className="text-sm font-medium text-[var(--text)]">Standards</div>
+                                          {enabledStandardsSets.length ? (
+                                            <>
+                                              {editingQuestionStandards.length ? (
+                                                <div className="flex flex-wrap gap-2">
+                                                  {editingQuestionStandards.map((standard) => (
+                                                    <button
+                                                      key={standard.id}
+                                                      type="button"
+                                                      className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--background)] px-3 py-1 text-xs text-[var(--text)]"
+                                                      onClick={() => removeStandard("edit", standard.id)}
+                                                    >
+                                                      <span>{standard.code}</span>
+                                                      <span className="text-[var(--muted)]">×</span>
+                                                    </button>
+                                                  ))}
+                                                </div>
+                                              ) : (
+                                                <div className="text-xs text-[var(--muted)]">No standards selected.</div>
+                                              )}
+                                              <div className="flex flex-wrap items-center gap-2">
+                                                <Input
+                                                  value={standardsSearch}
+                                                  onChange={(event) => setStandardsSearch(event.target.value)}
+                                                  placeholder="Search standards (e.g., L.K.1 or grammar)"
+                                                />
+                                                <Button type="button" variant="secondary" disabled={standardsLoading} onClick={searchStandards}>
+                                                  {standardsLoading ? "Searching…" : "Search"}
+                                                </Button>
+                                              </div>
+                                              {standardsSubjectFilter ? (
+                                                <div className="text-xs text-[var(--muted)]">
+                                                  Filtered by subject: {standardsSubjectFilter}
+                                                </div>
+                                              ) : (
+                                                <div className="text-xs text-[var(--muted)]">Select a subject in Step 2 to filter standards.</div>
+                                              )}
+                                              {standardsResults.length ? (
+                                                <div className="max-h-48 space-y-2 overflow-auto rounded-md border border-[var(--border)] bg-[var(--surface)] p-2">
+                                                  {standardsResults.map((standard) => (
+                                                    <div key={standard.id} className="flex items-start justify-between gap-3">
+                                                      <div>
+                                                        <div className="text-xs font-semibold text-[var(--text)]">{standard.code}</div>
+                                                        <div className="text-xs text-[var(--muted)]">{standard.description}</div>
+                                                      </div>
+                                                      <Button type="button" variant="secondary" onClick={() => addStandard("edit", standard)}>
+                                                        Add
+                                                      </Button>
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                              ) : (
+                                                <div className="text-xs text-[var(--muted)]">
+                                                  Search to find standards in your enabled frameworks.
+                                                </div>
+                                              )}
+                                            </>
+                                          ) : (
+                                            <div className="text-xs text-[var(--muted)]">Enable at least one standards set in Settings.</div>
+                                          )}
+                                          {standardsError ? (
+                                            <div className="text-xs text-[var(--danger)]" role="alert">
+                                              {standardsError}
+                                            </div>
+                                          ) : null}
+                                        </div>
+                                      ) : null}
+                                    </>
+                                  ) : (
+                                    <div className="space-y-2">
+                                      <div className="text-sm italic text-[var(--text)]">“{q.question_text}”</div>
+                                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                                        <div className="space-y-1">
+                                          <div className="text-xs text-[var(--muted)]">Evidence upload</div>
+                                          <div className="text-sm text-[var(--text)] capitalize">{evidenceUpload}</div>
+                                        </div>
+                                        <div className="space-y-1">
+                                          <div className="text-xs text-[var(--muted)]">Bloom&apos;s level</div>
+                                          <div className="text-sm text-[var(--text)]">{getBloomsLabel(q.blooms_level)}</div>
+                                        </div>
+                                        <div className="flex items-end justify-end sm:justify-start">
+                                          <Button
+                                            type="button"
+                                            variant={evidenceUpload === "required" ? "secondary" : "primary"}
+                                            disabled={saving || readonly}
+                                            onClick={() => void updateEvidenceUpload(q.id, evidenceUpload === "required" ? "optional" : "required")}
+                                          >
+                                            {evidenceUpload === "required" ? "Make Optional" : "Require Evidence"}
+                                          </Button>
+                                        </div>
+                                      </div>
+                                      {standardsEnabled ? (
+                                        <div className="space-y-1">
+                                          <div className="text-xs text-[var(--muted)]">Standards</div>
+                                          {q.standards && q.standards.length ? (
+                                            <div className="flex flex-wrap gap-2">
+                                              {q.standards.map((standard) => (
+                                                <span
+                                                  key={standard.id}
+                                                  className="rounded-full border border-[var(--border)] bg-[var(--background)] px-2 py-1 text-xs text-[var(--text)]"
+                                                >
+                                                  {standard.code}
+                                                </span>
+                                              ))}
+                                            </div>
+                                          ) : (
+                                            <div className="text-xs text-[var(--muted)]">No standards selected.</div>
+                                          )}
+                                        </div>
+                                      ) : null}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="text-sm text-[var(--muted)]">No questions yet.</div>
+                      )}
+                    </div>
+
+                    {addingQuestion ? (
+                      <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-4">
+                        <div className="text-sm font-medium text-[var(--text)]">Add Question to Bank</div>
+                        <div className="mt-3 space-y-3">
+                          <div className="space-y-2">
+                            <Label htmlFor="newQuestionText">Question text</Label>
+                            <textarea
+                              id="newQuestionText"
+                              maxLength={500}
+                              className="min-h-24 w-full rounded-md border bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] border-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] disabled:opacity-60"
+                              value={newQuestionText}
+                              onChange={(e) => setNewQuestionText(e.target.value)}
+                              disabled={readonly || saving}
+                              placeholder="Type the question prompt students will see…"
+                            />
+                          </div>
+                          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                            <div className="space-y-2">
+                              <Label htmlFor="newQuestionBloom">Bloom&apos;s level</Label>
+                              <select
+                                id="newQuestionBloom"
+                                className="h-10 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 text-sm text-[var(--text)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] disabled:opacity-60"
+                                value={newQuestionBloom}
+                                onChange={(e) => setNewQuestionBloom(e.target.value)}
+                                disabled={readonly || saving}
+                              >
+                                {BLOOMS_OPTIONS.map((option) => (
+                                  <option key={option.value} value={option.value}>
+                                    {option.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="newQuestionType">Question type</Label>
+                              <select
+                                id="newQuestionType"
+                                className="h-10 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 text-sm text-[var(--text)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] disabled:opacity-60"
+                                value={newQuestionTypePreset}
+                                onChange={(e) => setNewQuestionTypePreset(e.target.value)}
+                                disabled={readonly || saving}
+                              >
+                                {QUESTION_TYPE_OPTIONS.map((option) => (
+                                  <option key={option.value} value={option.value}>
+                                    {option.label}
+                                  </option>
+                                ))}
+                                <option value={CUSTOM_QUESTION_TYPE}>Custom…</option>
+                              </select>
+                              {newQuestionTypePreset === CUSTOM_QUESTION_TYPE ? (
+                                <Input
+                                  value={newQuestionTypeCustom}
+                                  onChange={(e) => setNewQuestionTypeCustom(e.target.value)}
+                                  disabled={readonly || saving}
+                                  placeholder="Type a custom question type"
+                                />
+                              ) : (
+                                <p className="text-xs text-[var(--muted)]">Use a labeled type or switch to custom.</p>
+                              )}
+                            </div>
+                            <div className="flex items-end justify-end gap-2">
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                disabled={saving}
+                                onClick={() => {
+                                  setAddingQuestion(false);
+                                  setNewQuestionStandards([]);
+                                }}
+                              >
+                                Cancel
+                              </Button>
+                              <Button
+                                type="button"
+                                disabled={readonly || saving || !newQuestionText.trim()}
+                                onClick={async () => {
+                                  await addQuestion();
+                                  setAddingQuestion(false);
+                                }}
+                              >
+                                Add
+                              </Button>
+                            </div>
+                          </div>
+                          {standardsEnabled ? (
+                            <div className="space-y-2">
+                              <div className="text-sm font-medium text-[var(--text)]">Standards</div>
+                              {enabledStandardsSets.length ? (
+                                <>
+                                  {newQuestionStandards.length ? (
+                                    <div className="flex flex-wrap gap-2">
+                                      {newQuestionStandards.map((standard) => (
+                                        <button
+                                          key={standard.id}
+                                          type="button"
+                                          className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--background)] px-3 py-1 text-xs text-[var(--text)]"
+                                          onClick={() => removeStandard("new", standard.id)}
+                                        >
+                                          <span>{standard.code}</span>
+                                          <span className="text-[var(--muted)]">×</span>
+                                        </button>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <div className="text-xs text-[var(--muted)]">No standards selected.</div>
+                                  )}
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <Input
+                                      value={standardsSearch}
+                                      onChange={(event) => setStandardsSearch(event.target.value)}
+                                      placeholder="Search standards (e.g., L.K.1 or grammar)"
+                                    />
+                                    <Button type="button" variant="secondary" disabled={standardsLoading} onClick={searchStandards}>
+                                      {standardsLoading ? "Searching…" : "Search"}
+                                    </Button>
+                                  </div>
+                                  {standardsSubjectFilter ? (
+                                    <div className="text-xs text-[var(--muted)]">
+                                      Filtered by subject: {standardsSubjectFilter}
+                                    </div>
+                                  ) : (
+                                    <div className="text-xs text-[var(--muted)]">Select a subject in Step 2 to filter standards.</div>
+                                  )}
+                                  {standardsResults.length ? (
+                                    <div className="max-h-48 space-y-2 overflow-auto rounded-md border border-[var(--border)] bg-[var(--surface)] p-2">
+                                      {standardsResults.map((standard) => (
+                                        <div key={standard.id} className="flex items-start justify-between gap-3">
+                                          <div>
+                                            <div className="text-xs font-semibold text-[var(--text)]">{standard.code}</div>
+                                            <div className="text-xs text-[var(--muted)]">{standard.description}</div>
+                                          </div>
+                                          <Button type="button" variant="secondary" onClick={() => addStandard("new", standard)}>
+                                            Add
+                                          </Button>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <div className="text-xs text-[var(--muted)]">
+                                      Search to find standards in your enabled frameworks.
+                                    </div>
+                                  )}
+                                </>
+                              ) : (
+                                <div className="text-xs text-[var(--muted)]">Enable at least one standards set in Settings.</div>
+                              )}
+                              {standardsError ? (
+                                <div className="text-xs text-[var(--danger)]" role="alert">
+                                  {standardsError}
+                                </div>
+                              ) : null}
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={readonly || saving}
+                        onClick={() => setAddingQuestion(true)}
+                        className="w-full rounded-md border border-dashed border-[var(--border)] bg-transparent px-4 py-4 text-sm text-[var(--muted)] hover:border-[var(--primary)] hover:text-[var(--text)] disabled:opacity-50"
+                      >
+                        + Add Question to Bank
+                      </button>
+                    )}
+
+                  </CardContent>
+                </Card>
+              ) : null}
+
+              {step === 5 ? (
+                <Card className="border-[var(--border)] bg-[var(--surface)]/80 backdrop-blur-sm shadow-sm">
+                  <CardHeader>
+                    <CardTitle>Grading Rubrics</CardTitle>
+                    <CardDescription>Configure the rubrics for Reasoning and Evidence.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="space-y-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
+                        <h3 className="font-medium text-[var(--text)]">Reasoning Rubric</h3>
+                        <p className="text-xs text-[var(--muted)]">Evaluates the logic and coherence of the answer.</p>
+                        <div className="flex flex-col gap-2">
+                          <Button type="button" variant="secondary" className="justify-start">Standard Reasoning</Button>
+                          <Button type="button" variant="ghost" className="justify-start text-[var(--muted)]">Custom...</Button>
+                        </div>
+                      </div>
+                      <div className="space-y-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
+                        <h3 className="font-medium text-[var(--text)]">Evidence Rubric</h3>
+                        <p className="text-xs text-[var(--muted)]">Evaluates the use of facts and citations.</p>
+                        <div className="flex flex-col gap-2">
+                          <Button type="button" variant="secondary" className="justify-start">Standard Evidence</Button>
+                          <Button type="button" variant="ghost" className="justify-start text-[var(--muted)]">Custom...</Button>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between gap-3 pt-4 border-t border-[var(--border)]">
+                      <Button type="button" variant="secondary" onClick={() => goToStep(4)}>← Back</Button>
+                      <Button type="button" onClick={() => goToStep(6)}>Continue →</Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : null}
+
+              {step === 6 ? (
+                <Card className="border-[var(--border)] bg-[var(--surface)]/80 backdrop-blur-sm shadow-sm ring-1 ring-[var(--primary)]/20">
+                  <CardHeader>
+                    <CardTitle>Final Preview</CardTitle>
+                    <CardDescription>This is how the assessment will appear to students on mobile/desktop.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="relative mx-auto aspect-[9/16] max-w-sm overflow-hidden rounded-[2rem] border-4 border-zinc-800 bg-black shadow-2xl md:aspect-[4/3] md:max-w-full md:rounded-xl md:border">
+                      <div className="absolute inset-0 bg-white">
+                        <iframe
+                          src={studentPreviewUrl}
+                          className="h-full w-full border-0"
+                          title="Student Preview"
+                        />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : null}
             </div>
+
+            {step === 6 ? (
+              <div className="space-y-4">
+                <div className="sticky top-6 space-y-4">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Integrity Shields</CardTitle>
+                      <CardDescription>Review settings before publishing.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <div className="flex items-center gap-2 text-sm font-medium text-[var(--text)]">
+                            <span>Pausing Guardrail</span>
+                            <span
+                              className="cursor-help text-xs text-[var(--muted)]"
+                              title="Flags long pauses (silence) while the student is responding."
+                            >
+                              (?)
+                            </span>
+                          </div>
+                          <div className="text-xs text-[var(--muted)]">Flag silence &gt; 2.5s</div>
+                        </div>
+                        <Switch
+                          checked={pausingEnabled}
+                          onCheckedChange={(checked) =>
+                            updateIntegrity({ pause_threshold_seconds: checked ? 2.5 : null })
+                          }
+                          disabled={saving || readonly}
+                          aria-label="Pausing Guardrail"
+                        />
+                      </div>
+
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <div className="flex items-center gap-2 text-sm font-medium text-[var(--text)]">
+                            <span>Focus Monitor</span>
+                            <span
+                              className="cursor-help text-xs text-[var(--muted)]"
+                              title="Tracks when students switch tabs or leave the assessment."
+                            >
+                              (?)
+                            </span>
+                          </div>
+                          <div className="text-xs text-[var(--muted)]">Track browser tab switching</div>
+                        </div>
+                        <Switch
+                          checked={integrity.tab_switch_monitor}
+                          onCheckedChange={(checked) => updateIntegrity({ tab_switch_monitor: checked })}
+                          disabled={saving || readonly}
+                          aria-label="Focus Monitor"
+                        />
+                      </div>
+
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <div className="flex items-center gap-2 text-sm font-medium text-[var(--text)]">
+                            <span>Dynamic Shuffle</span>
+                            <span
+                              className="cursor-help text-xs text-[var(--muted)]"
+                              title="Randomizes question order per student to reduce sharing answers."
+                            >
+                              (?)
+                            </span>
+                          </div>
+                          <div className="text-xs text-[var(--muted)]">Randomize question order</div>
+                        </div>
+                        <Switch
+                          checked={integrity.shuffle_questions}
+                          onCheckedChange={(checked) => updateIntegrity({ shuffle_questions: checked })}
+                          disabled={saving || readonly}
+                          aria-label="Dynamic Shuffle"
+                        />
+                      </div>
+
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <div className="flex items-center gap-2 text-sm font-medium text-[var(--text)]">
+                            <span>Grace Restart</span>
+                            <span
+                              className="cursor-help text-xs text-[var(--muted)]"
+                              title="Allows one restart if a student pauses too long before speaking or gives an off-topic response."
+                            >
+                              (?)
+                            </span>
+                          </div>
+                          <div className="text-xs text-[var(--muted)]">Allow a single restart per student</div>
+                        </div>
+                        <Switch
+                          checked={integrity.allow_grace_restart}
+                          onCheckedChange={(checked) => updateIntegrity({ allow_grace_restart: checked })}
+                          disabled={saving || readonly}
+                          aria-label="Grace Restart"
+                        />
+                      </div>
+
+                      <div className="border-t border-[var(--border)] pt-4">
+                        <div className="flex items-start justify-between gap-4">
+                          <div>
+                            <div className="flex items-center gap-2 text-sm font-medium text-[var(--text)]">
+                              <span>Academic Integrity Pledge</span>
+                              <span
+                                className="cursor-help text-xs text-[var(--muted)]"
+                                title="Shows a pledge modal before the student can start the assessment."
+                              >
+                                (?)
+                              </span>
+                            </div>
+                            <div className="text-xs text-[var(--muted)]">Require students to agree before seeing questions</div>
+                          </div>
+                          <Switch
+                            checked={integrity.pledge_enabled}
+                            onCheckedChange={(checked) => updateIntegrity({ pledge_enabled: checked })}
+                            disabled={saving || readonly}
+                            aria-label="Academic Integrity Pledge"
+                          />
+                        </div>
+
+                        {integrity.pledge_enabled ? (
+                          <div className="mt-3 space-y-2">
+                            <Label>Pledge text (optional)</Label>
+                            <textarea
+                              className="min-h-[120px] w-full resize-y rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--muted)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
+                              value={pledgeDraft}
+                              onChange={(e) => setPledgeDraft(e.target.value)}
+                              onBlur={() => updateIntegrity({ pledge_text: pledgeDraft.trim() ? pledgeDraft : null })}
+                              placeholder={[
+                                "I have studied the material and am ready to demonstrate my understanding.",
+                                "I will not use notes, websites, or other people during this assessment.",
+                                "I understand this assessment measures what I know, not what I can look up.",
+                                "My responses will be in my own words based on my learning.",
+                              ].join("\n")}
+                              disabled={saving || readonly}
+                            />
+                            <div className="text-xs text-[var(--muted)]">Leave blank to use the default pledge.</div>
+                          </div>
+                        ) : null}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Recording Limits</CardTitle>
+                      <CardDescription>Global response timers.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <div className="space-y-2">
+                        <Label>Recording limit</Label>
+                        <select
+                          className="h-10 w-full rounded-md border bg-[var(--surface)] px-3 text-sm text-[var(--text)] border-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
+                          value={integrity.recording_limit_seconds}
+                          onChange={(e) => updateIntegrity({ recording_limit_seconds: Number(e.target.value) })}
+                          disabled={saving || readonly}
+                        >
+                          {[30, 60, 90, 120, 180].map((v) => (
+                            <option key={v} value={v}>
+                              {v}s
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Viewing timer (Retell)</Label>
+                        <select
+                          className="h-10 w-full rounded-md border bg-[var(--surface)] px-3 text-sm text-[var(--text)] border-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
+                          value={integrity.viewing_timer_seconds}
+                          onChange={(e) => updateIntegrity({ viewing_timer_seconds: Number(e.target.value) })}
+                          disabled={saving || readonly}
+                        >
+                          {[10, 15, 20, 30].map((v) => (
+                            <option key={v} value={v}>
+                              {v}s
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              </div>
+            ) : null}
           </div>
-        ) : null}
+        </div>
       </div>
     </div>
   );

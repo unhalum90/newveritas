@@ -45,48 +45,48 @@ export default async function DashboardPage() {
   const assessmentIds = assessments?.map((a) => a.id) ?? [];
   const { count: pendingReviewCount } = assessmentIds.length
     ? await supabase
-        .from("submissions")
-        .select("id", { count: "exact", head: true })
-        .in("assessment_id", assessmentIds)
-        .eq("status", "submitted")
-        .neq("review_status", "published")
+      .from("submissions")
+      .select("id", { count: "exact", head: true })
+      .in("assessment_id", assessmentIds)
+      .eq("status", "submitted")
+      .neq("review_status", "published")
     : { count: 0 };
 
   const { count: submittedCount } = assessmentIds.length
     ? await supabase
-        .from("submissions")
-        .select("id", { count: "exact", head: true })
-        .in("assessment_id", assessmentIds)
-        .eq("status", "submitted")
+      .from("submissions")
+      .select("id", { count: "exact", head: true })
+      .in("assessment_id", assessmentIds)
+      .eq("status", "submitted")
     : { count: 0 };
 
   const { count: completedCount } = assessmentIds.length
     ? await supabase
-        .from("submissions")
-        .select("id", { count: "exact", head: true })
-        .in("assessment_id", assessmentIds)
-        .eq("status", "submitted")
-        .eq("review_status", "published")
+      .from("submissions")
+      .select("id", { count: "exact", head: true })
+      .in("assessment_id", assessmentIds)
+      .eq("status", "submitted")
+      .eq("review_status", "published")
     : { count: 0 };
 
   const { data: recentSubmissions } = assessmentIds.length
     ? await supabase
-        .from("submissions")
-        .select(
-          "assessment_id, student_id, submitted_at, created_at, review_status, assessments(title, class_id), students(first_name, last_name)",
-        )
-        .in("assessment_id", assessmentIds)
-        .order("submitted_at", { ascending: false })
-        .limit(5)
+      .from("submissions")
+      .select(
+        "assessment_id, student_id, submitted_at, created_at, review_status, assessments(title, class_id), students(first_name, last_name)",
+      )
+      .in("assessment_id", assessmentIds)
+      .order("submitted_at", { ascending: false })
+      .limit(5)
     : { data: [] };
 
   const { data: activitySubmissions } = assessmentIds.length
     ? await supabase
-        .from("submissions")
-        .select("assessment_id, submitted_at, created_at, assessments(class_id)")
-        .in("assessment_id", assessmentIds)
-        .order("submitted_at", { ascending: false })
-        .limit(100)
+      .from("submissions")
+      .select("assessment_id, submitted_at, created_at, assessments(class_id)")
+      .in("assessment_id", assessmentIds)
+      .order("submitted_at", { ascending: false })
+      .limit(100)
     : { data: [] };
 
   const studentCountByClass = new Map<string, number>();
@@ -128,162 +128,178 @@ export default async function DashboardPage() {
       ? new Date(value).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
       : "-";
 
+  // Get user name for greeting
+  const displayName = data.user.user_metadata?.full_name || data.user.user_metadata?.first_name || "Teacher";
+
+  // Time-of-day greeting
+  const hour = new Date().getHours();
+  // Note: This is server time, which is imperfect but acceptable for MVP. 
+  // Ideally this would be a client component or use user's timezone.
+  const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-[var(--text)]">Dashboard</h1>
+    <div className="relative min-h-[calc(100vh-4rem)] space-y-8 pb-10">
+      {/* Sparkle background effect - subtle radial gradient */}
+      <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-indigo-50/50 via-white to-white dark:from-indigo-950/20 dark:via-background dark:to-background" />
+
+      {/* Header Section */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="space-y-1">
+          <h1 className="text-3xl font-light tracking-tight text-[var(--text)] sm:text-4xl">
+            {greeting}, <span className="font-semibold text-transparent bg-clip-text bg-gradient-to-r from-[var(--primary)] to-indigo-500">{displayName}</span>
+          </h1>
+          <p className="text-[var(--muted)]">Here's what's happening in your workspace today.</p>
         </div>
         <Link href="/classes/new" data-tour="create-class">
-          <Button type="button">+ Create Class</Button>
+          <Button type="button" className="bg-gradient-to-r from-[var(--primary)] to-teal-600 shadow-lg shadow-teal-700/20 hover:shadow-teal-700/30 hover:-translate-y-0.5 transition-all duration-300">
+            + Create Class
+          </Button>
         </Link>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-1" data-tour="dashboard-stats">
-          <CardHeader>
-            <CardTitle>Quick stats</CardTitle>
-            <CardDescription>Snapshot of your workspace activity.</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-3">
-            <div className="flex items-center justify-between rounded-md border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
-              <div className="text-sm text-[var(--muted)]">Total students</div>
-              <div className="text-lg font-semibold text-[var(--text)]">{totalStudents}</div>
+      {/* Stats Grid */}
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+        {[
+          { label: "Total Students", value: totalStudents, color: "text-blue-600", bg: "bg-blue-50 dark:bg-blue-950/30" },
+          { label: "Active Assessments", value: activeAssessments, color: "text-emerald-600", bg: "bg-emerald-50 dark:bg-emerald-950/30" },
+          { label: "Pending Reviews", value: pendingReviewCount ?? 0, color: "text-amber-600", bg: "bg-amber-50 dark:bg-amber-950/30" },
+          { label: "Completion Rate", value: completionRate === null ? "—" : `${completionRate}%`, color: "text-purple-600", bg: "bg-purple-50 dark:bg-purple-950/30" },
+        ].map((stat) => (
+          <div key={stat.label} className="group relative overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg hover:shadow-gray-200/50 dark:hover:shadow-black/50">
+            <div className={`absolute -right-4 -top-4 h-24 w-24 rounded-full ${stat.bg} opacity-50 blur-2xl transition-all group-hover:scale-150 group-hover:opacity-100`} />
+            <div className="relative">
+              <div className="text-sm font-medium text-[var(--muted)]">{stat.label}</div>
+              <div className={`mt-2 text-3xl font-light ${stat.color}`}>{stat.value}</div>
             </div>
-            <div className="flex items-center justify-between rounded-md border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
-              <div className="text-sm text-[var(--muted)]">Active assessments</div>
-              <div className="text-lg font-semibold text-[var(--text)]">{activeAssessments}</div>
-            </div>
-            <div className="flex items-center justify-between rounded-md border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
-              <div className="text-sm text-[var(--muted)]">Pending reviews</div>
-              <div className="text-lg font-semibold text-[var(--text)]">{pendingReviewCount ?? 0}</div>
-            </div>
-            <div className="flex items-center justify-between rounded-md border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
-              <div className="text-sm text-[var(--muted)]">Completion rate</div>
-              <div className="text-lg font-semibold text-[var(--text)]">
-                {completionRate === null ? "—" : `${completionRate}%`}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+          </div>
+        ))}
+      </div>
 
-        <Card className="lg:col-span-2">
+      <div className="grid gap-6 lg:grid-cols-3">
+        {/* Recent Activity */}
+        <Card className="border-0 bg-[var(--surface)]/50 shadow-sm backdrop-blur-sm lg:col-span-2">
           <CardHeader>
-            <CardTitle>Recent activity</CardTitle>
-            <CardDescription>Latest student submissions.</CardDescription>
+            <CardTitle>Recent Activity</CardTitle>
+            <CardDescription>Latest submissions from your students.</CardDescription>
           </CardHeader>
           <CardContent>
             {!recentSubmissions?.length ? (
-              <div className="text-sm text-[var(--muted)]">No submissions yet.</div>
+              <div className="flex h-32 flex-col items-center justify-center rounded-lg border border-dashed border-[var(--border)] bg-gray-50/50 dark:bg-gray-900/10">
+                <p className="text-sm text-[var(--muted)]">No submissions yet.</p>
+              </div>
             ) : (
-              <div className="space-y-3">
+              <div className="divide-y divide-[var(--border)] rounded-lg border border-[var(--border)] bg-[var(--surface)] overflow-hidden">
                 {recentSubmissions.map((submission) => {
                   const assessment = pickSingle(submission.assessments);
                   const student = pickSingle(submission.students);
                   return (
-                  <div
-                    key={`${submission.assessment_id}-${submission.student_id}-${submission.submitted_at ?? submission.created_at ?? ""}`}
-                    className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm"
-                  >
-                    <div>
-                      <div className="font-medium text-[var(--text)]">{assessment?.title ?? "Assessment"}</div>
-                      <div className="text-xs text-[var(--muted)]">
-                        {student?.first_name ?? "Student"} {student?.last_name ?? ""}
+                    <div
+                      key={`${submission.assessment_id}-${submission.student_id}-${submission.submitted_at ?? submission.created_at ?? ""}`}
+                      className="group flex items-center justify-between gap-4 p-4 transition-colors hover:bg-gray-50 dark:hover:bg-gray-900/20"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-indigo-50 text-indigo-600 dark:bg-indigo-950/30 dark:text-indigo-400">
+                          {student?.first_name?.[0] ?? "S"}
+                        </div>
+                        <div>
+                          <div className="font-medium text-[var(--text)]">{assessment?.title ?? "Assessment"}</div>
+                          <div className="text-xs text-[var(--muted)]">
+                            {student?.first_name ?? "Student"} {student?.last_name ?? ""}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${submission.review_status === "published"
+                          ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
+                          : "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400"
+                          }`}>
+                          {submission.review_status === "published" ? "Reviewed" : "Pending"}
+                        </span>
+                        <div className="mt-1 text-xs text-[var(--muted)]">
+                          {formatTimestamp(submission.submitted_at ?? submission.created_at)}
+                        </div>
                       </div>
                     </div>
-                    <div className="text-xs text-[var(--muted)]">
-                      {submission.review_status === "published" ? "Reviewed" : "Awaiting review"} -{" "}
-                      {formatTimestamp(submission.submitted_at ?? submission.created_at)}
-                    </div>
-                  </div>
                   );
                 })}
               </div>
             )}
           </CardContent>
         </Card>
-      </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Getting started</CardTitle>
-          <CardDescription>Complete the basics to unlock the full workflow.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-2 text-sm">
-          <div className="flex items-center justify-between">
-            <span>Create your first class</span>
-            <span className="text-[var(--muted)]">{hasClasses ? "Done" : "Pending"}</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span>Add students to a class</span>
-            <span className="text-[var(--muted)]">{totalStudents > 0 ? "Done" : "Pending"}</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span>Create an assessment</span>
-            <span className="text-[var(--muted)]">{totalAssessments > 0 ? "Done" : "Pending"}</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span>Publish to a class</span>
-            <span className="text-[var(--muted)]">{activeAssessments > 0 ? "Done" : "Pending"}</span>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Classes</CardTitle>
-          {!hasClasses ? (
-            <CardDescription>Set up your first class to begin preparing assessments.</CardDescription>
-          ) : null}
-        </CardHeader>
-        <CardContent>
-          {classesError ? (
-            <div className="rounded-md border border-dashed border-[var(--border)] bg-[var(--surface)] p-6 text-sm text-[var(--muted)]">
-              We couldn&apos;t load your classes right now. Try refreshing, or check{" "}
-              <Link href="/classes" className="text-[var(--text)] hover:underline">
-                Classes
-              </Link>
-              .
-            </div>
-          ) : !hasClasses ? (
-            <div className="rounded-md border border-dashed border-[var(--border)] bg-[var(--surface)] p-6 text-sm text-[var(--muted)]">
-              Create your first class to begin preparing assessments.
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <div className="text-sm text-[var(--muted)]">
-                Recent classes (manage all in{" "}
-                <Link href="/classes" className="text-[var(--text)] hover:underline">
-                  Classes
-                </Link>
-                ).
-              </div>
-              <div className="space-y-2">
-                {classes?.map((c) => (
-                  <Link
-                    key={c.id}
-                    href={`/classes/${c.id}`}
-                    className="block rounded-md border border-[var(--border)] bg-[var(--surface)] p-4 hover:border-[var(--primary)]"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="text-sm font-semibold text-[var(--text)]">{c.name}</div>
-                      <span className="text-xs text-[var(--muted)]">View</span>
-                    </div>
-                    <div className="mt-1 text-xs text-[var(--muted)]">
-                      {c.access_mode === "code" ? "Code access" : c.access_mode.toUpperCase()} -{" "}
-                      {studentCountByClass.get(c.id) ?? 0} students - {liveAssessmentCountByClass.get(c.id) ?? 0} live
-                      assessments
-                    </div>
-                    <div className="mt-1 text-xs text-[var(--muted)]">
-                      Last activity: {formatTimestamp(lastActivityByClass.get(c.id) ?? c.created_at)}
-                    </div>
+        {/* Classes Column */}
+        <div className="space-y-6">
+          <Card className="border-[var(--border)] bg-gradient-to-br from-[var(--surface)] to-gray-50/50 dark:to-gray-900/20">
+            <CardHeader>
+              <CardTitle>Classes</CardTitle>
+              {!hasClasses && (
+                <CardDescription>Setup your classes to get started.</CardDescription>
+              )}
+            </CardHeader>
+            <CardContent>
+              {classesError ? (
+                <div className="text-sm text-red-500">Failed to load classes.</div>
+              ) : !hasClasses ? (
+                <div className="text-center py-6">
+                  <p className="text-sm text-[var(--muted)] mb-4">No classes yet.</p>
+                  <Link href="/classes/new">
+                    <Button variant="secondary" size="sm">Create First Class</Button>
                   </Link>
-                ))}
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {classes?.map((c) => (
+                    <Link
+                      key={c.id}
+                      href={`/classes/${c.id}`}
+                      className="group block rounded-lg border border-[var(--border)] bg-[var(--surface)] p-4 transition-all hover:border-indigo-200 hover:shadow-md dark:hover:border-indigo-800"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="font-medium text-[var(--text)] group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                          {c.name}
+                        </div>
+                        <div className="h-2 w-2 rounded-full bg-green-500" />
+                      </div>
+                      <div className="mt-2 text-xs text-[var(--muted)] flex items-center gap-2">
+                        <span>{studentCountByClass.get(c.id) ?? 0} Students</span>
+                        <span>•</span>
+                        <span>{liveAssessmentCountByClass.get(c.id) ?? 0} Live</span>
+                      </div>
+                    </Link>
+                  ))}
+                  <Link href="/classes" className="inline-block text-sm text-[var(--muted)] hover:text-[var(--primary)] transition-colors">
+                    View all classes →
+                  </Link>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Quick Actions / Getting Started */}
+          <Card className={`${totalAssessments > 0 && activeAssessments > 0 ? 'bg-[var(--surface)]' : 'bg-gradient-to-br from-indigo-50 to-white dark:from-indigo-950/20 dark:to-background border-indigo-100 dark:border-indigo-900'}`}>
+            <CardHeader>
+              <CardTitle className="text-base">Getting Started</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {[
+                { label: "Create class", done: hasClasses },
+                { label: "Add students", done: totalStudents > 0 },
+                { label: "Create assessment", done: totalAssessments > 0 },
+                { label: "Publish assessment", done: activeAssessments > 0 },
+              ].map((step, i) => (
+                <div key={step.label} className="flex items-center gap-3 text-sm">
+                  <div className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border ${step.done ? "border-green-600 bg-green-100 text-green-600 dark:bg-green-900/30" : "border-gray-300 bg-white text-gray-300 dark:bg-gray-800 dark:border-gray-700"}`} >
+                    {step.done ? "✓" : i + 1}
+                  </div>
+                  <span className={step.done ? "text-[var(--muted)] line-through opacity-70" : "font-medium text-[var(--text)]"}>
+                    {step.label}
+                  </span>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
     </div>
   );
 }

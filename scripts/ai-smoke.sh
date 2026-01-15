@@ -31,4 +31,11 @@ GEMINI_TEXT_MODEL="${GEMINI_TEXT_MODEL:-gemini-2.5-flash}"
 curl -sS "https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_TEXT_MODEL}:generateContent?key=${GOOGLE_API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{"contents":[{"role":"user","parts":[{"text":"Reply with exactly: OK"}]}]}' \
-  | head -n 80
+
+echo
+echo "== Gemini (API key) generateContent (Native Audio) =="
+GEMINI_TEXT_MODEL="${GEMINI_TEXT_MODEL:-gemini-3-flash}"
+echo "Note: This test uses a placeholder audio. Replace 'path/to/audio.mp3' with a real file to test."
+# Provide a command template for the user to copy/paste
+echo "Run this manually to test audio:"
+echo "base64 -i path/to/audio.mp3 | xargs -I {} curl -sS 'https://generativelanguage.googleapis.com/v1beta/models/\${GEMINI_TEXT_MODEL}:generateContent?key=\${GOOGLE_API_KEY}' -H 'Content-Type: application/json' -d '{\"contents\":[{\"role\":\"user\",\"parts\":[{\"text\":\"Transcribe this audio verbatim.\"},{\"inline_data\":{\"mime_type\":\"audio/mp3\",\"data\":\"{}\"}}]}]}'"

@@ -97,7 +97,7 @@ function getGeminiApiKeyHelp(message: string) {
 
 function getGeminiModelFallback(model: string) {
   // Some preview/Vertex-only models reject AI Studio API keys.
-  if (model.includes("preview") || model.includes("exp") || model.startsWith("gemini-3")) return "gemini-2.5-flash";
+  if (model.includes("preview") || model.includes("exp")) return "gemini-1.5-flash";
   return model;
 }
 
@@ -347,7 +347,7 @@ async function transcribeWithOpenAi(audioBytes: Buffer, mimeType: string, contex
 }
 
 async function transcribeWithGemini(audioBytes: Buffer, mimeType: string) {
-  const model = process.env.GEMINI_TRANSCRIBE_MODEL || process.env.GEMINI_TEXT_MODEL || "gemini-2.5-flash";
+  const model = process.env.GEMINI_TRANSCRIBE_MODEL || process.env.GEMINI_TEXT_MODEL || "gemini-3-flash-preview";
   const system = "You are a transcription engine. Return ONLY JSON: {\"transcript\": \"...\"}. No markdown.";
   const user = "Transcribe the audio verbatim. If unclear, do your best; do not invent content.";
   const b64 = audioBytes.toString("base64");
@@ -363,7 +363,15 @@ async function transcribeWithGemini(audioBytes: Buffer, mimeType: string) {
 }
 
 export async function transcribeAudio(audioBytes: Buffer, mimeType: string, context?: OpenAiLogContext) {
-  // Prefer OpenAI for transcription (most reliable with API keys).
+  // Priority to Gemini for native auditory intelligence if enabled.
+  if (isGeminiEnabled()) {
+    try {
+      return await transcribeWithGemini(audioBytes, mimeType);
+    } catch (e) {
+      console.error("Gemini transcription failed, falling back to OpenAI if available", e);
+    }
+  }
+
   if (process.env.OPENAI_API_KEY) return transcribeWithOpenAi(audioBytes, mimeType, context);
 
   if (!isGeminiEnabled()) {
@@ -403,6 +411,54 @@ function parseScoreOutput(data: unknown) {
   return {
     reasoning: { score: clampScore(rScore), justification: rJust.slice(0, 1000) },
     evidence: { score: clampScore(eScore), justification: eJust.slice(0, 1000) },
+  };
+}
+
+async function scoreWithGeminiNative(input: {
+  audioBytes: Buffer;
+  mimeType: string;
+  questionText: string;
+  rubricReasoning: string;
+  rubricEvidence: string;
+}) {
+  const model = process.env.GEMINI_SCORE_MODEL || process.env.GEMINI_TEXT_MODEL || "gemini-3-flash-preview";
+  const system =
+    "You are a strict grader. You will hear an audio response and evaluate it. Return ONLY JSON: {\"transcript\": \"...\", \"reasoning\": {\"score\": 1-5, \"justification\": \"...\"}, \"evidence\": {\"score\": 1-5, \"justification\": \"...\"}}";
+
+  const user = `Context for the response you are about to hear:
+Question:
+${input.questionText}
+
+Reasoning rubric instructions:
+${input.rubricReasoning}
+
+Evidence rubric instructions:
+${input.rubricEvidence}
+
+Rules:
+- First, transcribe the audio verbatim into the "transcript" field.
+- Then, provide a score 1-5 for each rubric based on the audio and transcription.
+- Justification must quote or reference specific parts of what was said.
+- If audio is silent or irrelevant, score 1 with clear explanation.`;
+
+  const b64 = input.audioBytes.toString("base64");
+  const data = await geminiGenerateJson(model, system, [
+    { text: user },
+    { inline_data: { mime_type: input.mimeType, data: b64 } },
+  ]);
+
+  const obj = data as {
+    transcript?: unknown;
+    reasoning?: { score?: unknown; justification?: unknown };
+    evidence?: { score?: unknown; justification?: unknown };
+  } | null;
+
+  if (typeof obj?.transcript !== "string") throw new Error("Gemini Native failed to return transcript.");
+
+  const scoring = parseScoreOutput(data);
+  return {
+    transcript: obj.transcript.trim(),
+    ...scoring,
   };
 }
 
@@ -448,7 +504,7 @@ async function scoreWithGemini(input: {
   rubricReasoning: string;
   rubricEvidence: string;
 }) {
-  const model = process.env.GEMINI_SCORE_MODEL || process.env.GEMINI_TEXT_MODEL || "gemini-2.5-flash";
+  const model = process.env.GEMINI_SCORE_MODEL || process.env.GEMINI_TEXT_MODEL || "gemini-3-flash-preview";
   const system =
     "You are a strict grader. Return ONLY JSON: reasoning{score,justification}, evidence{score,justification}. Scores are integers 1-5.";
 
@@ -585,6 +641,15 @@ export async function scoreSubmission(submissionId: string) {
     let errorCount = 0;
     let firstError: string | null = null;
 
+    const loadAudioBuffer = async (resp: (typeof responses)[number]): Promise<{ buf: Buffer; mime: string } | null> => {
+      const bucket = resp.storage_bucket || bucketFallback;
+      const { data: file, error: dlError } = await admin.storage.from(bucket).download(resp.storage_path);
+      if (dlError) return null;
+      const buf = Buffer.from(await file.arrayBuffer());
+      const mime = resp.mime_type || "audio/webm";
+      return { buf, mime };
+    };
+
     const loadTranscript = async (
       resp: (typeof responses)[number],
       questionId: string,
@@ -593,16 +658,14 @@ export async function scoreSubmission(submissionId: string) {
       let transcript = resp.transcript ?? "";
       if (transcript.trim()) return transcript;
 
-      const bucket = resp.storage_bucket || bucketFallback;
-      const { data: file, error: dlError } = await admin.storage.from(bucket).download(resp.storage_path);
-      if (dlError) {
+      const audio = await loadAudioBuffer(resp);
+      if (!audio) {
         if (optional) return null;
-        throw dlError;
+        throw new Error("Audio file missing.");
       }
-      const buf = Buffer.from(await file.arrayBuffer());
-      const mime = resp.mime_type || "audio/webm";
+
       try {
-        transcript = await transcribeAudio(buf, mime, {
+        transcript = await transcribeAudio(audio.buf, audio.mime, {
           operation: "transcription",
           assessmentId: submission.assessment_id,
           studentId: submission.student_id,
@@ -679,10 +742,36 @@ export async function scoreSubmission(submissionId: string) {
             }
           }
         }
-        if (process.env.OPENAI_API_KEY) {
+
+        // --- GEMINI NATIVE AUDIO PATH ---
+        if (isGeminiEnabled() && !isEvidenceFollowup(q.question_type)) {
+          const audio = await loadAudioBuffer(primaryResp);
+          if (audio) {
+            const nativeResult = await scoreWithGeminiNative({
+              audioBytes: audio.buf,
+              mimeType: audio.mime,
+              questionText,
+              rubricReasoning,
+              rubricEvidence,
+            });
+
+            // Update transcript in DB if it was missing/changed
+            if (!primaryResp.transcript || primaryResp.transcript !== nativeResult.transcript) {
+              await admin.from("submission_responses").update({ transcript: nativeResult.transcript }).eq("id", primaryResp.id);
+              transcript = nativeResult.transcript;
+            }
+
+            primary = {
+              reasoning: nativeResult.reasoning,
+              evidence: nativeResult.evidence,
+            };
+          } else {
+            throw new Error("Unable to load audio for native scoring.");
+          }
+        } else if (process.env.OPENAI_API_KEY) {
           primary = await scoreWithOpenAi({
             questionText,
-            transcript: scoringTranscript,
+            transcript: stripPauseMarkers(transcript),
             rubricReasoning,
             rubricEvidence,
             context: {
@@ -700,8 +789,8 @@ export async function scoreSubmission(submissionId: string) {
             );
           }
           primary = await scoreWithGemini({
-            questionText: q.question_text,
-            transcript: scoringTranscript,
+            questionText,
+            transcript: stripPauseMarkers(transcript),
             rubricReasoning,
             rubricEvidence,
           });
@@ -720,7 +809,7 @@ export async function scoreSubmission(submissionId: string) {
         (process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_KEY)
       ) {
         try {
-          const reviewModel = process.env.GEMINI_REVIEW_MODEL || "gemini-2.5-flash";
+          const reviewModel = process.env.GEMINI_REVIEW_MODEL || "gemini-3-flash-preview";
           const system =
             "You are a strict grading reviewer. Return ONLY JSON: reasoning{score,justification}, evidence{score,justification}. Scores are integers 1-5.";
           const user = `Review the following grading and correct if needed.

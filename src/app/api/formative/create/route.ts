@@ -16,6 +16,11 @@ interface CreateFormativeRequest {
     learningTarget?: string;
     maxTurns?: number;
     difficulty?: "supportive" | "standard" | "challenge";
+    // Feedback visibility
+    showScoreToStudent?: boolean;
+    showSummaryToStudent?: boolean;
+    showStrengthsToStudent?: boolean;
+    showWeaknessesToStudent?: boolean;
 }
 
 export async function POST(request: NextRequest) {
@@ -51,6 +56,11 @@ export async function POST(request: NextRequest) {
                 due_at: body.dueAt,
                 status: body.status,
                 type: body.type || "pulse",
+                // Feedback visibility (default to true if not provided)
+                show_score_to_student: body.showScoreToStudent ?? true,
+                show_summary_to_student: body.showSummaryToStudent ?? true,
+                show_strengths_to_student: body.showStrengthsToStudent ?? true,
+                show_weaknesses_to_student: body.showWeaknessesToStudent ?? true,
             })
             .select("id")
             .single();

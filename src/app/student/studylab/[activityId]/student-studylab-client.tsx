@@ -10,6 +10,11 @@ interface Activity {
     title: string;
     prompt_template?: string;
     max_turns?: number;
+    // Feedback visibility settings (default to true for backwards compatibility)
+    show_score_to_student?: boolean;
+    show_summary_to_student?: boolean;
+    show_strengths_to_student?: boolean;
+    show_weaknesses_to_student?: boolean;
 }
 
 interface Student {
@@ -62,9 +67,23 @@ export function StudentStudylabClient({ activity, student, initialSubmission }: 
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     // TTS State
-    // TTS State
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const [isPlaying, setIsPlaying] = useState(false);
+    const [isMuted, setIsMuted] = useState(false);
+
+    // Load mute preference
+    useEffect(() => {
+        const saved = localStorage.getItem("studylab_muted");
+        if (saved === "true") setIsMuted(true);
+    }, []);
+
+    // Save mute preference
+    const toggleMute = () => {
+        const newMuted = !isMuted;
+        setIsMuted(newMuted);
+        localStorage.setItem("studylab_muted", String(newMuted));
+        if (newMuted) stopSpeaking();
+    };
 
     // Initialize Audio on mount
     useEffect(() => {
@@ -84,7 +103,7 @@ export function StudentStudylabClient({ activity, student, initialSubmission }: 
     }
 
     const speakText = async (text: string) => {
-        if (!audioRef.current) return;
+        if (!audioRef.current || isMuted) return;
 
         try {
             stopSpeaking();
@@ -324,7 +343,8 @@ export function StudentStudylabClient({ activity, student, initialSubmission }: 
                                 <CardTitle className="flex items-center gap-2">
                                     <span>🤖</span> AI Assessment
                                 </CardTitle>
-                                {grading.score && (
+                                {/* Show score only if enabled (default true for backwards compat) */}
+                                {(activity.show_score_to_student !== false) && grading.score && (
                                     <div className={`px-4 py-1 rounded-full text-sm font-bold bg-white shadow-sm
                                         ${grading.score >= 3 ? 'text-green-700' :
                                             grading.score === 2 ? 'text-yellow-700' : 'text-red-700'}`}>
@@ -333,25 +353,41 @@ export function StudentStudylabClient({ activity, student, initialSubmission }: 
                                 )}
                             </CardHeader>
                             <CardContent className="space-y-4">
-                                <p className="text-zinc-800 leading-relaxed">{grading.summary}</p>
+                                {/* Show summary only if enabled */}
+                                {(activity.show_summary_to_student !== false) && grading.summary && (
+                                    <p className="text-zinc-800 leading-relaxed">{grading.summary}</p>
+                                )}
                                 <div className="grid md:grid-cols-2 gap-4">
-                                    <div>
-                                        <h4 className="font-semibold text-green-700 mb-2">Strengths</h4>
-                                        <ul className="list-disc list-inside text-sm text-zinc-700 space-y-1">
-                                            {grading.feedback?.strengths?.map((s: string, i: number) => (
-                                                <li key={i}>{s}</li>
-                                            ))}
-                                        </ul>
-                                    </div>
-                                    <div>
-                                        <h4 className="font-semibold text-amber-700 mb-2">Focus Areas</h4>
-                                        <ul className="list-disc list-inside text-sm text-zinc-700 space-y-1">
-                                            {grading.feedback?.improvements?.map((s: string, i: number) => (
-                                                <li key={i}>{s}</li>
-                                            ))}
-                                        </ul>
-                                    </div>
+                                    {/* Show strengths only if enabled */}
+                                    {(activity.show_strengths_to_student !== false) && grading.feedback?.strengths && grading.feedback.strengths.length > 0 && (
+                                        <div>
+                                            <h4 className="font-semibold text-green-700 mb-2">Strengths</h4>
+                                            <ul className="list-disc list-inside text-sm text-zinc-700 space-y-1">
+                                                {grading.feedback.strengths.map((s: string, i: number) => (
+                                                    <li key={i}>{s}</li>
+                                                ))}
+                                            </ul>
+                                        </div>
+                                    )}
+                                    {/* Show focus areas only if enabled */}
+                                    {(activity.show_weaknesses_to_student !== false) && grading.feedback?.improvements && grading.feedback.improvements.length > 0 && (
+                                        <div>
+                                            <h4 className="font-semibold text-amber-700 mb-2">Focus Areas</h4>
+                                            <ul className="list-disc list-inside text-sm text-zinc-700 space-y-1">
+                                                {grading.feedback.improvements.map((s: string, i: number) => (
+                                                    <li key={i}>{s}</li>
+                                                ))}
+                                            </ul>
+                                        </div>
+                                    )}
                                 </div>
+                                {/* If no feedback sections are visible, show a minimal message */}
+                                {(activity.show_score_to_student === false) &&
+                                    (activity.show_summary_to_student === false) &&
+                                    (activity.show_strengths_to_student === false) &&
+                                    (activity.show_weaknesses_to_student === false) && (
+                                        <p className="text-zinc-500 italic text-center">Session completed. Your teacher will provide feedback.</p>
+                                    )}
                             </CardContent>
                         </Card>
                     )}
@@ -418,14 +454,40 @@ export function StudentStudylabClient({ activity, student, initialSubmission }: 
                                         {activity.title}
                                     </CardDescription>
                                 </div>
-                                <Button
-                                    variant="secondary"
-                                    size="sm"
-                                    onClick={() => setShowNotes(!showNotes)}
-                                    className="text-xs"
-                                >
-                                    {showNotes ? "Hide Notes" : "View Notes 📝"}
-                                </Button>
+                                <div className="flex items-center gap-2">
+                                    <Button
+                                        variant="secondary"
+                                        size="sm"
+                                        onClick={toggleMute}
+                                        className="text-xs"
+                                        title={isMuted ? "Unmute" : "Mute"}
+                                    >
+                                        {isMuted ? "🔇" : "🔊"}
+                                    </Button>
+                                    <Button
+                                        variant="secondary"
+                                        size="sm"
+                                        onClick={() => setShowNotes(!showNotes)}
+                                        className="text-xs"
+                                    >
+                                        {showNotes ? "Hide Notes" : "View Notes 📝"}
+                                    </Button>
+                                    {/* End Session moved to header for better mobile UX */}
+                                    {!isComplete && (
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="text-xs text-zinc-400 hover:text-red-500 hover:bg-red-50"
+                                            onClick={() => {
+                                                if (confirm("Are you sure you want to end this session early? Your progress will be saved.")) {
+                                                    setIsComplete(true);
+                                                }
+                                            }}
+                                        >
+                                            End Early
+                                        </Button>
+                                    )}
+                                </div>
                             </div>
                             {/* Progress Bar */}
                             <div className="w-full bg-zinc-100 h-1 mt-2 rounded-full overflow-hidden">
@@ -498,23 +560,9 @@ export function StudentStudylabClient({ activity, student, initialSubmission }: 
                                         </Button>
                                     </div>
                                     <div className="flex items-center gap-8 w-full justify-center">
-                                        <p className="text-sm text-zinc-500 font-medium w-24 text-center">
-                                            {isProcessing ? "Processing" : isRecording ? "Tap to Stop" : "Tap to Speak"}
+                                        <p className="text-sm text-zinc-500 font-medium text-center">
+                                            {isProcessing ? "Processing..." : isRecording ? "Tap to Stop" : "Tap to Speak"}
                                         </p>
-                                    </div>
-
-                                    {/* Early Exit Actions */}
-                                    <div className="flex gap-4 mt-2">
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            className="text-red-500 hover:text-red-600 hover:bg-red-50"
-                                            onClick={() => {
-                                                if (confirm("End session early?")) setIsComplete(true);
-                                            }}
-                                        >
-                                            End Session
-                                        </Button>
                                     </div>
                                 </div>
                             ) : (

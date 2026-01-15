@@ -25,7 +25,7 @@ export default async function StudyLabAnalyticsPage({ params }: Props) {
         .eq("id", activityId)
         .maybeSingle();
 
-    if (!activity || activity.teacher_id !== user.id) redirect("/studylab");
+    if (!activity || activity.teacher_id !== user.id) redirect("/activities/studylab");
 
     // Fetch Submissions
     const { data: submissions } = await supabase
@@ -82,7 +82,7 @@ export default async function StudyLabAnalyticsPage({ params }: Props) {
                     <h1 className="text-2xl font-semibold text-[var(--text)]">Class Analytics</h1>
                     <p className="text-[var(--muted)]">Activity: {activity.title}</p>
                 </div>
-                <Link href={`/studylab/${activityId}/review`}>
+                <Link href={`/activities/studylab/${activityId}/review`}>
                     <Button variant="secondary">Back to Review</Button>
                 </Link>
             </div>

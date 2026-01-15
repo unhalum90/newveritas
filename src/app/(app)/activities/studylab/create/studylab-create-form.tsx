@@ -30,6 +30,12 @@ export function StudyLabCreateForm({ teacherId, classes }: Props) {
     const [dueTime, setDueTime] = useState("");
     const [selectedClassIds, setSelectedClassIds] = useState<string[]>([]);
 
+    // Feedback visibility settings
+    const [showScoreToStudent, setShowScoreToStudent] = useState(true);
+    const [showSummaryToStudent, setShowSummaryToStudent] = useState(true);
+    const [showStrengthsToStudent, setShowStrengthsToStudent] = useState(true);
+    const [showWeaknessesToStudent, setShowWeaknessesToStudent] = useState(true);
+
     const handleClassToggle = (classId: string) => {
         setSelectedClassIds((prev) =>
             prev.includes(classId)
@@ -80,7 +86,12 @@ export function StudyLabCreateForm({ teacherId, classes }: Props) {
                     dueAt,
                     status: publishNow ? "live" : "draft",
                     classIds: publishNow ? selectedClassIds : [],
-                    type: "studylab", // Distinct type
+                    type: "studylab",
+                    // Feedback visibility
+                    showScoreToStudent,
+                    showSummaryToStudent,
+                    showStrengthsToStudent,
+                    showWeaknessesToStudent,
                 }),
             });
 
@@ -204,6 +215,69 @@ export function StudyLabCreateForm({ teacherId, classes }: Props) {
                             />
                         </div>
                     </div>
+                </CardContent>
+            </Card>
+
+            {/* Student Feedback Settings */}
+            <Card>
+                <CardHeader>
+                    <CardTitle>Student Feedback Settings</CardTitle>
+                    <p className="text-sm text-[var(--muted)]">
+                        Choose what parts of the AI feedback students will see after completing their session.
+                    </p>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <label className="flex items-center justify-between p-3 rounded-md border border-[var(--border)] hover:bg-[var(--surface)]/50 cursor-pointer">
+                        <div>
+                            <span className="font-medium text-sm">Score</span>
+                            <p className="text-xs text-[var(--muted)]">Show the AI-assigned score (1-4)</p>
+                        </div>
+                        <input
+                            type="checkbox"
+                            checked={showScoreToStudent}
+                            onChange={(e) => setShowScoreToStudent(e.target.checked)}
+                            className="h-5 w-5 rounded border-gray-300 text-[var(--primary)] focus:ring-[var(--primary)]"
+                        />
+                    </label>
+
+                    <label className="flex items-center justify-between p-3 rounded-md border border-[var(--border)] hover:bg-[var(--surface)]/50 cursor-pointer">
+                        <div>
+                            <span className="font-medium text-sm">Summary</span>
+                            <p className="text-xs text-[var(--muted)]">Show the AI's overall assessment summary</p>
+                        </div>
+                        <input
+                            type="checkbox"
+                            checked={showSummaryToStudent}
+                            onChange={(e) => setShowSummaryToStudent(e.target.checked)}
+                            className="h-5 w-5 rounded border-gray-300 text-[var(--primary)] focus:ring-[var(--primary)]"
+                        />
+                    </label>
+
+                    <label className="flex items-center justify-between p-3 rounded-md border border-[var(--border)] hover:bg-[var(--surface)]/50 cursor-pointer">
+                        <div>
+                            <span className="font-medium text-sm">Strengths</span>
+                            <p className="text-xs text-[var(--muted)]">Show what the student did well</p>
+                        </div>
+                        <input
+                            type="checkbox"
+                            checked={showStrengthsToStudent}
+                            onChange={(e) => setShowStrengthsToStudent(e.target.checked)}
+                            className="h-5 w-5 rounded border-gray-300 text-[var(--primary)] focus:ring-[var(--primary)]"
+                        />
+                    </label>
+
+                    <label className="flex items-center justify-between p-3 rounded-md border border-[var(--border)] hover:bg-[var(--surface)]/50 cursor-pointer">
+                        <div>
+                            <span className="font-medium text-sm">Focus Areas</span>
+                            <p className="text-xs text-[var(--muted)]">Show areas for improvement</p>
+                        </div>
+                        <input
+                            type="checkbox"
+                            checked={showWeaknessesToStudent}
+                            onChange={(e) => setShowWeaknessesToStudent(e.target.checked)}
+                            className="h-5 w-5 rounded border-gray-300 text-[var(--primary)] focus:ring-[var(--primary)]"
+                        />
+                    </label>
                 </CardContent>
             </Card>
 

@@ -517,464 +517,467 @@ export function AssessmentResultsClient({ assessmentId }: { assessmentId: string
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold text-[var(--text)]">Results</h1>
-          <p className="mt-1 text-sm text-[var(--muted)]">
-            {assessment?.title ? `${assessment.title} • ` : ""}
-            {submissions.length} submissions
-            {isPracticeMode ? " • Practice mode" : ""}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            type="button"
-            variant="secondary"
-            disabled={!submissions.length}
-            onClick={() => downloadCsv(`${assessment?.title ?? "assessment"}-results.csv`, exportRows)}
-          >
-            Export CSV
-          </Button>
-          <Link href={`/assessments/${assessmentId}?step=1`}>
-            <Button type="button" variant="secondary">
-              Back to Builder
+    <div className="relative min-h-screen pb-20">
+      {/* Sparkle background */}
+      <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-indigo-50/50 via-white to-white dark:from-indigo-950/20 dark:via-background dark:to-background" />
+
+      <div className="space-y-6">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-light text-[var(--text)]">
+              Assessment <span className="font-semibold text-transparent bg-clip-text bg-gradient-to-r from-[var(--primary)] to-indigo-500">Results</span>
+            </h1>
+            <p className="mt-1 text-sm text-[var(--muted)]">
+              {assessment?.title ? `${assessment.title} • ` : ""}
+              {submissions.length} submissions
+              {isPracticeMode ? " • Practice mode" : ""}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={!submissions.length}
+              onClick={() => downloadCsv(`${assessment?.title ?? "assessment"}-results.csv`, exportRows)}
+            >
+              Export CSV
             </Button>
-          </Link>
+            <Link href={`/assessments/${assessmentId}?step=1`}>
+              <Button type="button" variant="secondary">
+                Back to Builder
+              </Button>
+            </Link>
+          </div>
         </div>
-      </div>
 
-      {error ? <div className="text-sm text-[var(--danger)]">{error}</div> : null}
-      {loading ? <div className="text-sm text-[var(--muted)]">Loading…</div> : null}
+        {error ? <div className="text-sm text-[var(--danger)]">{error}</div> : null}
+        {loading ? <div className="text-sm text-[var(--muted)]">Loading…</div> : null}
 
-      {summary ? (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+        {summary ? (
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+            <Card className="border-[var(--border)] bg-[var(--surface)]/80 backdrop-blur-sm shadow-sm transition-all hover:shadow-md">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-[var(--muted)]">Completion</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-[var(--text)]">
+                  {summary.submitted_count}<span className="text-[var(--muted)] text-lg font-normal">/{summary.total_submissions}</span>
+                </div>
+                <div className="mt-1 text-xs text-[var(--muted)]">{Math.round(summary.completion_rate * 100)}% submitted</div>
+                {typeof summary.restart_count === "number" && summary.restart_count > 0 ? (
+                  <div className="mt-2 text-xs text-[var(--muted)]">Restarts: {summary.restart_count}</div>
+                ) : null}
+              </CardContent>
+            </Card>
+            <Card className="border-[var(--border)] bg-[var(--surface)]/80 backdrop-blur-sm shadow-sm transition-all hover:shadow-md">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-[var(--muted)]">Class Avg</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-[var(--text)]">
+                  {isPracticeMode ? "Practice" : typeof summary.avg_score === "number" ? summary.avg_score.toFixed(2) : "—"}
+                </div>
+                <div className="mt-1 text-xs text-[var(--muted)]">{isPracticeMode ? "Not scored" : "out of 5.00"}</div>
+              </CardContent>
+            </Card>
+            <Card className="border-[var(--border)] bg-[var(--surface)]/80 backdrop-blur-sm shadow-sm transition-all hover:shadow-md">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-[var(--muted)]">Scoring Status</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-[var(--text)]">
+                  {isPracticeMode ? "—" : summary.scoring_complete_count}
+                  {!isPracticeMode ? <span className="text-[var(--muted)] font-normal text-lg"> / {summary.scoring_error_count}</span> : null}
+                </div>
+                <div className="mt-1 text-xs text-[var(--muted)]">
+                  {isPracticeMode ? "Practice mode" : "complete / errors"}
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="border-[var(--border)] bg-[var(--surface)]/80 backdrop-blur-sm shadow-sm transition-all hover:shadow-md">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-[var(--muted)]">Avg Time to Score</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-[var(--text)]">
+                  {typeof summary.avg_time_to_score_seconds === "number"
+                    ? Math.round(summary.avg_time_to_score_seconds)
+                    : "—"}
+                  <span className="text-sm font-normal text-[var(--muted)] ml-1">sec</span>
+                </div>
+                <div className="mt-1 text-xs text-[var(--muted)]">per submission</div>
+              </CardContent>
+            </Card>
+          </div>
+        ) : null}
+
+        <AssessmentReportPanel assessmentId={assessmentId} />
+
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[380px_1fr]">
           <Card>
             <CardHeader>
-              <CardTitle>Completion</CardTitle>
-              <CardDescription>Submitted / total</CardDescription>
+              <CardTitle>Submissions</CardTitle>
+              <CardDescription>Pick a student attempt to review.</CardDescription>
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-semibold text-[var(--text)]">
-                {summary.submitted_count}/{summary.total_submissions}
+            <CardContent className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-xs text-[var(--muted)]">
+                  {showFlaggedOnly ? "Showing flagged submissions only." : "Showing all submissions."}
+                </div>
+                <div className="flex items-center gap-2 text-xs text-[var(--muted)]">
+                  <span>Flagged only</span>
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border border-[var(--border)]"
+                    checked={showFlaggedOnly}
+                    onChange={(e) => setShowFlaggedOnly(e.target.checked)}
+                    aria-label="Show flagged submissions only"
+                  />
+                </div>
               </div>
-              <div className="mt-1 text-sm text-[var(--muted)]">{Math.round(summary.completion_rate * 100)}%</div>
-              {typeof summary.restart_count === "number" ? (
-                <div className="mt-2 text-xs text-[var(--muted)]">Grace restarts used: {summary.restart_count}</div>
-              ) : null}
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>Class Avg</CardTitle>
-              <CardDescription>Across scored submissions</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-semibold text-[var(--text)]">
-                {isPracticeMode ? "Practice" : typeof summary.avg_score === "number" ? summary.avg_score.toFixed(2) : "—"}
-              </div>
-              <div className="mt-1 text-sm text-[var(--muted)]">{isPracticeMode ? "Not scored" : "out of 5"}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>Scoring</CardTitle>
-              <CardDescription>Complete / errors</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-semibold text-[var(--text)]">
-                {isPracticeMode ? "—" : summary.scoring_complete_count}
-                {!isPracticeMode ? <span className="text-[var(--muted)]"> / </span> : null}
-                {!isPracticeMode ? summary.scoring_error_count : null}
-              </div>
-              <div className="mt-1 text-sm text-[var(--muted)]">
-                {isPracticeMode ? "Practice mode" : "complete / error"}
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>Time To Score</CardTitle>
-              <CardDescription>Avg seconds</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-semibold text-[var(--text)]">
-                {typeof summary.avg_time_to_score_seconds === "number"
-                  ? Math.round(summary.avg_time_to_score_seconds)
-                  : "—"}
-              </div>
-              <div className="mt-1 text-sm text-[var(--muted)]">seconds</div>
-            </CardContent>
-          </Card>
-        </div>
-      ) : null}
-
-      <AssessmentReportPanel assessmentId={assessmentId} />
-
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[380px_1fr]">
-        <Card>
-          <CardHeader>
-            <CardTitle>Submissions</CardTitle>
-            <CardDescription>Pick a student attempt to review.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <div className="text-xs text-[var(--muted)]">
-                {showFlaggedOnly ? "Showing flagged submissions only." : "Showing all submissions."}
-              </div>
-              <div className="flex items-center gap-2 text-xs text-[var(--muted)]">
-                <span>Flagged only</span>
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 rounded border border-[var(--border)]"
-                  checked={showFlaggedOnly}
-                  onChange={(e) => setShowFlaggedOnly(e.target.checked)}
-                  aria-label="Show flagged submissions only"
-                />
-              </div>
-            </div>
-            {!visibleSubmissions.length ? (
-              <div className="text-sm text-[var(--muted)]">No submissions yet.</div>
-            ) : (
-              visibleSubmissions.map((s) => {
-                const active = s.id === selectedSubmissionId;
-                const flagCount = s.integrity_flag_count ?? 0;
-                return (
-                  <button
-                    key={s.id}
-                    type="button"
-                    onClick={() => setSelectedSubmissionId(s.id)}
-                    className={`w-full rounded-md border px-3 py-3 text-left transition-colors border-[var(--border)] ${active ? "ring-1 ring-[var(--primary)]" : "hover:border-[var(--primary)]"
-                      }`}
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="text-sm font-semibold text-[var(--text)]">{s.student_name}</div>
-                      <div className="flex items-center gap-2">
-                        <div className="text-xs text-[var(--muted)]">{s.status.toUpperCase()}</div>
-                        {s.status === "submitted" ? (
-                          isPracticeMode ? (
-                            <div className="rounded-full border px-2 py-0.5 text-[11px] border-[var(--border)] text-[var(--primary)]">
-                              PRACTICE
-                            </div>
-                          ) : (
-                            <div
-                              className={`rounded-full border px-2 py-0.5 text-[11px] border-[var(--border)] ${s.scoring_status === "complete"
+              {!visibleSubmissions.length ? (
+                <div className="text-sm text-[var(--muted)]">No submissions yet.</div>
+              ) : (
+                visibleSubmissions.map((s) => {
+                  const active = s.id === selectedSubmissionId;
+                  const flagCount = s.integrity_flag_count ?? 0;
+                  return (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => setSelectedSubmissionId(s.id)}
+                      className={`w-full rounded-md border px-3 py-3 text-left transition-colors border-[var(--border)] ${active ? "ring-1 ring-[var(--primary)]" : "hover:border-[var(--primary)]"
+                        }`}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="text-sm font-semibold text-[var(--text)]">{s.student_name}</div>
+                        <div className="flex items-center gap-2">
+                          <div className="text-xs text-[var(--muted)]">{s.status.toUpperCase()}</div>
+                          {s.status === "submitted" ? (
+                            isPracticeMode ? (
+                              <div className="rounded-full border px-2 py-0.5 text-[11px] border-[var(--border)] text-[var(--primary)]">
+                                PRACTICE
+                              </div>
+                            ) : (
+                              <div
+                                className={`rounded-full border px-2 py-0.5 text-[11px] border-[var(--border)] ${s.scoring_status === "complete"
                                   ? "text-[var(--success)]"
                                   : s.scoring_status === "error"
                                     ? "text-[var(--danger)]"
                                     : "text-[var(--muted)]"
-                                }`}
-                              title={s.scoring_status === "error" ? s.scoring_error ?? "Scoring failed." : undefined}
-                            >
-                              {s.scoring_status === "complete"
-                                ? "SCORED"
-                                : s.scoring_status === "error"
-                                  ? "SCORE ERROR"
-                                  : "SCORING…"}
-                            </div>
-                          )
-                        ) : null}
-                        {s.review_status === "published" ? (
-                          <div className="rounded-full border px-2 py-0.5 text-[11px] border-[var(--border)] text-[var(--primary)]">
-                            PUBLISHED
-                          </div>
-                        ) : null}
-                        {s.restart_reason ? (
-                          <div className="rounded-full border px-2 py-0.5 text-[11px] border-[var(--border)] text-[var(--muted)]">
-                            RESTART ({s.restart_reason.replace("_", " ")})
-                          </div>
-                        ) : null}
-                        {flagCount > 0 ? (
-                          <div className="rounded-full border px-2 py-0.5 text-[11px] border-[var(--border)] text-[var(--danger)]">
-                            {flagCount} FLAG{flagCount === 1 ? "" : "S"}
-                          </div>
-                        ) : null}
-                      </div>
-                    </div>
-                    <div className="mt-1 text-xs text-[var(--muted)]">
-                      {formatTime(s.submitted_at) ? `Submitted ${formatTime(s.submitted_at)}` : `Started ${formatTime(s.started_at)}`}
-                      {" • "}
-                      {s.response_count} recordings
-                      {" • "}
-                      {isPracticeMode ? "Practice attempt" : `Avg ${typeof s.avg_score === "number" ? s.avg_score.toFixed(2) : "—"}`}
-                    </div>
-                  </button>
-                );
-              })
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between gap-3">
-              <CardTitle>Review</CardTitle>
-              <Button
-                type="button"
-                variant="secondary"
-                disabled={isPracticeMode || !selectedSubmissionId || rescoring}
-                onClick={handleRescore}
-              >
-                {rescoring ? "Re-scoring…" : "Re-score"}
-              </Button>
-            </div>
-            <CardDescription>
-              {selectedSubmission ? `${selectedSubmission.student_name} • ${selectedSubmission.status.toUpperCase()}` : "Select a submission"}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {detailLoading ? <div className="text-sm text-[var(--muted)]">Loading submission…</div> : null}
-            {!detailLoading && detail ? (
-              <div className="space-y-4">
-                <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-3 text-xs">
-                  <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">
-                    Integrity Flags
-                  </div>
-                  {integrityFlags.length ? (
-                    <div className="mt-2 space-y-1 text-[var(--text)]">
-                      {integrityFlags.map((flag) => (
-                        <div key={flag.id} className="flex flex-wrap items-center justify-between gap-2">
-                          <div className="text-xs font-medium">{flag.label}</div>
-                          <div className="text-[11px] text-[var(--muted)]">{flag.details}</div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="mt-2 text-[11px] text-[var(--muted)]">No integrity flags detected.</div>
-                  )}
-                </div>
-                <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-3 text-xs">
-                  <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">
-                    Integrity Timeline
-                  </div>
-                  {integrityTimeline.length ? (
-                    <div className="mt-2 space-y-1 text-[var(--text)]">
-                      {integrityTimeline.map((event) => (
-                        <div key={event.id} className="flex flex-wrap items-center justify-between gap-2">
-                          <div className="text-xs">{event.summary}</div>
-                          <div className="text-[11px] text-[var(--muted)]">{event.timestamp}</div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="mt-2 text-[11px] text-[var(--muted)]">No integrity events logged.</div>
-                  )}
-                </div>
-                {detail.submission.integrity_pledge_accepted_at ? (
-                  <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-3 text-xs text-[var(--muted)]">
-                    Integrity pledge accepted {formatTime(detail.submission.integrity_pledge_accepted_at)}
-                    {detail.submission.integrity_pledge_version ? ` • v${detail.submission.integrity_pledge_version}` : ""}
-                    {detail.submission.integrity_pledge_ip_address ? ` • IP ${detail.submission.integrity_pledge_ip_address}` : ""}
-                  </div>
-                ) : null}
-                {detail.submission.scoring_status === "error" ? (
-                  <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-3 text-sm text-[var(--danger)]">
-                    Scoring failed{detail.submission.scoring_error ? `: ${detail.submission.scoring_error}` : "."} You can try{" "}
-                    <span className="font-semibold">Re-score</span>.
-                  </div>
-                ) : null}
-                {scoringPending ? (
-                  <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-3 text-sm text-[var(--muted)]">
-                    Scoring in progress… this view auto-refreshes.
-                  </div>
-                ) : null}
-                <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <div className="text-sm font-semibold text-[var(--text)]">Release grade</div>
-                      <div className="text-xs text-[var(--muted)]">Publish verified feedback to the student.</div>
-                    </div>
-                    {detail.submission.review_status === "published" ? (
-                      <span className="rounded-full border border-[var(--border)] px-2 py-1 text-xs text-[var(--primary)]">
-                        Published
-                      </span>
-                    ) : null}
-                  </div>
-                  {detail.submission.published_at ? (
-                    <div className="mt-2 text-xs text-[var(--muted)]">
-                      Published {formatTime(detail.submission.published_at) ?? ""}
-                    </div>
-                  ) : null}
-                  <div className="mt-3 space-y-2">
-                    <label className="text-xs font-semibold text-[var(--muted)]">Teacher growth note</label>
-                    <textarea
-                      rows={3}
-                      className="w-full rounded-md border border-[var(--border)] bg-[var(--surface)] p-3 text-sm text-[var(--text)]"
-                      placeholder="Add encouragement, specific feedback, or next steps."
-                      value={releaseComment}
-                      onChange={(e) => setReleaseComment(e.target.value)}
-                    />
-                  </div>
-                  <div className="mt-3 space-y-2">
-                    <label className="text-xs font-semibold text-[var(--muted)]">Final score override (optional)</label>
-                    <input
-                      type="number"
-                      min={0}
-                      max={5}
-                      step={0.1}
-                      className="h-10 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 text-sm text-[var(--text)]"
-                      placeholder="Leave blank to use the computed average."
-                      value={releaseOverride}
-                      onChange={(e) => setReleaseOverride(e.target.value)}
-                    />
-                  </div>
-                  {releaseOverride.trim() ? (
-                    <>
-                      <div className="mt-3 space-y-2">
-                        <label className="text-xs font-semibold text-[var(--muted)]">Override reason (required when overriding)</label>
-                        <select
-                          className="h-10 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 text-sm text-[var(--text)]"
-                          value={overrideReasonCategory}
-                          onChange={(e) => setOverrideReasonCategory(e.target.value)}
-                        >
-                          <option value="">Select a reason...</option>
-                          <option value="accent_dialect">Accent/dialect variation</option>
-                          <option value="audio_quality">Audio quality (mic noise, poor recording)</option>
-                          <option value="accommodation">Speech impediment/accommodation</option>
-                          <option value="off_task">Off-task response</option>
-                          <option value="other">Other (explain below)</option>
-                        </select>
-                      </div>
-                      <div className="mt-3 space-y-2">
-                        <label className="text-xs font-semibold text-[var(--muted)]">
-                          {overrideReasonCategory === "other" ? "Explanation (required)" : "Additional notes (optional)"}
-                        </label>
-                        <textarea
-                          rows={2}
-                          className="w-full rounded-md border border-[var(--border)] bg-[var(--surface)] p-3 text-sm text-[var(--text)]"
-                          placeholder="Explain why you're adjusting the AI score..."
-                          value={overrideReasonNote}
-                          onChange={(e) => setOverrideReasonNote(e.target.value)}
-                        />
-                      </div>
-                    </>
-                  ) : null}
-                  {detail.submission.scoring_status !== "complete" ? (
-                    <div className="mt-3 text-xs text-[var(--muted)]">
-                      Scoring must complete before you can release feedback.
-                    </div>
-                  ) : null}
-                  {releaseError ? <div className="mt-3 text-sm text-[var(--danger)]">{releaseError}</div> : null}
-                  {releaseNotice ? <div className="mt-3 text-sm text-[var(--primary)]">{releaseNotice}</div> : null}
-                  <div className="mt-4 flex items-center justify-end">
-                    <Button
-                      type="button"
-                      disabled={releaseWorking || detail.submission.scoring_status !== "complete"}
-                      onClick={handleRelease}
-                    >
-                      {releaseWorking ? "Releasing…" : "Release Grade"}
-                    </Button>
-                  </div>
-                </div>
-                {detail.questions.map((q) => (
-                  <div key={q.id} className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-4">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div className="text-sm font-semibold text-[var(--text)]">Question {q.order_index}</div>
-                      <div className="text-xs text-[var(--muted)]">{q.question_type ?? "open_response"}</div>
-                    </div>
-                    <div className="mt-2 text-sm italic text-[var(--text)]">“{q.question_text}”</div>
-                    {q.blooms_level ? (
-                      <div className="mt-1 text-xs text-[var(--muted)]">Bloom&apos;s level: {q.blooms_level}</div>
-                    ) : null}
-                    <div className="mt-3">
-                      {q.evidence ? (
-                        <div className="space-y-2">
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <div className="text-xs font-semibold text-[var(--muted)]">Student Evidence</div>
-                            <div className="flex items-center gap-3 text-xs">
-                              <a
-                                href={q.evidence.signed_url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="text-[var(--primary)] hover:underline"
+                                  }`}
+                                title={s.scoring_status === "error" ? s.scoring_error ?? "Scoring failed." : undefined}
                               >
-                                View full size
-                              </a>
-                              <a
-                                href={q.evidence.signed_url}
-                                download={`evidence_question_${q.order_index}.jpg`}
-                                className="text-[var(--primary)] hover:underline"
-                              >
-                                Download
-                              </a>
+                                {s.scoring_status === "complete"
+                                  ? "SCORED"
+                                  : s.scoring_status === "error"
+                                    ? "SCORE ERROR"
+                                    : "SCORING…"}
+                              </div>
+                            )
+                          ) : null}
+                          {s.review_status === "published" ? (
+                            <div className="rounded-full border px-2 py-0.5 text-[11px] border-[var(--border)] text-[var(--primary)]">
+                              PUBLISHED
                             </div>
-                          </div>
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={q.evidence.signed_url}
-                            alt={`Evidence for question ${q.order_index}`}
-                            className="max-h-72 w-full rounded-md border border-[var(--border)] object-contain"
-                          />
-                          <div className="text-xs text-[var(--muted)]">Uploaded {formatTime(q.evidence.uploaded_at)}</div>
-                        </div>
-                      ) : (
-                        <div className="text-xs text-[var(--muted)]">No evidence image submitted.</div>
-                      )}
-                    </div>
-                    <div className="mt-3">
-                      {q.response ? (
-                        <div className="space-y-2">
-                          <audio controls src={q.response.signed_url} className="h-10 w-full" />
-                          <div className="text-xs text-[var(--muted)]">
-                            {q.response.duration_seconds ? `${q.response.duration_seconds}s` : ""}{" "}
-                            {q.response.created_at ? `• Uploaded ${formatTime(q.response.created_at)}` : ""}
-                          </div>
-                          {q.response.transcript ? (
-                            <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-3 text-sm text-[var(--text)]">
-                              <div className="text-xs font-semibold text-[var(--muted)]">Transcript</div>
-                              <div className="mt-1 whitespace-pre-wrap">{q.response.transcript}</div>
+                          ) : null}
+                          {s.restart_reason ? (
+                            <div className="rounded-full border px-2 py-0.5 text-[11px] border-[var(--border)] text-[var(--muted)]">
+                              RESTART ({s.restart_reason.replace("_", " ")})
                             </div>
-                          ) : (
-                            <div className="text-xs text-[var(--muted)]">Transcript pending…</div>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="text-sm text-[var(--muted)]">No recording submitted for this question.</div>
-                      )}
-                    </div>
-
-                    {q.response ? (
-                      <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
-                        <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-3">
-                          <div className="flex items-center justify-between">
-                            <div className="text-xs font-semibold text-[var(--muted)]">Reasoning</div>
-                            <div
-                              className={`rounded-full border px-2 py-0.5 text-xs font-semibold border-[var(--border)] ${q.scores?.reasoning.score == null
-                                  ? "bg-[var(--background)] text-[var(--muted)]"
-                                  : "bg-[var(--background)] text-[var(--primary)]"
-                                }`}
-                            >
-                              {q.scores?.reasoning.score ?? "—"}/5
+                          ) : null}
+                          {flagCount > 0 ? (
+                            <div className="rounded-full border px-2 py-0.5 text-[11px] border-[var(--border)] text-[var(--danger)]">
+                              {flagCount} FLAG{flagCount === 1 ? "" : "S"}
                             </div>
-                          </div>
-                          <div className="mt-2 text-sm text-[var(--text)] whitespace-pre-wrap">
-                            {q.scores?.reasoning.justification ?? "Scoring pending…"}
-                          </div>
-                        </div>
-                        <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-3">
-                          <div className="flex items-center justify-between">
-                            <div className="text-xs font-semibold text-[var(--muted)]">Evidence</div>
-                            <div
-                              className={`rounded-full border px-2 py-0.5 text-xs font-semibold border-[var(--border)] ${q.scores?.evidence.score == null
-                                  ? "bg-[var(--background)] text-[var(--muted)]"
-                                  : "bg-[var(--background)] text-[var(--primary)]"
-                                }`}
-                            >
-                              {q.scores?.evidence.score ?? "—"}/5
-                            </div>
-                          </div>
-                          <div className="mt-2 text-sm text-[var(--text)] whitespace-pre-wrap">
-                            {q.scores?.evidence.justification ?? "Scoring pending…"}
-                          </div>
+                          ) : null}
                         </div>
                       </div>
-                    ) : null}
-                  </div>
-                ))}
+                      <div className="mt-1 text-xs text-[var(--muted)]">
+                        {formatTime(s.submitted_at) ? `Submitted ${formatTime(s.submitted_at)}` : `Started ${formatTime(s.started_at)}`}
+                        {" • "}
+                        {s.response_count} recordings
+                        {" • "}
+                        {isPracticeMode ? "Practice attempt" : `Avg ${typeof s.avg_score === "number" ? s.avg_score.toFixed(2) : "—"}`}
+                      </div>
+                    </button>
+                  );
+                })
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between gap-3">
+                <CardTitle>Review</CardTitle>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={isPracticeMode || !selectedSubmissionId || rescoring}
+                  onClick={handleRescore}
+                >
+                  {rescoring ? "Re-scoring…" : "Re-score"}
+                </Button>
               </div>
-            ) : null}
-          </CardContent>
-        </Card>
+              <CardDescription>
+                {selectedSubmission ? `${selectedSubmission.student_name} • ${selectedSubmission.status.toUpperCase()}` : "Select a submission"}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {detailLoading ? <div className="text-sm text-[var(--muted)]">Loading submission…</div> : null}
+              {!detailLoading && detail ? (
+                <div className="space-y-4">
+                  <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-3 text-xs">
+                    <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">
+                      Integrity Flags
+                    </div>
+                    {integrityFlags.length ? (
+                      <div className="mt-2 space-y-1 text-[var(--text)]">
+                        {integrityFlags.map((flag) => (
+                          <div key={flag.id} className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="text-xs font-medium">{flag.label}</div>
+                            <div className="text-[11px] text-[var(--muted)]">{flag.details}</div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="mt-2 text-[11px] text-[var(--muted)]">No integrity flags detected.</div>
+                    )}
+                  </div>
+                  <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-3 text-xs">
+                    <div className="text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">
+                      Integrity Timeline
+                    </div>
+                    {integrityTimeline.length ? (
+                      <div className="mt-2 space-y-1 text-[var(--text)]">
+                        {integrityTimeline.map((event) => (
+                          <div key={event.id} className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="text-xs">{event.summary}</div>
+                            <div className="text-[11px] text-[var(--muted)]">{event.timestamp}</div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="mt-2 text-[11px] text-[var(--muted)]">No integrity events logged.</div>
+                    )}
+                  </div>
+                  {detail.submission.integrity_pledge_accepted_at ? (
+                    <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-3 text-xs text-[var(--muted)]">
+                      Integrity pledge accepted {formatTime(detail.submission.integrity_pledge_accepted_at)}
+                      {detail.submission.integrity_pledge_version ? ` • v${detail.submission.integrity_pledge_version}` : ""}
+                      {detail.submission.integrity_pledge_ip_address ? ` • IP ${detail.submission.integrity_pledge_ip_address}` : ""}
+                    </div>
+                  ) : null}
+                  {detail.submission.scoring_status === "error" ? (
+                    <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-3 text-sm text-[var(--danger)]">
+                      Scoring failed{detail.submission.scoring_error ? `: ${detail.submission.scoring_error}` : "."} You can try{" "}
+                      <span className="font-semibold">Re-score</span>.
+                    </div>
+                  ) : null}
+                  {scoringPending ? (
+                    <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-3 text-sm text-[var(--muted)]">
+                      Scoring in progress… this view auto-refreshes.
+                    </div>
+                  ) : null}
+                  <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <div className="text-sm font-semibold text-[var(--text)]">Release grade</div>
+                        <div className="text-xs text-[var(--muted)]">Publish verified feedback to the student.</div>
+                      </div>
+                      {detail.submission.review_status === "published" ? (
+                        <span className="rounded-full border border-[var(--border)] px-2 py-1 text-xs text-[var(--primary)]">
+                          Published
+                        </span>
+                      ) : null}
+                    </div>
+                    {detail.submission.published_at ? (
+                      <div className="mt-2 text-xs text-[var(--muted)]">
+                        Published {formatTime(detail.submission.published_at) ?? ""}
+                      </div>
+                    ) : null}
+                    <div className="mt-3 space-y-2">
+                      <label className="text-xs font-semibold text-[var(--muted)]">Teacher growth note</label>
+                      <textarea
+                        rows={3}
+                        className="w-full rounded-md border border-[var(--border)] bg-[var(--surface)] p-3 text-sm text-[var(--text)]"
+                        placeholder="Add encouragement, specific feedback, or next steps."
+                        value={releaseComment}
+                        onChange={(e) => setReleaseComment(e.target.value)}
+                      />
+                    </div>
+                    <div className="mt-3 space-y-2">
+                      <label className="text-xs font-semibold text-[var(--muted)]">Final score override (optional)</label>
+                      <input
+                        type="number"
+                        min={0}
+                        max={5}
+                        step={0.1}
+                        className="h-10 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 text-sm text-[var(--text)]"
+                        placeholder="Leave blank to use the computed average."
+                        value={releaseOverride}
+                        onChange={(e) => setReleaseOverride(e.target.value)}
+                      />
+                    </div>
+                    {releaseOverride.trim() ? (
+                      <>
+                        <div className="mt-3 space-y-2">
+                          <label className="text-xs font-semibold text-[var(--muted)]">Override reason (required when overriding)</label>
+                          <select
+                            className="h-10 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 text-sm text-[var(--text)]"
+                            value={overrideReasonCategory}
+                            onChange={(e) => setOverrideReasonCategory(e.target.value)}
+                          >
+                            <option value="">Select a reason...</option>
+                            <option value="accent_dialect">Accent/dialect variation</option>
+                            <option value="audio_quality">Audio quality (mic noise, poor recording)</option>
+                            <option value="accommodation">Speech impediment/accommodation</option>
+                            <option value="off_task">Off-task response</option>
+                            <option value="other">Other (explain below)</option>
+                          </select>
+                        </div>
+                        <div className="mt-3 space-y-2">
+                          <label className="text-xs font-semibold text-[var(--muted)]">
+                            {overrideReasonCategory === "other" ? "Explanation (required)" : "Additional notes (optional)"}
+                          </label>
+                          <textarea
+                            rows={2}
+                            className="w-full rounded-md border border-[var(--border)] bg-[var(--surface)] p-3 text-sm text-[var(--text)]"
+                            placeholder="Explain why you're adjusting the AI score..."
+                            value={overrideReasonNote}
+                            onChange={(e) => setOverrideReasonNote(e.target.value)}
+                          />
+                        </div>
+                      </>
+                    ) : null}
+                    {detail.submission.scoring_status !== "complete" ? (
+                      <div className="mt-3 text-xs text-[var(--muted)]">
+                        Scoring must complete before you can release feedback.
+                      </div>
+                    ) : null}
+                    {releaseError ? <div className="mt-3 text-sm text-[var(--danger)]">{releaseError}</div> : null}
+                    {releaseNotice ? <div className="mt-3 text-sm text-[var(--primary)]">{releaseNotice}</div> : null}
+                    <div className="mt-4 flex items-center justify-end">
+                      <Button
+                        type="button"
+                        disabled={releaseWorking || detail.submission.scoring_status !== "complete"}
+                        onClick={handleRelease}
+                      >
+                        {releaseWorking ? "Releasing…" : "Release Grade"}
+                      </Button>
+                    </div>
+                  </div>
+                  {detail.questions.map((q) => (
+                    <div key={q.id} className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div className="text-sm font-semibold text-[var(--text)]">Question {q.order_index}</div>
+                        <div className="text-xs text-[var(--muted)]">{q.question_type ?? "open_response"}</div>
+                      </div>
+                      <div className="mt-2 text-sm italic text-[var(--text)]">“{q.question_text}”</div>
+                      {q.blooms_level ? (
+                        <div className="mt-1 text-xs text-[var(--muted)]">Bloom&apos;s level: {q.blooms_level}</div>
+                      ) : null}
+                      <div className="mt-3">
+                        {q.evidence ? (
+                          <div className="space-y-2">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div className="text-xs font-semibold text-[var(--muted)]">Student Evidence</div>
+                              <div className="flex items-center gap-3 text-xs">
+                                <a
+                                  href={q.evidence.signed_url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-[var(--primary)] hover:underline"
+                                >
+                                  View full size
+                                </a>
+                                <a
+                                  href={q.evidence.signed_url}
+                                  download={`evidence_question_${q.order_index}.jpg`}
+                                  className="text-[var(--primary)] hover:underline"
+                                >
+                                  Download
+                                </a>
+                              </div>
+                            </div>
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={q.evidence.signed_url}
+                              alt={`Evidence for question ${q.order_index}`}
+                              className="max-h-72 w-full rounded-md border border-[var(--border)] object-contain"
+                            />
+                            <div className="text-xs text-[var(--muted)]">Uploaded {formatTime(q.evidence.uploaded_at)}</div>
+                          </div>
+                        ) : (
+                          <div className="text-xs text-[var(--muted)]">No evidence image submitted.</div>
+                        )}
+                      </div>
+                      <div className="mt-3">
+                        {q.response ? (
+                          <div className="space-y-2">
+                            <audio controls src={q.response.signed_url} className="h-10 w-full" />
+                            <div className="text-xs text-[var(--muted)]">
+                              {q.response.duration_seconds ? `${q.response.duration_seconds}s` : ""}{" "}
+                              {q.response.created_at ? `• Uploaded ${formatTime(q.response.created_at)}` : ""}
+                            </div>
+                            {q.response.transcript ? (
+                              <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-3 text-sm text-[var(--text)]">
+                                <div className="text-xs font-semibold text-[var(--muted)]">Transcript</div>
+                                <div className="mt-1 whitespace-pre-wrap">{q.response.transcript}</div>
+                              </div>
+                            ) : (
+                              <div className="text-xs text-[var(--muted)]">Transcript pending…</div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="text-sm text-[var(--muted)]">No recording submitted for this question.</div>
+                        )}
+                      </div>
+
+                      {q.response ? (
+                        <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+                          <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-3">
+                            <div className="flex items-center justify-between">
+                              <div className="text-xs font-semibold text-[var(--muted)]">Reasoning</div>
+                              <div
+                                className={`rounded-full border px-2 py-0.5 text-xs font-semibold border-[var(--border)] ${q.scores?.reasoning.score == null
+                                  ? "bg-[var(--background)] text-[var(--muted)]"
+                                  : "bg-[var(--background)] text-[var(--primary)]"
+                                  }`}
+                              >
+                                {q.scores?.reasoning.score ?? "—"}/5
+                              </div>
+                            </div>
+                            <div className="mt-2 text-sm text-[var(--text)] whitespace-pre-wrap">
+                              {q.scores?.reasoning.justification ?? "Scoring pending…"}
+                            </div>
+                          </div>
+                          <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-3">
+                            <div className="flex items-center justify-between">
+                              <div className="text-xs font-semibold text-[var(--muted)]">Evidence</div>
+                              <div
+                                className={`rounded-full border px-2 py-0.5 text-xs font-semibold border-[var(--border)] ${q.scores?.evidence.score == null
+                                  ? "bg-[var(--background)] text-[var(--muted)]"
+                                  : "bg-[var(--background)] text-[var(--primary)]"
+                                  }`}
+                              >
+                                {q.scores?.evidence.score ?? "—"}/5
+                              </div>
+                            </div>
+                            <div className="mt-2 text-sm text-[var(--text)] whitespace-pre-wrap">
+                              {q.scores?.evidence.justification ?? "Scoring pending…"}
+                            </div>
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   );

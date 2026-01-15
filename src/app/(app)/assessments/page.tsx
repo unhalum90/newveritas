@@ -29,12 +29,12 @@ export default async function AssessmentsPage() {
     classIds.length === 0
       ? []
       : (
-          await supabase
-            .from("assessments")
-            .select("id, title, status, authoring_mode, is_practice_mode, created_at, class_id")
-            .in("class_id", classIds)
-            .order("created_at", { ascending: false })
-        ).data ?? [];
+        await supabase
+          .from("assessments")
+          .select("id, title, status, authoring_mode, is_practice_mode, created_at, class_id")
+          .in("class_id", classIds)
+          .order("created_at", { ascending: false })
+      ).data ?? [];
 
   const submissionStatsById: Record<string, { completed: number; needsReview: number }> = {};
   if (assessments.length) {
@@ -57,56 +57,63 @@ export default async function AssessmentsPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-[var(--text)]">Assessments</h1>
-          <p className="mt-1 text-sm text-[var(--muted)]">Build assessments and publish them to a class.</p>
-        </div>
-        <Link href="/assessments/new">
-          <Button type="button">+ New Assessment</Button>
-        </Link>
-      </div>
+    <div className="relative min-h-screen pb-20">
+      {/* Sparkle background */}
+      <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-indigo-50/50 via-white to-white dark:from-indigo-950/20 dark:via-background dark:to-background" />
 
-      {!classes?.length ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>Create a class first</CardTitle>
-            <CardDescription>Assessments attach to classes.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Link href="/classes/new">
-              <Button type="button">Create Class</Button>
-            </Link>
-          </CardContent>
-        </Card>
-      ) : !assessments?.length ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>No assessments yet</CardTitle>
-            <CardDescription>Create your first assessment to begin.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3 text-sm text-[var(--muted)]">
-              <p>Follow these steps to get your first assessment live:</p>
-              <ol className="list-decimal space-y-1 pl-5">
-                <li>Create a draft assessment.</li>
-                <li>Add questions or upload a PDF.</li>
-                <li>Publish it to your class.</li>
-              </ol>
-              <Link href="/assessments/new">
-                <Button type="button">Create Assessment</Button>
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-light text-[var(--text)]">
+              Your <span className="font-semibold text-transparent bg-clip-text bg-gradient-to-r from-[var(--primary)] to-indigo-500">Assessments</span>
+            </h1>
+            <p className="mt-1 text-sm text-[var(--muted)]">Build assessments and publish them to a class.</p>
+          </div>
+          <Link href="/assessments/new">
+            <Button type="button">+ New Assessment</Button>
+          </Link>
+        </div>
+
+        {!classes?.length ? (
+          <Card className="border-[var(--border)] bg-[var(--surface)]/80 backdrop-blur-sm shadow-sm">
+            <CardHeader>
+              <CardTitle>Create a class first</CardTitle>
+              <CardDescription>Assessments attach to classes.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Link href="/classes/new">
+                <Button type="button">Create Class</Button>
               </Link>
-            </div>
-          </CardContent>
-        </Card>
-      ) : (
-        <AssessmentsClient
-          initialAssessments={assessments}
-          classNameById={Object.fromEntries(classNameById.entries())}
-          submissionStatsById={submissionStatsById}
-        />
-      )}
+            </CardContent>
+          </Card>
+        ) : !assessments?.length ? (
+          <Card className="border-[var(--border)] bg-[var(--surface)]/80 backdrop-blur-sm shadow-sm">
+            <CardHeader>
+              <CardTitle>No assessments yet</CardTitle>
+              <CardDescription>Create your first assessment to begin.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3 text-sm text-[var(--muted)]">
+                <p>Follow these steps to get your first assessment live:</p>
+                <ol className="list-decimal space-y-1 pl-5">
+                  <li>Create a draft assessment.</li>
+                  <li>Add questions or upload a PDF.</li>
+                  <li>Publish it to your class.</li>
+                </ol>
+                <Link href="/assessments/new">
+                  <Button type="button">Create Assessment</Button>
+                </Link>
+              </div>
+            </CardContent>
+          </Card>
+        ) : (
+          <AssessmentsClient
+            initialAssessments={assessments}
+            classNameById={Object.fromEntries(classNameById.entries())}
+            submissionStatsById={submissionStatsById}
+          />
+        )}
+      </div>
     </div>
   );
 }

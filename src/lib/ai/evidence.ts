@@ -37,111 +37,61 @@ function parseAnalysis(raw: unknown): EvidenceAnalysis | null {
 
 export async function analyzeEvidenceImage(input: {
   image: Buffer;
+  mimeType?: string;
   questionText?: string | null;
   context?: AnalysisContext;
 }) {
-  const apiKey = requireEnv("OPENAI_API_KEY");
-  const model = process.env.ANALYSIS_MODEL || "gpt-4o-mini-2024-07-18";
-  const startedAt = Date.now();
+  const model = process.env.GEMINI_TEXT_MODEL || "gemini-3-flash-preview";
+  const apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error("Missing GOOGLE_API_KEY");
 
-  const dataUrl = `data:image/jpeg;base64,${input.image.toString("base64")}`;
+  const system =
+    "You review a student evidence file (photo or PDF). Return ONLY JSON with keys: summary (string) and questions (array of 2 strings). Keep questions short and specific.";
+
   const questionText = input.questionText?.trim();
-  const prompt = questionText
+  const userPrompt = questionText
     ? `Teacher prompt:\n${questionText}\n\nGenerate two follow-up questions about the evidence.`
     : "Generate two follow-up questions about the evidence.";
-  const system =
-    "You review a photo of student evidence. Return ONLY JSON with keys: summary (string) and questions (array of 2 strings). Keep questions short and specific.";
 
-  let res: Response;
+  const mimeType = input.mimeType || "image/jpeg";
+  const b64 = input.image.toString("base64");
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+    model,
+  )}:generateContent?key=${encodeURIComponent(apiKey)}`;
+
   try {
-    res = await fetch("https://api.openai.com/v1/chat/completions", {
+    const res = await fetch(url, {
       method: "POST",
-      headers: {
-        authorization: `Bearer ${apiKey}`,
-        "content-type": "application/json",
-      },
+      headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        model,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: system },
-          {
-            role: "user",
-            content: [
-              { type: "text", text: prompt },
-              { type: "image_url", image_url: { url: dataUrl } },
-            ],
-          },
-        ],
+        systemInstruction: { parts: [{ text: system }] },
+        contents: [{
+          role: "user",
+          parts: [
+            { text: userPrompt },
+            { inline_data: { mime_type: mimeType, data: b64 } }
+          ]
+        }],
+        generationConfig: {
+          temperature: 0.2,
+          responseMimeType: "application/json",
+        },
       }),
     });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    await logOpenAiError({
-      model,
-      route: "/v1/chat/completions",
-      statusCode: null,
-      latencyMs: Date.now() - startedAt,
-      operation: "evidence_analysis",
-      assessmentId: input.context?.assessmentId,
-      studentId: input.context?.studentId,
-      submissionId: input.context?.submissionId,
-      questionId: input.context?.questionId,
-      metadata: { error: message },
-    });
-    return null;
-  }
 
-  const data = (await res.json().catch(() => null)) as
-    | {
-        error?: { message?: unknown };
-        choices?: Array<{ message?: { content?: unknown } }>;
-        usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
-      }
-    | null;
-  const usage = data?.usage;
+    const data = (await res.json().catch(() => null)) as any;
+    if (!res.ok) {
+      throw new Error(data?.error?.message ?? "Gemini evidence analysis failed.");
+    }
 
-  if (!res.ok) {
-    const msg = typeof data?.error?.message === "string" ? data.error.message : "OpenAI request failed.";
-    await logOpenAiError({
-      model,
-      route: "/v1/chat/completions",
-      statusCode: res.status,
-      latencyMs: Date.now() - startedAt,
-      promptTokens: usage?.prompt_tokens,
-      completionTokens: usage?.completion_tokens,
-      totalTokens: usage?.total_tokens,
-      operation: "evidence_analysis",
-      assessmentId: input.context?.assessmentId,
-      studentId: input.context?.studentId,
-      submissionId: input.context?.submissionId,
-      questionId: input.context?.questionId,
-      metadata: { error: msg },
-    });
-    return null;
-  }
+    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (typeof text !== "string" || !text.trim()) return null;
 
-  await logOpenAiCall({
-    model,
-    route: "/v1/chat/completions",
-    statusCode: res.status,
-    latencyMs: Date.now() - startedAt,
-    promptTokens: usage?.prompt_tokens,
-    completionTokens: usage?.completion_tokens,
-    totalTokens: usage?.total_tokens,
-    operation: "evidence_analysis",
-    assessmentId: input.context?.assessmentId,
-    studentId: input.context?.studentId,
-    submissionId: input.context?.submissionId,
-    questionId: input.context?.questionId,
-  });
-
-  const content = data?.choices?.[0]?.message?.content;
-  if (typeof content !== "string" || !content.trim()) return null;
-  try {
-    const parsed = JSON.parse(content) as unknown;
+    const parsed = JSON.parse(text) as unknown;
     return parseAnalysis(parsed);
-  } catch {
+  } catch (error) {
+    console.error("Gemini evidence analysis failed", error);
     return null;
   }
 }

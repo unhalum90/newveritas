@@ -28,43 +28,50 @@ export default async function ClassDetailPage({ params }: { params: Promise<{ id
     .order("created_at", { ascending: false });
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-[var(--text)]">{cls.name}</h1>
-          <p className="mt-1 text-sm text-[var(--muted)]">
-            {cls.access_mode === "code" ? "Code access" : cls.access_mode.toUpperCase()}
-            {cls.description ? ` • ${cls.description}` : ""}
-          </p>
+    <div className="relative min-h-screen pb-20">
+      {/* Sparkle background */}
+      <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-indigo-50/50 via-white to-white dark:from-indigo-950/20 dark:via-background dark:to-background" />
+
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-light text-[var(--text)]">
+              Class <span className="font-semibold text-transparent bg-clip-text bg-gradient-to-r from-[var(--primary)] to-indigo-500">{cls.name}</span>
+            </h1>
+            <p className="mt-1 text-sm text-[var(--muted)]">
+              {cls.access_mode === "code" ? "Code access" : cls.access_mode.toUpperCase()}
+              {cls.description ? ` • ${cls.description}` : ""}
+            </p>
+          </div>
+          <Link href="/classes">
+            <Button type="button" variant="ghost">
+              Back to Classes
+            </Button>
+          </Link>
         </div>
-        <Link href="/classes">
-          <Button type="button" variant="secondary">
-            Back to Classes
-          </Button>
-        </Link>
+
+        <Card className="border-[var(--border)] bg-[var(--surface)]/80 backdrop-blur-sm shadow-sm">
+          <CardHeader>
+            <CardTitle>Students</CardTitle>
+            <CardDescription>
+              Students log in at{" "}
+              <Link href="/student/login" className="text-[var(--primary)] hover:underline">
+                /student/login
+              </Link>
+              . Copy links below to share student access.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {!students?.length ? (
+              <div className="text-sm text-[var(--muted)]">No students yet.</div>
+            ) : (
+              <StudentTable classId={id} students={students} />
+            )}
+          </CardContent>
+        </Card>
+
+        <AddStudents classId={id} />
       </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Students</CardTitle>
-          <CardDescription>
-            Students log in at{" "}
-            <Link href="/student/login" className="text-[var(--text)] hover:underline">
-              /student/login
-            </Link>
-            . Copy links below to share student access.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {!students?.length ? (
-            <div className="text-sm text-[var(--muted)]">No students yet.</div>
-          ) : (
-            <StudentTable classId={id} students={students} />
-          )}
-        </CardContent>
-      </Card>
-
-      <AddStudents classId={id} />
     </div>
   );
 }

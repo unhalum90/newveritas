@@ -88,6 +88,16 @@ export function StudentDashboardClient() {
     });
   }, [assessments, activeTab]);
 
+  // Count new (unstarted) assignments per tab
+  const newCounts = useMemo(() => {
+    const isNew = (a: AssessmentListItem) => !a.latest_submission || a.latest_submission.status === "assigned";
+    return {
+      assessments: assessments.filter((a) => (a.type === "summative" || !a.type) && isNew(a)).length,
+      pulse: assessments.filter((a) => a.type === "pulse" && isNew(a)).length,
+      studylab: assessments.filter((a) => a.type === "studylab" && isNew(a)).length,
+    };
+  }, [assessments]);
+
   return (
     <div className="min-h-screen bg-zinc-50 px-6 py-10">
       <div className="mx-auto w-full max-w-4xl space-y-6">
@@ -123,30 +133,45 @@ export function StudentDashboardClient() {
         <div className="flex space-x-2 border-b border-zinc-200">
           <button
             onClick={() => setActiveTab("assessments")}
-            className={`pb-2 px-4 text-sm font-medium transition-colors border-b-2 ${activeTab === "assessments"
+            className={`pb-2 px-4 text-sm font-medium transition-colors border-b-2 flex items-center gap-2 ${activeTab === "assessments"
               ? "border-zinc-900 text-zinc-900"
               : "border-transparent text-zinc-500 hover:text-zinc-700"
               }`}
           >
             Assessments
+            {newCounts.assessments > 0 && (
+              <span className="px-1.5 py-0.5 text-[10px] font-bold bg-emerald-500 text-white rounded-full animate-pulse">
+                NEW
+              </span>
+            )}
           </button>
           <button
             onClick={() => setActiveTab("pulse")}
-            className={`pb-2 px-4 text-sm font-medium transition-colors border-b-2 ${activeTab === "pulse"
+            className={`pb-2 px-4 text-sm font-medium transition-colors border-b-2 flex items-center gap-2 ${activeTab === "pulse"
               ? "border-purple-600 text-purple-700"
               : "border-transparent text-zinc-500 hover:text-zinc-700"
               }`}
           >
             Pulse Checks
+            {newCounts.pulse > 0 && (
+              <span className="px-1.5 py-0.5 text-[10px] font-bold bg-purple-500 text-white rounded-full animate-pulse">
+                NEW
+              </span>
+            )}
           </button>
           <button
             onClick={() => setActiveTab("studylab")}
-            className={`pb-2 px-4 text-sm font-medium transition-colors border-b-2 ${activeTab === "studylab"
+            className={`pb-2 px-4 text-sm font-medium transition-colors border-b-2 flex items-center gap-2 ${activeTab === "studylab"
               ? "border-blue-600 text-blue-700"
               : "border-transparent text-zinc-500 hover:text-zinc-700"
               }`}
           >
             Study Lab
+            {newCounts.studylab > 0 && (
+              <span className="px-1.5 py-0.5 text-[10px] font-bold bg-teal-500 text-white rounded-full animate-pulse">
+                NEW
+              </span>
+            )}
           </button>
         </div>
 

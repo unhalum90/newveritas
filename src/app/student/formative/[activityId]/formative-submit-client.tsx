@@ -174,7 +174,24 @@ export function FormativeSubmitClient({
 
     const startRecording = async (type: "voice_memo" | "explanation") => {
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            console.log("Starting recording of type:", type);
+            // Try with raw constraints first to avoid processing silences
+            const stream = await navigator.mediaDevices.getUserMedia({
+                audio: {
+                    echoCancellation: false,
+                    noiseSuppression: false,
+                    autoGainControl: true // Keep AGC as it usually helps
+                }
+            });
+
+            const tracks = stream.getAudioTracks();
+            console.log("Microphone access granted. Tracks:", tracks.map(t => ({
+                label: t.label,
+                enabled: t.enabled,
+                muted: t.muted, // if true, hardware is muted
+                readyState: t.readyState,
+                settings: t.getSettings()
+            })));
 
             // Detect supported mime type
             const mimeType = [
@@ -184,41 +201,56 @@ export function FormativeSubmitClient({
                 'audio/aac'
             ].find(type => MediaRecorder.isTypeSupported(type)) || '';
 
-            const options = mimeType ? { mimeType } : undefined;
+            const options = mimeType ? { mimeType, audioBitsPerSecond: 128000 } : undefined;
             const mediaRecorder = new MediaRecorder(stream, options);
             mediaRecorderRef.current = mediaRecorder;
 
-            // ... (Visualization Setup) ...
-            if (cameraAnxietyMode) {
-                const audioContext = new AudioContext();
-                const source = audioContext.createMediaStreamSource(stream);
-                const analyser = audioContext.createAnalyser();
-                analyser.fftSize = 256;
-                source.connect(analyser);
-                analyserRef.current = analyser;
-
-                const updateAudioLevel = () => {
-                    if (analyserRef.current) {
-                        const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
-                        analyserRef.current.getByteFrequencyData(dataArray);
-                        const average = dataArray.reduce((a, b) => a + b) / dataArray.length;
-                        setAudioLevel(average / 255);
-                    }
-                    animationRef.current = requestAnimationFrame(updateAudioLevel);
-                };
-                updateAudioLevel();
+            // Always setup AudioContext for diagnostics, even if cameraAnxietyMode is off
+            const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+            if (audioContext.state === 'suspended') {
+                await audioContext.resume();
             }
+            const source = audioContext.createMediaStreamSource(stream);
+            const analyser = audioContext.createAnalyser();
+            analyser.fftSize = 256;
+            source.connect(analyser);
+            analyserRef.current = analyser;
+
+            const updateAudioLevel = () => {
+                if (analyserRef.current) {
+                    const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
+                    analyserRef.current.getByteFrequencyData(dataArray);
+                    const average = dataArray.reduce((total, val) => total + val, 0) / dataArray.length;
+                    setAudioLevel(average / 255);
+                    if (Math.random() < 0.05) {
+                        console.log("Live Level:", average, "Muted:", tracks[0].muted);
+                    }
+                }
+                animationRef.current = requestAnimationFrame(updateAudioLevel);
+            };
+            updateAudioLevel();
 
             const chunks: Blob[] = [];
             mediaRecorder.ondataavailable = (e) => {
                 if (e.data.size > 0) {
                     chunks.push(e.data);
+                    console.log("Audio chunk received:", e.data.size, "Total chunks:", chunks.length, "Total size:", chunks.reduce((acc, c) => acc + c.size, 0));
                 }
             };
 
+            mediaRecorder.onerror = (e) => {
+                console.error("MediaRecorder error:", e);
+                setError("Recording error occurred: " + ((e as any).error?.message || "Unknown recorder error"));
+            };
+
             mediaRecorder.onstop = () => {
-                const blob = new Blob(chunks, { type: mimeType || 'audio/webm' });
-                if (type === "voice_memo") {
+                const finalMimeType = mimeType || 'audio/webm';
+                const blob = new Blob(chunks, { type: finalMimeType });
+                console.log("Recording stopped. Total chunks:", chunks.length, "Final blob size:", blob.size, "Type:", finalMimeType);
+
+                if (blob.size === 0) {
+                    setError("The recording was empty. Please check your microphone permissions and try again.");
+                } else if (type === "voice_memo") {
                     setVoiceMemoBlob(blob);
                     setVoiceMemoUrl(URL.createObjectURL(blob));
                 } else {
@@ -229,27 +261,29 @@ export function FormativeSubmitClient({
                 if (animationRef.current) {
                     cancelAnimationFrame(animationRef.current);
                 }
+                if (timerRef.current) {
+                    clearInterval(timerRef.current);
+                }
                 setAudioLevel(0);
                 setActiveRecordingType(null);
             };
 
-            mediaRecorder.start();
             setActiveRecordingType(type);
             setRecordingTime(0);
+            mediaRecorder.start(500);
 
             timerRef.current = setInterval(() => {
                 setRecordingTime((prev) => prev + 1);
             }, 1000);
         } catch (err) {
             console.error("Recording start error", err);
-            setError("Could not access microphone. Please check your browser permissions and try again.");
+            setError("Could not access microphone. Error: " + (err instanceof Error ? err.message : String(err)));
         }
     };
 
     const stopRecording = () => {
         if (mediaRecorderRef.current && activeRecordingType) {
             mediaRecorderRef.current.stop();
-            // activeRecordingType is cleared in onstop
             if (timerRef.current) {
                 clearInterval(timerRef.current);
             }
@@ -622,35 +656,43 @@ export function FormativeSubmitClient({
                             {voiceMemoUrl ? (
                                 <div className="space-y-3">
                                     <audio src={voiceMemoUrl} controls className="w-full" aria-label="Your voice memo" />
-                                    <Button
-                                        type="button"
-                                        variant="secondary"
-                                        size="sm"
-                                        onClick={() => resetRecording(true)}
-                                    >
-                                        Re-record memo
-                                    </Button>
+                                    <div className="flex gap-2">
+                                        <Button
+                                            type="button"
+                                            variant="secondary"
+                                            size="sm"
+                                            onClick={() => resetRecording(true)}
+                                        >
+                                            Re-record memo
+                                        </Button>
+                                        <a
+                                            href={voiceMemoUrl}
+                                            download="voice-memo-debug.webm"
+                                            className="text-xs text-blue-600 underline flex items-center"
+                                        >
+                                            Download for Debug
+                                        </a>
+                                    </div>
                                     <p className="text-xs text-green-600 font-medium">Recording details saved. Ready to submit!</p>
                                 </div>
                             ) : activeRecordingType === 'voice_memo' ? (
                                 <div className="space-y-3 text-center">
-                                    {cameraAnxietyMode ? (
-                                        <div
-                                            className="h-16 flex items-end justify-center gap-1"
-                                            aria-label={`Recording: ${formatTime(recordingTime)}`}
-                                        >
-                                            {[...Array(12)].map((_, i) => (
-                                                <div
-                                                    key={i}
-                                                    className="w-2 bg-[var(--primary)] rounded-full transition-all"
-                                                    style={{
-                                                        height: `${Math.max(8, audioLevel * 64 + Math.random() * 20)}px`,
-                                                    }}
-                                                />
-                                            ))}
-                                        </div>
-                                    ) : (
-                                        <div className="text-4xl font-mono text-red-500 animate-pulse" aria-live="polite">
+                                    <div
+                                        className="h-16 flex items-end justify-center gap-1"
+                                        aria-label={`Recording: ${formatTime(recordingTime)}`}
+                                    >
+                                        {[...Array(12)].map((_, i) => (
+                                            <div
+                                                key={i}
+                                                className="w-2 bg-[var(--primary,#3b82f6)] rounded-full transition-all border border-blue-400/20"
+                                                style={{
+                                                    height: `${Math.max(8, audioLevel * 64 + Math.random() * 20)}px`,
+                                                }}
+                                            />
+                                        ))}
+                                    </div>
+                                    {!cameraAnxietyMode && (
+                                        <div className="text-sm font-mono text-red-500 animate-pulse">
                                             🔴 {formatTime(recordingTime)}
                                         </div>
                                     )}
@@ -699,32 +741,38 @@ export function FormativeSubmitClient({
                         {audioUrl ? (
                             <div className="space-y-3">
                                 <audio src={audioUrl} controls className="w-full" aria-label="Your recorded explanation" />
-                                <div className="flex gap-2">
+                                <div className="flex gap-2 items-center">
                                     <Button type="button" variant="secondary" size="sm" onClick={() => resetRecording()}>
                                         Re-record
                                     </Button>
+                                    <a
+                                        href={audioUrl}
+                                        download="explanation-debug.webm"
+                                        className="text-xs text-blue-600 underline"
+                                    >
+                                        Download for Debug
+                                    </a>
                                 </div>
                             </div>
                         ) : activeRecordingType === 'explanation' ? (
                             <div className="space-y-3 text-center">
-                                {cameraAnxietyMode ? (
-                                    <div
-                                        className="h-16 flex items-end justify-center gap-1"
-                                        aria-label={`Recording: ${formatTime(recordingTime)}`}
-                                        role="status"
-                                    >
-                                        {[...Array(12)].map((_, i) => (
-                                            <div
-                                                key={i}
-                                                className="w-2 bg-[var(--primary)] rounded-full transition-all"
-                                                style={{
-                                                    height: `${Math.max(8, audioLevel * 64 + Math.random() * 20)}px`,
-                                                }}
-                                            />
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <div className="text-4xl font-mono text-red-500 animate-pulse" aria-live="polite">
+                                <div
+                                    className="h-16 flex items-end justify-center gap-1"
+                                    aria-label={`Recording: ${formatTime(recordingTime)}`}
+                                    role="status"
+                                >
+                                    {[...Array(12)].map((_, i) => (
+                                        <div
+                                            key={i}
+                                            className="w-2 bg-[var(--primary)] rounded-full transition-all"
+                                            style={{
+                                                height: `${Math.max(8, audioLevel * 64 + Math.random() * 20)}px`,
+                                            }}
+                                        />
+                                    ))}
+                                </div>
+                                {!cameraAnxietyMode && (
+                                    <div className="text-sm font-mono text-red-500 animate-pulse">
                                         🔴 {formatTime(recordingTime)}
                                     </div>
                                 )}

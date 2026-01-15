@@ -7,7 +7,7 @@ async function geminiGenerateJson(system: string, userText: string) {
     const apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_KEY;
     if (!apiKey) throw new Error("Missing Google API Key");
 
-    const model = "gemini-2.5-flash"; // Fast model for grading
+    const model = "gemini-3-flash-preview"; // Fast model for grading
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
     const res = await fetch(url, {

@@ -38,7 +38,7 @@ export default async function StudyLabReviewDetailPage({ params }: Props) {
         .eq("id", submissionId)
         .single();
 
-    if (!submission) redirect(`/studylab/${activityId}/review`);
+    if (!submission) redirect(`/activities/studylab/${activityId}/review`);
 
     // Parse History
     // Parse Data
@@ -102,7 +102,7 @@ export default async function StudyLabReviewDetailPage({ params }: Props) {
                             </Button>
                         </a>
                     )}
-                    <Link href={`/studylab/${activityId}/review`}>
+                    <Link href={`/activities/studylab/${activityId}/review`}>
                         <Button variant="secondary">Back to List</Button>
                     </Link>
                 </div>

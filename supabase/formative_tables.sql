@@ -44,8 +44,11 @@ create table if not exists public.formative_submissions (
   student_id uuid not null references public.students(id) on delete cascade,
   status text not null default 'assigned' check (status in ('assigned', 'submitted', 'reviewed')),
   input_mode text check (input_mode in ('scan', 'voice_memo', 'digital', 'skeleton')),
+  artifact_url text, -- For convenience in aggregation
+  audio_url text,    -- For convenience in aggregation
   submitted_at timestamptz,
   reviewed_at timestamptz,
+  reviewed_by uuid references auth.users(id),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   
@@ -61,17 +64,34 @@ create table if not exists public.formative_submission_files (
   created_at timestamptz not null default now()
 );
 
--- Formative scores (teacher feedback)
+-- Formative scores (teacher evaluation)
 create table if not exists public.formative_scores (
   id uuid primary key default gen_random_uuid(),
   submission_id uuid not null references public.formative_submissions(id) on delete cascade,
-  rubric_scores jsonb not null default '{}'::jsonb, -- { accuracy: 2, reasoning: 3 ... }
+  accuracy integer,
+  reasoning integer,
+  clarity integer,
+  transfer integer,
+  overall integer,
+  rubric_scores jsonb not null default '{}'::jsonb, -- Legacy support/flexible storage
   feedback_audio_url text,
   feedback_text text,
+  scored_by uuid references auth.users(id),
+  scored_at timestamptz default now(),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   
   unique(submission_id)
+);
+
+-- Formative feedback (teacher comments)
+create table if not exists public.formative_feedback (
+  id uuid primary key default gen_random_uuid(),
+  submission_id uuid not null references public.formative_submissions(id) on delete cascade,
+  comment text not null,
+  needs_resubmission boolean default false,
+  feedback_by uuid references auth.users(id),
+  created_at timestamptz default now()
 );
 
 
@@ -201,6 +221,31 @@ create policy "Students can view their scores"
       select 1 from public.formative_submissions s
       join public.students stu on s.student_id = stu.id
       where s.id = formative_scores.submission_id
+      and stu.auth_user_id = auth.uid()
+    )
+  );
+
+-- Feedback policies
+alter table public.formative_feedback enable row level security;
+
+create policy "Teachers can manage feedback"
+  on public.formative_feedback for all
+  using (
+    exists (
+      select 1 from public.formative_submissions s
+      join public.formative_activities a on s.activity_id = a.id
+      where s.id = formative_feedback.submission_id
+      and a.teacher_id = auth.uid()
+    )
+  );
+
+create policy "Students can view their own feedback"
+  on public.formative_feedback for select
+  using (
+    exists (
+      select 1 from public.formative_submissions s
+      join public.students stu on s.student_id = stu.id
+      where s.id = formative_feedback.submission_id
       and stu.auth_user_id = auth.uid()
     )
   );

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
+import Script from "next/script";
 import "./globals.css";
 import "driver.js/dist/driver.css";
 import { CookieBanner } from "@/components/cookie-banner";
@@ -27,7 +28,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
         suppressHydrationWarning
@@ -36,6 +37,19 @@ export default function RootLayout({
         {children}
         <Analytics />
         <CookieBanner />
+        <Script
+          src="https://www.googletagmanager.com/gtag/js?id=G-0CV2K5MWWZ"
+          strategy="afterInteractive"
+        />
+        <Script id="google-analytics" strategy="afterInteractive">
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+
+            gtag('config', 'G-0CV2K5MWWZ');
+          `}
+        </Script>
       </body>
     </html>
   );
