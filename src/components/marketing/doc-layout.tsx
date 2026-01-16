@@ -268,7 +268,12 @@ function renderDocBlocks(blocks: DocBlock[]) {
 }
 
 export function DocLayout({ title, fileName }: DocLayoutProps) {
-  const content = fs.readFileSync(path.join(process.cwd(), fileName), "utf8").trim();
+  // Sanitize fileName to prevent path traversal
+  const sanitizedFileName = fileName.replace(/\.\./g, '').replace(/[^a-zA-Z0-9._/-]/g, '');
+  if (sanitizedFileName !== fileName || fileName.includes('..')) {
+    throw new Error('Invalid file name');
+  }
+  const content = fs.readFileSync(path.join(process.cwd(), sanitizedFileName), "utf8").trim();
   const blocks = parseDocContent(content);
 
   return (

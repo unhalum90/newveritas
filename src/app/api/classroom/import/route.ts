@@ -232,7 +232,8 @@ export async function POST(request: NextRequest) {
                         code: studentCode,
                     });
                 } catch (err) {
-                    console.error(`Failed to create student ${firstName} ${lastName}:`, err);
+                    const studentName = `${firstName} ${lastName}`.replace(/%/g, '%%');
+                    console.error("Failed to create student:", studentName, err);
                     errors.push(`${firstName} ${lastName}`);
                 }
             }));

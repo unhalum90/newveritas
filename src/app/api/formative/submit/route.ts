@@ -173,7 +173,7 @@ export async function POST(request: NextRequest) {
                     });
 
                 if (artifactUploadError) {
-                    console.error(`Error uploading artifact ${i}:`, artifactUploadError);
+                    console.error("Error uploading artifact:", i, artifactUploadError);
                     return NextResponse.json(
                         { error: `Failed to upload artifact page ${i + 1}` },
                         { status: 500 }
