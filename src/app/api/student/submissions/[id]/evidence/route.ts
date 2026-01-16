@@ -309,8 +309,8 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
   let analyzedAt = row.analyzed_at ? row.analyzed_at : null;
   if (isEvidenceFollowup(q.question_type) && (process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY)) {
     const ai = await analyzeEvidenceImage({
-      image: out,
-      mimeType,
+      images: [out],
+      mimeTypes: [mimeType],
       questionText: q.question_text,
       context: {
         assessmentId: submission.assessment_id,

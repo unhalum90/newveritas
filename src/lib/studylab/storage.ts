@@ -6,6 +6,8 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 export const FORMATIVE_BUCKETS = {
   ARTIFACTS: "formative-artifacts",
   AUDIO: "formative-audio",
+  STUDYLAB_IMAGES: "studylab-images",
+  STUDYLAB_RECORDINGS: "student-recordings",
 } as const;
 
 /**

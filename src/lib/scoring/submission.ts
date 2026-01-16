@@ -352,9 +352,10 @@ async function transcribeWithGemini(audioBytes: Buffer, mimeType: string) {
   const user = "Transcribe the audio verbatim. If unclear, do your best; do not invent content.";
   const b64 = audioBytes.toString("base64");
 
+  const cleanMimeType = mimeType.split(";")[0];
   const data = await geminiGenerateJson(model, system, [
     { text: user },
-    { inline_data: { mime_type: mimeType, data: b64 } },
+    { inline_data: { mime_type: cleanMimeType, data: b64 } },
   ]);
 
   const transcript = (data as { transcript?: unknown } | null)?.transcript;
@@ -441,10 +442,11 @@ Rules:
 - Justification must quote or reference specific parts of what was said.
 - If audio is silent or irrelevant, score 1 with clear explanation.`;
 
+  const cleanMimeType = input.mimeType.split(";")[0];
   const b64 = input.audioBytes.toString("base64");
   const data = await geminiGenerateJson(model, system, [
     { text: user },
-    { inline_data: { mime_type: input.mimeType, data: b64 } },
+    { inline_data: { mime_type: cleanMimeType, data: b64 } },
   ]);
 
   const obj = data as {

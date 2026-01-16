@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { transcribeAudio } from "@/lib/scoring/submission";
+import { FORMATIVE_BUCKETS } from "@/lib/studylab/storage";
 
 interface ChatContext {
     learningTarget: string;
@@ -138,7 +139,7 @@ export async function POST(req: NextRequest) {
 
         // 1. Upload Audio
         const { error: uploadError } = await admin.storage
-            .from("studylab-recordings")
+            .from(FORMATIVE_BUCKETS.STUDYLAB_RECORDINGS)
             .upload(path, file, { contentType: file.type || "audio/webm", upsert: true });
 
         if (uploadError) console.error("Audio Upload failed", uploadError);

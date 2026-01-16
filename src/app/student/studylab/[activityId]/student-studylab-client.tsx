@@ -44,16 +44,38 @@ interface Props {
     initialSubmission: Submission | null;
 }
 export function StudentStudylabClient({ activity, student, initialSubmission }: Props) {
-    const [selectedFile, setSelectedFile] = useState<File | null>(null);
-    const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-    const [imagePath, setImagePath] = useState<string | null>(null);
+    const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+    const [previews, setPreviews] = useState<string[]>([]);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const MAX_FILES = 3;
+    const [imagePaths, setImagePaths] = useState<string[]>([]);
 
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (file) {
-            setSelectedFile(file);
-            setPreviewUrl(URL.createObjectURL(file));
+        const files = e.target.files;
+        if (!files) return;
+
+        const newFiles: File[] = [];
+        const newPreviews: string[] = [];
+
+        const remainingSlots = MAX_FILES - selectedFiles.length;
+        const filesToAdd = Math.min(files.length, remainingSlots);
+
+        for (let i = 0; i < filesToAdd; i++) {
+            const file = files[i];
+            newFiles.push(file);
+            newPreviews.push(URL.createObjectURL(file));
         }
+
+        setSelectedFiles(prev => [...prev, ...newFiles]);
+        setPreviews(prev => [...prev, ...newPreviews]);
+
+        // Reset input
+        e.target.value = "";
+    };
+
+    const removeFile = (index: number) => {
+        setSelectedFiles(prev => prev.filter((_, i) => i !== index));
+        setPreviews(prev => prev.filter((_, i) => i !== index));
     };
 
     const [isStarting, setIsStarting] = useState(false);
@@ -174,7 +196,7 @@ export function StudentStudylabClient({ activity, student, initialSubmission }: 
                     studentId: student.id,
                     history: messages,
                     selfRating, // Send rating
-                    imagePath // Send artifact path for teacher review
+                    imagePath: imagePaths.join(",") // Send artifact paths for teacher review
                 })
             });
 
@@ -201,7 +223,7 @@ export function StudentStudylabClient({ activity, student, initialSubmission }: 
     }, [messages, isProcessing, isComplete]);
 
     const handleStartSession = async () => {
-        if (!selectedFile) return;
+        if (selectedFiles.length === 0) return;
 
         // Unlock mobile audio context
         unlockAudio();
@@ -210,7 +232,10 @@ export function StudentStudylabClient({ activity, student, initialSubmission }: 
 
         try {
             const formData = new FormData();
-            formData.append("file", selectedFile);
+            selectedFiles.forEach((file, i) => {
+                formData.append(`file_${i}`, file);
+            });
+            formData.append("fileCount", String(selectedFiles.length));
             formData.append("activityId", activity.id);
 
             const res = await fetch("/api/studylab/session/start", {
@@ -224,9 +249,7 @@ export function StudentStudylabClient({ activity, student, initialSubmission }: 
             if (data.message) {
                 setMessages([{ role: "ai", content: data.message }]);
                 setIsSessionActive(true);
-                if (data.imagePath) {
-                    setImagePath(data.imagePath);
-                }
+                setImagePaths(data.imagePaths || []);
             }
         } catch (error) {
             console.error("Start Session Error:", error);
@@ -430,9 +453,9 @@ export function StudentStudylabClient({ activity, student, initialSubmission }: 
 
                     <Card className="h-[600px] flex flex-col bg-slate-50 relative overflow-hidden">
                         {/* Notes Overlay */}
-                        {showNotes && previewUrl && (
+                        {showNotes && previews.length > 0 && (
                             <div className="absolute inset-0 z-50 bg-black/90 p-4 flex flex-col items-center justify-center animate-in fade-in duration-200">
-                                <img src={previewUrl} alt="Notes" className="max-h-[85%] object-contain rounded bg-white" />
+                                <img src={previews[0]} alt="Notes" className="max-h-[85%] object-contain rounded bg-white" />
                                 <Button
                                     variant="secondary"
                                     className="mt-4"
@@ -633,61 +656,87 @@ export function StudentStudylabClient({ activity, student, initialSubmission }: 
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <div className="flex flex-col items-center justify-center space-y-4 rounded-lg border-2 border-dashed border-zinc-200 p-12 text-center bg-zinc-50/50">
-                            {previewUrl ? (
-                                <div className="space-y-4 w-full max-w-md">
-                                    <div className="relative h-64 w-full">
-                                        <img
-                                            src={previewUrl}
-                                            alt="Notes preview"
-                                            className="h-full w-full object-contain rounded-md bg-white shadow-sm border"
-                                        />
-                                        <button
-                                            onClick={() => {
-                                                setSelectedFile(null);
-                                                setPreviewUrl(null);
-                                            }}
-                                            className="absolute top-2 right-2 bg-black/50 text-white rounded-full p-1 hover:bg-black/70 transition-colors"
-                                        >
-                                            ✕
-                                        </button>
-                                    </div>
-                                    <div className="flex flex-col gap-2">
-                                        <p className="text-sm text-zinc-500">Image selected. Ready to start session.</p>
-                                        <Button
-                                            className="w-full"
-                                            onClick={handleStartSession}
-                                            disabled={isStarting}
-                                        >
-                                            {isStarting ? (
-                                                <span className="flex items-center gap-2">
-                                                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                                                    Initializing Session...
-                                                </span>
-                                            ) : (
-                                                "Start Study Session"
+                        <Card className="border-blue-500/20 bg-black/40 backdrop-blur-sm">
+                            <CardHeader>
+                                <CardTitle className="flex justify-between items-center text-blue-400">
+                                    <span>Ready to study?</span>
+                                    <span className="text-xs font-normal text-blue-500/60">Upload photos of your notes (up to 3)</span>
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-6">
+                                <div className="flex flex-col items-center gap-6">
+                                    {previews.length > 0 ? (
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 w-full">
+                                            {previews.map((src, idx) => (
+                                                <div key={idx} className="relative group">
+                                                    <img
+                                                        src={src}
+                                                        alt={`Preview ${idx + 1}`}
+                                                        className="w-full h-48 object-cover rounded-xl border border-blue-500/30 shadow-lg shadow-blue-500/10"
+                                                    />
+                                                    <button
+                                                        onClick={() => removeFile(idx)}
+                                                        className="absolute -top-2 -right-2 w-8 h-8 bg-black/80 text-red-500 rounded-full border border-red-500/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                                                    >
+                                                        ✕
+                                                    </button>
+                                                    <div className="absolute bottom-2 left-2 px-2 py-1 bg-black/60 rounded-md text-[10px] text-blue-300 backdrop-blur-sm border border-blue-500/20">
+                                                        Page {idx + 1}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                            {previews.length < MAX_FILES && (
+                                                <button
+                                                    onClick={() => fileInputRef.current?.click()}
+                                                    className="w-full h-48 border-2 border-dashed border-blue-500/20 rounded-xl flex flex-col items-center justify-center gap-2 hover:border-blue-500/40 hover:bg-blue-500/5 transition-all group"
+                                                >
+                                                    <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                                        <span className="text-blue-400">＋</span>
+                                                    </div>
+                                                    <span className="text-xs text-blue-500/60 font-medium">Add another page</span>
+                                                </button>
                                             )}
-                                        </Button>
-                                    </div>
-                                </div>
-                            ) : (
-                                <>
-                                    <p className="text-zinc-500">Upload your notes to start the AI session.</p>
+                                        </div>
+                                    ) : (
+                                        <div
+                                            onClick={() => fileInputRef.current?.click()}
+                                            className="cursor-pointer group flex flex-col items-center justify-center p-12 border-2 border-dashed border-blue-500/20 rounded-2xl hover:border-blue-500/40 hover:bg-blue-500/5 transition-all w-full md:w-3/4"
+                                        >
+                                            <div className="w-20 h-20 bg-blue-500/10 rounded-full flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                                                <span className="text-3xl">📷</span>
+                                            </div>
+                                            <p className="text-blue-400 font-medium text-lg">Snap or Upload Notes</p>
+                                            <p className="text-blue-500/60 text-sm mt-1">Diagrams, handwriting, or text are all welcome</p>
+                                        </div>
+                                    )}
+
                                     <input
+                                        ref={fileInputRef}
                                         type="file"
                                         accept="image/*"
-                                        className="hidden"
-                                        id="notes-upload"
+                                        multiple
                                         onChange={handleFileSelect}
+                                        className="hidden"
                                     />
-                                    <label htmlFor="notes-upload" className="cursor-pointer">
-                                        <div className="bg-[var(--primary)] text-[var(--primary-foreground)] h-10 px-4 py-2 inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-[var(--primary)]/90">
-                                            Upload Notes
-                                        </div>
-                                    </label>
-                                </>
-                            )}
-                        </div>
+
+                                    <Button
+                                        size="lg"
+                                        className="w-full md:w-1/2 bg-blue-600 hover:bg-blue-500 text-white font-bold py-6 rounded-xl shadow-lg shadow-blue-500/20 border-t border-white/20 transition-all active:scale-95 disabled:opacity-50"
+                                        onClick={handleStartSession}
+                                        disabled={selectedFiles.length === 0 || isStarting}
+                                    >
+                                        {isStarting ? (
+                                            <span className="flex items-center gap-2">
+                                                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                                Analyzing notes...
+                                            </span>
+                                        ) : (
+                                            "✨ Analyze & Connect"
+                                        )}
+                                    </Button>
+                                </div>
+                            </CardContent>
+                        </Card>
                     </CardContent>
                 </Card>
             </div>

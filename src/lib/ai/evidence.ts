@@ -36,8 +36,8 @@ function parseAnalysis(raw: unknown): EvidenceAnalysis | null {
 }
 
 export async function analyzeEvidenceImage(input: {
-  image: Buffer;
-  mimeType?: string;
+  images: Buffer[];
+  mimeTypes?: string[];
   questionText?: string | null;
   context?: AnalysisContext;
 }) {
@@ -46,15 +46,28 @@ export async function analyzeEvidenceImage(input: {
   if (!apiKey) throw new Error("Missing GOOGLE_API_KEY");
 
   const system =
-    "You review a student evidence file (photo or PDF). Return ONLY JSON with keys: summary (string) and questions (array of 2 strings). Keep questions short and specific.";
+    "You are an expert educator analyzing student evidence (photos of notes, diagrams, or work). " +
+    "Perform a deep visual analysis. Look for layouts, diagrams, handwriting patterns, and structural cues, not just text. " +
+    "Acknowledge specific visual elements you see. " +
+    "Return ONLY JSON with keys: summary (string) and questions (array of 2 strings). Keep questions short and probing.";
 
   const questionText = input.questionText?.trim();
   const userPrompt = questionText
-    ? `Teacher prompt:\n${questionText}\n\nGenerate two follow-up questions about the evidence.`
-    : "Generate two follow-up questions about the evidence.";
+    ? `Teacher prompt:\n${questionText}\n\nAnalyze the provided evidence and generate two follow-up questions.`
+    : "Analyze the provided evidence and generate two follow-up questions.";
 
-  const mimeType = input.mimeType || "image/jpeg";
-  const b64 = input.image.toString("base64");
+  const images = input.images;
+  const mimeTypes = input.mimeTypes || images.map(() => "image/jpeg");
+
+  const parts: any[] = [{ text: userPrompt }];
+  images.forEach((buf, i) => {
+    parts.push({
+      inline_data: {
+        mime_type: mimeTypes[i] || "image/jpeg",
+        data: buf.toString("base64"),
+      },
+    });
+  });
 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
     model,
@@ -66,13 +79,7 @@ export async function analyzeEvidenceImage(input: {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: system }] },
-        contents: [{
-          role: "user",
-          parts: [
-            { text: userPrompt },
-            { inline_data: { mime_type: mimeType, data: b64 } }
-          ]
-        }],
+        contents: [{ role: "user", parts }],
         generationConfig: {
           temperature: 0.2,
           responseMimeType: "application/json",
