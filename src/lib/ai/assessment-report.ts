@@ -168,7 +168,8 @@ export async function generateAssessmentReportInsights(input: {
     "You are an instructional analysis assistant. Return ONLY JSON (no markdown) matching the schema. " +
     "Use evidence_refs with excerpt_id values provided. " +
     "Do not infer emotion, motivation, or attitude. " +
-    "Do not name students. Use provided student labels only when necessary.";
+    "Do not name students. Use provided student labels only when necessary. " +
+    "Do NOT use first-person pronouns (I, me, my, we, us, our) in any text fields. Use objective, professional language.";
 
   const payload = {
     assessment: input.assessment,
@@ -216,10 +217,10 @@ ${JSON.stringify(payload)}`;
 
     const data = (await res.json().catch(() => null)) as
       | {
-          error?: { message?: unknown };
-          choices?: Array<{ message?: { content?: unknown } }>;
-          usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
-        }
+        error?: { message?: unknown };
+        choices?: Array<{ message?: { content?: unknown } }>;
+        usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
+      }
       | null;
     const usage = data?.usage;
 

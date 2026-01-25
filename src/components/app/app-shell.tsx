@@ -3,17 +3,25 @@
 import { useEffect, useState } from "react";
 
 import { AppHeader } from "@/components/app/app-header";
+import { PrivacyNoticeModal } from "@/components/compliance/privacy-notice-modal";
 
 type ThemeMode = "dark" | "light";
 
 const THEME_STORAGE_KEY = "veritas-dashboard-theme";
 
+type PrivacyNoticeProps = {
+  userId: string;
+  userType: "teacher" | "student";
+  lastShown: string | null;
+};
+
 type AppShellProps = {
   children: React.ReactNode;
   mainClassName?: string;
+  privacyNotice?: PrivacyNoticeProps;
 };
 
-export function AppShell({ children, mainClassName = "mx-auto max-w-6xl px-6 py-10" }: AppShellProps) {
+export function AppShell({ children, mainClassName = "mx-auto max-w-6xl px-6 py-10", privacyNotice }: AppShellProps) {
   const [theme, setTheme] = useState<ThemeMode>("dark");
 
   useEffect(() => {
@@ -42,6 +50,17 @@ export function AppShell({ children, mainClassName = "mx-auto max-w-6xl px-6 py-
       <main id="main-content" className={mainClassName}>
         {children}
       </main>
+      {privacyNotice && (
+        <PrivacyNoticeModal
+          userId={privacyNotice.userId}
+          userType={privacyNotice.userType}
+          lastShown={privacyNotice.lastShown}
+        />
+      )}
+      <footer className="mt-auto border-t border-[var(--border)] bg-[var(--surface)] py-4 text-center text-xs text-[var(--muted)]">
+        © 2026 SayVeritas / Chamberlin Innovations SASU. All rights reserved.
+      </footer>
     </div>
   );
 }
+

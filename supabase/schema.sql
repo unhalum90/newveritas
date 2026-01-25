@@ -72,7 +72,11 @@ create table if not exists public.schools (
   name text not null,
   country text,
   school_type text,
-  created_at timestamptz default now()
+  data_classification text not null default 'anonymous',
+  retention_audio_days int not null default 30,
+  retention_transcript_days int not null default 30,
+  retention_log_days int not null default 90,
+  dsl_email text -- Crisis alert recipient
 );
 
 -- =========================
@@ -1603,6 +1607,7 @@ alter table public.assessment_questions add column if not exists data_classifica
 alter table public.rubrics add column if not exists data_classification text not null default 'educational';
 alter table public.rubric_standards add column if not exists data_classification text not null default 'educational';
 alter table public.submissions add column if not exists data_classification text not null default 'educational';
+alter table public.submissions add column if not exists crisis_flagged boolean not null default false;
 alter table public.integrity_events add column if not exists data_classification text not null default 'educational';
 alter table public.submission_responses add column if not exists data_classification text not null default 'audio';
 alter table public.evidence_images add column if not exists data_classification text not null default 'educational';
@@ -1679,4 +1684,80 @@ $$;
 
 -- Index for profile-based queries
 create index if not exists assessments_profile_idx on public.assessments(assessment_profile);
+
+-- =========================
+-- Activity: Session Tracking
+-- =========================
+
+create table if not exists public.session_tracking (
+  id uuid primary key default gen_random_uuid(),
+  student_id uuid not null references public.students(id) on delete cascade,
+  date date not null default current_date,
+  duration_seconds int not null default 0,
+  sessions_count int not null default 0,
+  last_activity_at timestamptz not null default now(),
+  created_at timestamptz not null default now(),
+  data_classification text not null default 'educational'
+);
+
+create unique index if not exists session_tracking_student_date_idx on public.session_tracking (student_id, date);
+
+alter table public.session_tracking enable row level security;
+
+drop policy if exists "Students can view own session tracking" on public.session_tracking;
+create policy "Students can view own session tracking"
+on public.session_tracking
+for select
+using (
+  exists (
+    select 1 from public.students s
+    where s.id = student_id and s.auth_user_id = auth.uid()
+  )
+);
+
+drop policy if exists "Teachers can view student session tracking" on public.session_tracking;
+create policy "Teachers can view student session tracking"
+on public.session_tracking
+for select
+using (
+  exists (
+    select 1 from public.teachers t
+    join public.classes c on c.workspace_id = t.workspace_id
+    join public.students s on s.class_id = c.id
+    where s.id = student_id and t.user_id = auth.uid()
+  )
+);
+
+-- =========================
+-- Safety: Crisis Detection
+-- =========================
+
+create table if not exists public.crisis_alerts (
+  id uuid primary key default gen_random_uuid(),
+  school_id uuid references public.schools(id) on delete cascade,
+  student_id uuid references public.students(id) on delete cascade,
+  submission_id uuid references public.submissions(id) on delete cascade,
+  keyword_detected text,
+  context_excerpt text,
+  alerted_at timestamptz default now(),
+  dsl_email_sent_to text,
+  data_classification text not null default 'sensitive'
+);
+
+create index if not exists crisis_alerts_school_id_idx on public.crisis_alerts(school_id);
+
+alter table public.crisis_alerts enable row level security;
+
+-- Only admins and teachers should potentially see this, or maybe just admins/DSLs.
+-- For now, consistent with other tables:
+create policy "Teachers can view crisis alerts"
+on public.crisis_alerts
+for select
+using (
+  exists (
+    select 1
+    from public.teachers t
+    where t.school_id = school_id and t.user_id = auth.uid()
+  )
+);
 

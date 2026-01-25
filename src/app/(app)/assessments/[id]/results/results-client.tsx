@@ -6,6 +6,8 @@ import Link from "next/link";
 import { AssessmentReportPanel } from "@/components/assessments/assessment-report-panel";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useSchoolLocale } from "@/hooks/use-school-locale";
+import { useUKVocabulary } from "@/hooks/use-uk-locale";
 
 type SubmissionRow = {
   id: string;
@@ -224,6 +226,9 @@ export function AssessmentResultsClient({ assessmentId }: { assessmentId: string
   const [releaseWorking, setReleaseWorking] = useState(false);
   const [releaseError, setReleaseError] = useState<string | null>(null);
   const [releaseNotice, setReleaseNotice] = useState<string | null>(null);
+
+  const { hideScores } = useSchoolLocale();
+  const { translate: t } = useUKVocabulary();
 
   const selectedSubmission = useMemo(
     () => submissions.find((s) => s.id === selectedSubmissionId) ?? null,
@@ -569,20 +574,22 @@ export function AssessmentResultsClient({ assessmentId }: { assessmentId: string
                 ) : null}
               </CardContent>
             </Card>
+            {hideScores ? null : (
+              <Card className="border-[var(--border)] bg-[var(--surface)]/80 backdrop-blur-sm shadow-sm transition-all hover:shadow-md">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium text-[var(--muted)]">Class Avg</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-[var(--text)]">
+                    {isPracticeMode ? "Practice" : typeof summary.avg_score === "number" ? summary.avg_score.toFixed(2) : "—"}
+                  </div>
+                  <div className="mt-1 text-xs text-[var(--muted)]">{isPracticeMode ? "Not scored" : "out of 5.00"}</div>
+                </CardContent>
+              </Card>
+            )}
             <Card className="border-[var(--border)] bg-[var(--surface)]/80 backdrop-blur-sm shadow-sm transition-all hover:shadow-md">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-[var(--muted)]">Class Avg</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-[var(--text)]">
-                  {isPracticeMode ? "Practice" : typeof summary.avg_score === "number" ? summary.avg_score.toFixed(2) : "—"}
-                </div>
-                <div className="mt-1 text-xs text-[var(--muted)]">{isPracticeMode ? "Not scored" : "out of 5.00"}</div>
-              </CardContent>
-            </Card>
-            <Card className="border-[var(--border)] bg-[var(--surface)]/80 backdrop-blur-sm shadow-sm transition-all hover:shadow-md">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-[var(--muted)]">Scoring Status</CardTitle>
+                <CardTitle className="text-sm font-medium text-[var(--muted)]">{t("Scoring Status")}</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-[var(--text)]">
@@ -596,7 +603,7 @@ export function AssessmentResultsClient({ assessmentId }: { assessmentId: string
             </Card>
             <Card className="border-[var(--border)] bg-[var(--surface)]/80 backdrop-blur-sm shadow-sm transition-all hover:shadow-md">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-[var(--muted)]">Avg Time to Score</CardTitle>
+                <CardTitle className="text-sm font-medium text-[var(--muted)]">{t("Avg Time to Score")}</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-[var(--text)]">
@@ -698,7 +705,7 @@ export function AssessmentResultsClient({ assessmentId }: { assessmentId: string
                         {" • "}
                         {s.response_count} recordings
                         {" • "}
-                        {isPracticeMode ? "Practice attempt" : `Avg ${typeof s.avg_score === "number" ? s.avg_score.toFixed(2) : "—"}`}
+                        {isPracticeMode ? "Practice attempt" : hideScores ? "Assessment complete" : `Avg ${typeof s.avg_score === "number" ? s.avg_score.toFixed(2) : "—"}`}
                       </div>
                     </button>
                   );
@@ -807,19 +814,21 @@ export function AssessmentResultsClient({ assessmentId }: { assessmentId: string
                         onChange={(e) => setReleaseComment(e.target.value)}
                       />
                     </div>
-                    <div className="mt-3 space-y-2">
-                      <label className="text-xs font-semibold text-[var(--muted)]">Final score override (optional)</label>
-                      <input
-                        type="number"
-                        min={0}
-                        max={5}
-                        step={0.1}
-                        className="h-10 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 text-sm text-[var(--text)]"
-                        placeholder="Leave blank to use the computed average."
-                        value={releaseOverride}
-                        onChange={(e) => setReleaseOverride(e.target.value)}
-                      />
-                    </div>
+                    {hideScores ? null : (
+                      <div className="mt-3 space-y-2">
+                        <label className="text-xs font-semibold text-[var(--muted)]">Final score override (optional)</label>
+                        <input
+                          type="number"
+                          min={0}
+                          max={5}
+                          step={0.1}
+                          className="h-10 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 text-sm text-[var(--text)]"
+                          placeholder="Leave blank to use the computed average."
+                          value={releaseOverride}
+                          onChange={(e) => setReleaseOverride(e.target.value)}
+                        />
+                      </div>
+                    )}
                     {releaseOverride.trim() ? (
                       <>
                         <div className="mt-3 space-y-2">
@@ -864,7 +873,7 @@ export function AssessmentResultsClient({ assessmentId }: { assessmentId: string
                         disabled={releaseWorking || detail.submission.scoring_status !== "complete"}
                         onClick={handleRelease}
                       >
-                        {releaseWorking ? "Releasing…" : "Release Grade"}
+                        {releaseWorking ? "Releasing…" : t("Release Grade")}
                       </Button>
                     </div>
                   </div>
@@ -944,7 +953,7 @@ export function AssessmentResultsClient({ assessmentId }: { assessmentId: string
                                 className={`rounded-full border px-2 py-0.5 text-xs font-semibold border-[var(--border)] ${q.scores?.reasoning.score == null
                                   ? "bg-[var(--background)] text-[var(--muted)]"
                                   : "bg-[var(--background)] text-[var(--primary)]"
-                                  }`}
+                                  } ${hideScores ? "hidden" : ""}`}
                               >
                                 {q.scores?.reasoning.score ?? "—"}/5
                               </div>
@@ -960,7 +969,7 @@ export function AssessmentResultsClient({ assessmentId }: { assessmentId: string
                                 className={`rounded-full border px-2 py-0.5 text-xs font-semibold border-[var(--border)] ${q.scores?.evidence.score == null
                                   ? "bg-[var(--background)] text-[var(--muted)]"
                                   : "bg-[var(--background)] text-[var(--primary)]"
-                                  }`}
+                                  } ${hideScores ? "hidden" : ""}`}
                               >
                                 {q.scores?.evidence.score ?? "—"}/5
                               </div>

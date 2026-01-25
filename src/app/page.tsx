@@ -4,6 +4,7 @@ import { HeroImage } from "@/components/home/hero-image";
 import { MarketingFooter } from "@/components/marketing/marketing-footer";
 import { WebinarCalendar } from "@/components/marketing/webinar-calendar";
 import { WebinarRegistrationForm } from "@/components/marketing/webinar-registration-form";
+import { ShieldAlert } from "lucide-react";
 
 export default function Home() {
   const pricingTiers = [
@@ -129,8 +130,10 @@ export default function Home() {
             <div className="grid gap-12 md:grid-cols-2 md:items-center">
               {/* Left Column - Content */}
               <div>
-
-
+                <div className="mb-6 flex items-center gap-2 rounded-full border border-indigo-500/30 bg-indigo-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-indigo-400">
+                  <ShieldAlert className="h-3 w-3" />
+                  UK DfE Safety Standards Compliant
+                </div>
                 <h1 className="text-5xl font-bold leading-tight tracking-tight md:text-7xl">
                   Voice-based learning <br />
                   <span className="text-[var(--primary)]">platform.</span>
@@ -138,7 +141,7 @@ export default function Home() {
 
                 <p className="mt-6 text-lg leading-relaxed text-[var(--muted)] md:text-xl">
                   Daily formative check-ins. Weekly Socratic study sessions. Unit oral assessments.
-                  One platform where thinking happens through speaking, not typing.
+                  One platform where thinking happens through speaking, not typing. Built for UK schools with integrated safeguarding and academic integrity.
                 </p>
                 <div className="mt-8 flex flex-col gap-3 sm:flex-row">
                   <Link
@@ -576,7 +579,7 @@ export default function Home() {
                 },
                 {
                   title: "School-level control",
-                  description: "Admin tools and bulk onboarding (where enabled).",
+                  description: "Admin dashboards with UK compliance reporting (Integrity & Engagement).",
                   icon: "⚙️"
                 },
               ].map((item) => (
@@ -623,6 +626,14 @@ export default function Home() {
                 <div className="flex items-start gap-2">
                   <span className="text-teal-400">✓</span>
                   <span className="text-sm text-[var(--muted)]">No emotion inference: we focus on content, not tone</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="text-teal-400">✓</span>
+                  <span className="text-sm text-[var(--muted)]">UK Data Residency: GDPR-compliant processing</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="text-teal-400">✓</span>
+                  <span className="text-sm text-[var(--muted)]">Anti-Anthropomorphization: AI as a utility, not a person</span>
                 </div>
               </div>
               <div className="mt-8 flex flex-wrap gap-3">
@@ -794,6 +805,6 @@ export default function Home() {
       </main>
 
       <MarketingFooter />
-    </div>
+    </div >
   );
 }

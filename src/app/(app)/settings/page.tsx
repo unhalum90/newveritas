@@ -7,8 +7,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { useSchoolLocale } from "@/hooks/use-school-locale";
 
 export default function SettingsPage() {
+  const { locale } = useSchoolLocale();
   const [email, setEmail] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [timezone, setTimezone] = useState("America/Los_Angeles");
@@ -163,6 +165,16 @@ export default function SettingsPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 className="bg-[var(--surface)]/50"
               />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="system-locale">System</Label>
+              <Input
+                id="system-locale"
+                value={locale}
+                disabled
+                className="bg-[var(--surface)]/50 opacity-100 text-[var(--muted)]"
+              />
+              <p className="text-xs text-[var(--muted)]">School location settings (managed by admin).</p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="timezone">Timezone</Label>

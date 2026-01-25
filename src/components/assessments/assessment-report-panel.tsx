@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useSchoolLocale } from "@/hooks/use-school-locale";
+import { useUKVocabulary } from "@/hooks/use-uk-locale";
 
 type ReportPayload = {
   id: string;
@@ -67,6 +69,9 @@ export function AssessmentReportPanel({ assessmentId }: { assessmentId: string }
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const { hideScores } = useSchoolLocale();
+  const { translate: t } = useUKVocabulary();
 
   const loadLatest = useCallback(async () => {
     setLoading(true);
@@ -212,7 +217,7 @@ export function AssessmentReportPanel({ assessmentId }: { assessmentId: string }
             <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--muted)]">
               <span>Data quality: {qualityLevel}</span>
               {llmMode ? <span> - LLM mode: {llmMode.replace("_", " ")}</span> : null}
-              {stale ? <span className="text-[var(--danger)]"> - Scores updated since report</span> : null}
+              {stale ? <span className="text-[var(--danger)]"> - {hideScores ? "Data updated since report" : "Scores updated since report"}</span> : null}
             </div>
             {warnings.length ? (
               <div className="rounded-xl border border-white/10 bg-[rgba(15,23,42,0.35)] p-3 text-xs text-[var(--muted)]">
@@ -228,18 +233,22 @@ export function AssessmentReportPanel({ assessmentId }: { assessmentId: string }
                   {formatPercent(report.completion_rate)}
                 </div>
               </div>
-              <div className="rounded-xl border border-white/10 bg-[rgba(15,23,42,0.35)] p-3">
-                <div className="text-xs text-[var(--muted)]">Avg reasoning score</div>
-                <div className="mt-1 text-lg font-semibold text-[var(--text)]">
-                  {formatNumber(report.avg_reasoning_score)}
-                </div>
-              </div>
-              <div className="rounded-xl border border-white/10 bg-[rgba(15,23,42,0.35)] p-3">
-                <div className="text-xs text-[var(--muted)]">Avg evidence score</div>
-                <div className="mt-1 text-lg font-semibold text-[var(--text)]">
-                  {formatNumber(report.avg_evidence_score)}
-                </div>
-              </div>
+              {hideScores ? null : (
+                <>
+                  <div className="rounded-xl border border-white/10 bg-[rgba(15,23,42,0.35)] p-3">
+                    <div className="text-xs text-[var(--muted)]">Avg reasoning score</div>
+                    <div className="mt-1 text-lg font-semibold text-[var(--text)]">
+                      {formatNumber(report.avg_reasoning_score)}
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-[rgba(15,23,42,0.35)] p-3">
+                    <div className="text-xs text-[var(--muted)]">Avg evidence score</div>
+                    <div className="mt-1 text-lg font-semibold text-[var(--text)]">
+                      {formatNumber(report.avg_evidence_score)}
+                    </div>
+                  </div>
+                </>
+              )}
               <div className="rounded-xl border border-white/10 bg-[rgba(15,23,42,0.35)] p-3">
                 <div className="text-xs text-[var(--muted)]">Avg response length</div>
                 <div className="mt-1 text-lg font-semibold text-[var(--text)]">

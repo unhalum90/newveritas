@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useSchoolLocale } from "@/hooks/use-school-locale";
 
 type FeedbackQuestion = {
   id: string;
@@ -63,6 +64,8 @@ export function StudentFeedbackClient({ assessmentId }: { assessmentId: string }
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const { hideScores } = useSchoolLocale();
+
   useEffect(() => {
     (async () => {
       setLoading(true);
@@ -82,10 +85,11 @@ export function StudentFeedbackClient({ assessmentId }: { assessmentId: string }
 
   const scoreLabel = useMemo(() => {
     if (!payload) return "—";
+    if (hideScores) return "";
     return typeof payload.submission.final_score === "number"
       ? payload.submission.final_score.toFixed(2)
       : "—";
-  }, [payload]);
+  }, [payload, hideScores]);
 
   return (
     <div className="relative min-h-screen px-6 py-10 pb-20">
@@ -120,7 +124,7 @@ export function StudentFeedbackClient({ assessmentId }: { assessmentId: string }
               <CardHeader className="pb-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <CardTitle className="text-xl">Assessment Score</CardTitle>
+                    <CardTitle className="text-xl">{hideScores ? "Assessment Feedback" : "Assessment Score"}</CardTitle>
                     <CardDescription>
                       {payload.submission.published_at
                         ? `Released ${formatDateTime(payload.submission.published_at)}`
@@ -137,7 +141,7 @@ export function StudentFeedbackClient({ assessmentId }: { assessmentId: string }
                         Verified
                       </span>
                     )}
-                    <div className="text-4xl font-light text-[var(--text)] tracking-tight">{scoreLabel}</div>
+                    {!hideScores && <div className="text-4xl font-light text-[var(--text)] tracking-tight">{scoreLabel}</div>}
                   </div>
                 </div>
               </CardHeader>
@@ -220,9 +224,11 @@ export function StudentFeedbackClient({ assessmentId }: { assessmentId: string }
                         <div className="rounded-lg border border-indigo-100 bg-indigo-50/50 p-4">
                           <div className="flex items-center justify-between text-xs text-indigo-700 mb-2">
                             <span className="font-semibold uppercase tracking-wider">Reasoning</span>
-                            <span className="font-bold text-lg bg-white px-2 py-0.5 rounded shadow-sm">
-                              {q.scores.reasoning.score ?? "—"}<span className="text-sm text-indigo-400 font-normal">/5</span>
-                            </span>
+                            {!hideScores && (
+                              <span className="font-bold text-lg bg-white px-2 py-0.5 rounded shadow-sm">
+                                {q.scores.reasoning.score ?? "—"}<span className="text-sm text-indigo-400 font-normal">/5</span>
+                              </span>
+                            )}
                           </div>
                           <div className="text-sm text-indigo-900 whitespace-pre-wrap leading-relaxed">
                             {q.scores.reasoning.justification ?? "Feedback pending."}
@@ -231,9 +237,11 @@ export function StudentFeedbackClient({ assessmentId }: { assessmentId: string }
                         <div className="rounded-lg border border-emerald-100 bg-emerald-50/50 p-4">
                           <div className="flex items-center justify-between text-xs text-emerald-700 mb-2">
                             <span className="font-semibold uppercase tracking-wider">Evidence</span>
-                            <span className="font-bold text-lg bg-white px-2 py-0.5 rounded shadow-sm">
-                              {q.scores.evidence.score ?? "—"}<span className="text-sm text-emerald-400 font-normal">/5</span>
-                            </span>
+                            {!hideScores && (
+                              <span className="font-bold text-lg bg-white px-2 py-0.5 rounded shadow-sm">
+                                {q.scores.evidence.score ?? "—"}<span className="text-sm text-emerald-400 font-normal">/5</span>
+                              </span>
+                            )}
                           </div>
                           <div className="text-sm text-emerald-900 whitespace-pre-wrap leading-relaxed">
                             {q.scores.evidence.justification ?? "Feedback pending."}

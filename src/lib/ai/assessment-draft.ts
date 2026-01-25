@@ -118,15 +118,15 @@ function normalizeAiDraftJson(input: unknown) {
 
   const questions = Array.isArray(rawQuestionsList)
     ? rawQuestionsList
-        .map((q): { question_text: unknown; question_type?: unknown } | null => {
-          if (typeof q === "string") return { question_text: q };
-          if (!q || typeof q !== "object") return null;
-          const qo = q as Record<string, unknown>;
-          const question_text = qo.question_text ?? qo.questionText ?? qo.text ?? qo.question ?? qo.prompt ?? qo.content ?? qo.stem;
-          const question_type = qo.question_type ?? qo.questionType ?? qo.type ?? qo.kind;
-          return { question_text, question_type };
-        })
-        .filter(Boolean)
+      .map((q): { question_text: unknown; question_type?: unknown } | null => {
+        if (typeof q === "string") return { question_text: q };
+        if (!q || typeof q !== "object") return null;
+        const qo = q as Record<string, unknown>;
+        const question_text = qo.question_text ?? qo.questionText ?? qo.text ?? qo.question ?? qo.prompt ?? qo.content ?? qo.stem;
+        const question_type = qo.question_type ?? qo.questionType ?? qo.type ?? qo.kind;
+        return { question_text, question_type };
+      })
+      .filter(Boolean)
     : rawQuestionsCandidate;
 
   let rubrics: unknown = obj.rubrics;
@@ -239,7 +239,8 @@ ${schema}
 Hard rules:
 - "questions" MUST be an array of objects, never an object/dict.
 - Each question MUST have "question_text" as a non-empty string.
-- "rubrics.reasoning" and "rubrics.evidence" MUST be plain strings (not objects/arrays).`;
+- "rubrics.reasoning" and "rubrics.evidence" MUST be plain strings (not objects/arrays).
+- Do NOT use first-person pronouns (I, me, my, we, us, our) in instructions or questions. Use imperative or objective voice.`;
 
   const user = `Teacher request:
 ${prompt}
@@ -280,10 +281,10 @@ Instructions should be student-facing and <= 500 characters.`;
 
     const data = (await res.json().catch(() => null)) as
       | {
-          error?: { message?: unknown; code?: unknown };
-          choices?: Array<{ message?: { content?: unknown } }>;
-          usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
-        }
+        error?: { message?: unknown; code?: unknown };
+        choices?: Array<{ message?: { content?: unknown } }>;
+        usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
+      }
       | null;
     const usage = data?.usage;
 

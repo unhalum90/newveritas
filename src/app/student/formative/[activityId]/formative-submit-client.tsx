@@ -4,7 +4,9 @@ import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useSessionTimer } from "@/hooks/use-session-timer";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import Link from "next/link";
 import { Label } from "@/components/ui/label";
 
 interface Activity {
@@ -13,6 +15,9 @@ interface Activity {
     prompt_template: string | null;
     due_at: string | null;
     status: string;
+    require_artifact?: boolean;
+    max_artifact_count?: number;
+    type?: "pulse" | "studylab";
 }
 
 interface Submission {
@@ -61,8 +66,8 @@ const INPUT_MODE_LABELS: Record<InputMode, { title: string; description: string;
         icon: "🎤",
     },
     digital: {
-        title: "Type Notes",
-        description: "I prefer typing my notes directly",
+        title: "Type Answer",
+        description: "Type your answer directly",
         icon: "⌨️",
     },
     skeleton: {
@@ -80,6 +85,7 @@ export function FormativeSubmitClient({
     score,
     hasIepAccommodations = false,
 }: Props) {
+    const { isLimitReached, showBreakSuggestion, setShowBreakSuggestion } = useSessionTimer({ studentId });
     const router = useRouter();
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -94,7 +100,8 @@ export function FormativeSubmitClient({
     const [artifactFiles, setArtifactFiles] = useState<File[]>([]);
     const [artifactPreviews, setArtifactPreviews] = useState<string[]>([]);
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const MAX_ARTIFACT_FILES = 3;
+    // Use activity's max_artifact_count, default to 1 if not set
+    const MAX_ARTIFACT_FILES = activity.max_artifact_count || 1;
 
     // Digital notes state (for digital mode)
     const [digitalNotes, setDigitalNotes] = useState("");
@@ -314,23 +321,36 @@ export function FormativeSubmitClient({
         return activity.prompt_template || "Explain what you learned in 30 seconds.";
     };
 
+    const isPulse = activity.type === "pulse";
+    const availableModes: InputMode[] = isPulse
+        ? ["digital", "voice_memo"]
+        : ["scan", "voice_memo", "digital", "skeleton"];
+
+    // Update labels for Pulse vs StudyLab
+    const getModeLabel = (mode: InputMode) => {
+        if (isPulse && mode === "digital") return { ...INPUT_MODE_LABELS.digital, title: "Type Answer", description: "Type your answer directly" };
+        if (isPulse && mode === "voice_memo") return { ...INPUT_MODE_LABELS.voice_memo, title: "Record Answer", description: "Speak your answer directly" };
+        return INPUT_MODE_LABELS[mode];
+    };
+
     const handleSubmit = async () => {
         // Validate based on input mode
-        if (inputMode === "scan" && artifactFiles.length === 0) {
+        if (inputMode === "scan" && artifactFiles.length === 0 && !isPulse) {
             setError("Please upload at least one page of your notes.");
             return;
         }
         if (inputMode === "digital" && !digitalNotes.trim()) {
-            setError("Please type your notes.");
+            setError("Please type your answer.");
             return;
         }
         if (inputMode === "voice_memo" && !voiceMemoBlob) {
-            setError("Please record your thoughts.");
+            setError("Please record your answer.");
             return;
         }
 
-        // For non-voice-memo modes, require the explanation audio
-        if (inputMode !== "voice_memo" && !audioBlob) {
+        // For non-voice-memo modes in StudyLab, require the explanation audio
+        // Pulse activities DO NOT require separate explanation audio
+        if (!isPulse && inputMode !== "voice_memo" && !audioBlob) {
             setError("Please record your voice explanation.");
             return;
         }
@@ -347,13 +367,15 @@ export function FormativeSubmitClient({
             // Use voice memo as the audio explanation if in voice_memo mode
             const finalAudioBlob = inputMode === "voice_memo" ? voiceMemoBlob : audioBlob;
 
-            if (!finalAudioBlob) {
+            if (!finalAudioBlob && !isPulse) {
                 throw new Error("Missing audio recording.");
             }
 
-            // Determine extension
-            const ext = finalAudioBlob.type.includes("mp4") ? "mp4" : "webm";
-            formData.append("audio", finalAudioBlob, `recording.${ext}`);
+            // Determine extension if audio exists
+            if (finalAudioBlob) {
+                const ext = finalAudioBlob.type.includes("mp4") ? "mp4" : "webm";
+                formData.append("audio", finalAudioBlob, `recording.${ext}`);
+            }
 
             if (inputMode === "scan" && artifactFiles.length > 0) {
                 // Append all artifact files
@@ -440,48 +462,107 @@ export function FormativeSubmitClient({
         );
     }
 
+    // Default to 'digital' for Pulse if current mode is not available
+    useEffect(() => {
+        if (isPulse && !availableModes.includes(inputMode)) {
+            setInputMode("digital");
+        }
+    }, [isPulse, availableModes, inputMode]);
+
+    // Daily Limit Lock Screen
+    if (isLimitReached) {
+        return (
+            <div className="min-h-screen bg-zinc-50 flex items-center justify-center p-6">
+                <Card className="max-w-md w-full border-red-200 bg-red-50 shadow-xl">
+                    <CardHeader className="text-center">
+                        <div className="mx-auto w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-4">
+                            <span className="text-3xl">⏳</span>
+                        </div>
+                        <CardTitle className="text-red-900">Daily Limit Reached</CardTitle>
+                        <CardDescription className="text-red-700">
+                            You've practiced for 60 minutes today.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="text-center space-y-4">
+                        <p className="text-sm text-red-800">
+                            Great job on your learning today! To keep your progress fresh and avoid burnout,
+                            please take a break and resume tomorrow.
+                        </p>
+                        <Link href="/student">
+                            <Button className="w-full bg-red-600 hover:bg-red-700 text-white">
+                                Return to Dashboard
+                            </Button>
+                        </Link>
+                    </CardContent>
+                </Card>
+            </div>
+        );
+    }
+
     return (
         <div className={`space-y-6 ${accessibilityClasses}`} role="main" aria-label="Submit formative activity">
-            {/* Accessibility Settings - Collapsible Dropdown */}
-            <details className="group">
-                <summary className="flex items-center gap-2 cursor-pointer text-sm text-[var(--muted)] hover:text-[var(--text)] transition-colors list-none">
-                    <span aria-hidden="true">⚙️</span>
-                    <span>Accessibility</span>
-                    <span className="ml-1 text-xs group-open:rotate-180 transition-transform">▼</span>
-                </summary>
-                <div className="mt-3 p-4 rounded-lg border border-[var(--border)] bg-[var(--surface)]">
-                    <div className="flex flex-wrap gap-4">
-                        <label className="flex items-center gap-2 text-sm cursor-pointer">
-                            <input
-                                type="checkbox"
-                                checked={cameraAnxietyMode}
-                                onChange={(e) => setCameraAnxietyMode(e.target.checked)}
-                                aria-describedby="camera-anxiety-desc"
-                            />
-                            <span>Audio visualizer only</span>
-                        </label>
-                        <label className="flex items-center gap-2 text-sm cursor-pointer">
-                            <input
-                                type="checkbox"
-                                checked={highContrastMode}
-                                onChange={(e) => setHighContrastMode(e.target.checked)}
-                            />
-                            <span>High contrast</span>
-                        </label>
-                        <label className="flex items-center gap-2 text-sm cursor-pointer">
-                            <input
-                                type="checkbox"
-                                checked={useDyslexicFont}
-                                onChange={(e) => setUseDyslexicFont(e.target.checked)}
-                            />
-                            <span>Dyslexia-friendly font</span>
-                        </label>
+            {/* Break Suggestion Alert */}
+            {showBreakSuggestion && (
+                <div className="bg-blue-600 text-white p-4 rounded-xl shadow-lg flex items-center justify-between animate-in slide-in-from-top duration-500">
+                    <div className="flex items-center gap-3">
+                        <span className="text-2xl">☕</span>
+                        <div>
+                            <p className="font-bold">Time for a break?</p>
+                            <p className="text-sm opacity-90">Great work! Take a 5-minute break before continuing.</p>
+                        </div>
                     </div>
-                    <p id="camera-anxiety-desc" className="text-xs text-[var(--muted)] mt-2">
-                        Audio visualizer replaces the camera view with sound wave bars.
-                    </p>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-white hover:bg-blue-700"
+                        onClick={() => setShowBreakSuggestion(false)}
+                    >
+                        Dismiss
+                    </Button>
                 </div>
-            </details>
+            )}
+            {/* Accessibility Settings - Collapsible Dropdown (Hide for Pulse to simplify) */}
+            {!isPulse && (
+                <details className="group">
+                    <summary className="flex items-center gap-2 cursor-pointer text-sm text-[var(--muted)] hover:text-[var(--text)] transition-colors list-none">
+                        <span aria-hidden="true">⚙️</span>
+                        <span>Accessibility</span>
+                        <span className="ml-1 text-xs group-open:rotate-180 transition-transform">▼</span>
+                    </summary>
+                    <div className="mt-3 p-4 rounded-lg border border-[var(--border)] bg-[var(--surface)]">
+                        <div className="flex flex-wrap gap-4">
+                            <label className="flex items-center gap-2 text-sm cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={cameraAnxietyMode}
+                                    onChange={(e) => setCameraAnxietyMode(e.target.checked)}
+                                    aria-describedby="camera-anxiety-desc"
+                                />
+                                <span>Audio visualizer only</span>
+                            </label>
+                            <label className="flex items-center gap-2 text-sm cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={highContrastMode}
+                                    onChange={(e) => setHighContrastMode(e.target.checked)}
+                                />
+                                <span>High contrast</span>
+                            </label>
+                            <label className="flex items-center gap-2 text-sm cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={useDyslexicFont}
+                                    onChange={(e) => setUseDyslexicFont(e.target.checked)}
+                                />
+                                <span>Dyslexia-friendly font</span>
+                            </label>
+                        </div>
+                        <p id="camera-anxiety-desc" className="text-xs text-[var(--muted)] mt-2">
+                            Audio visualizer replaces the camera view with sound wave bars.
+                        </p>
+                    </div>
+                </details>
+            )}
 
             {error && (
                 <div
@@ -518,8 +599,8 @@ export function FormativeSubmitClient({
                         role="radiogroup"
                         aria-label="Choose how to submit your work"
                     >
-                        {(Object.keys(INPUT_MODE_LABELS) as InputMode[]).map((mode) => {
-                            const { title, description, icon } = INPUT_MODE_LABELS[mode];
+                        {availableModes.map((mode) => {
+                            const { title, description, icon } = getModeLabel(mode);
                             const isSelected = inputMode === mode;
                             return (
                                 <button
@@ -550,14 +631,20 @@ export function FormativeSubmitClient({
             <Card>
                 <CardHeader>
                     <CardTitle>
-                        {inputMode === 'voice_memo' ? 'Record Voice Memo' : `Step 1: ${INPUT_MODE_LABELS[inputMode].title}`}
+                        {isPulse
+                            ? (inputMode === 'voice_memo' ? 'Record Answer' : 'Write Answer')
+                            : (inputMode === 'voice_memo' ? 'Record Voice Memo' : `Step 1: ${INPUT_MODE_LABELS[inputMode].title}`)
+                        }
                     </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                     {inputMode === "scan" && (
                         <>
                             <p className="text-sm text-[var(--muted)]">
-                                Take photos or upload scans of your handwritten notes (up to 3 pages).
+                                {MAX_ARTIFACT_FILES === 1
+                                    ? "Take a photo or upload a scan of your work."
+                                    : `Take photos or upload scans of your work (up to ${MAX_ARTIFACT_FILES} photos).`
+                                }
                             </p>
                             <input
                                 ref={fileInputRef}
@@ -620,7 +707,7 @@ export function FormativeSubmitClient({
 
                             {artifactFiles.length >= MAX_ARTIFACT_FILES && (
                                 <p className="text-xs text-[var(--muted)]">
-                                    Maximum 3 pages uploaded. Remove a page to add a different one.
+                                    Maximum {MAX_ARTIFACT_FILES} {MAX_ARTIFACT_FILES === 1 ? 'photo' : 'photos'} uploaded. Remove a photo to add a different one.
                                 </p>
                             )}
                         </>
@@ -629,7 +716,7 @@ export function FormativeSubmitClient({
                     {inputMode === "digital" && (
                         <>
                             <p className="text-sm text-[var(--muted)]">
-                                Type your notes, key points, or summary in the box below.
+                                {isPulse ? "Type your answer below." : "Type your notes, key points, or summary in the box below."}
                             </p>
                             <Label htmlFor="digital-notes" className="sr-only">
                                 Your digital notes
@@ -643,7 +730,7 @@ export function FormativeSubmitClient({
                                 aria-describedby="digital-notes-hint"
                             />
                             <p id="digital-notes-hint" className="text-xs text-[var(--muted)]">
-                                Use bullet points or short sentences. Aim for 3–5 key ideas.
+                                {isPulse ? "Be concise." : "Use bullet points or short sentences. Aim for 3–5 key ideas."}
                             </p>
                         </>
                     )}
@@ -725,8 +812,8 @@ export function FormativeSubmitClient({
                 </CardContent>
             </Card>
 
-            {/* Step 2: Record Audio Explanation (Hidden for Voice Memo mode) */}
-            {inputMode !== "voice_memo" && (
+            {/* Step 2: Record Audio Explanation (Hidden for Voice Memo mode AND Pulse activities) */}
+            {!isPulse && inputMode !== "voice_memo" && (
                 <Card>
                     <CardHeader>
                         <CardTitle>Step 2: Record Your Explanation</CardTitle>

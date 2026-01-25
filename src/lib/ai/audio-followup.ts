@@ -40,7 +40,9 @@ export async function generateAudioFollowup(input: {
 }) {
   const model = process.env.GEMINI_TEXT_MODEL || "gemini-3-flash-preview";
   const system =
-    "You are a Socratic tutor. Return ONLY JSON with key: question (string). Ask one concise follow-up question.";
+    "You are a Socratic tutor. Return ONLY JSON with key: question (string). Ask one concise follow-up question. " +
+    "Do NOT use first-person pronouns (I, me, my, we, us, our). Usage such as 'I think' or 'I see' is strictly forbidden. " +
+    "Use functional phrasing like 'This response requires clarification on...' or 'The argument suggests...'.";
   const user = `Original prompt:
 ${input.questionText}
 

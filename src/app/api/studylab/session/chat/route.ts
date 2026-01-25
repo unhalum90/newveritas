@@ -42,18 +42,20 @@ async function geminiChatResponse(transcript: string, history: { role: string; c
         systemPrompt = `You are a friendly Socratic tutor closing a session.
         Context: The goal was "${learningTarget}".
         1. Read the student's final reflection/question.
-        2. Validate it positively.
+        2. Validate it positively using objective language (e.g., "That is a valid point").
         3. Do NOT ask another question.
-        4. Say goodbye comfortably.
-        5. Return ONLY JSON: { "message": "..." }`;
+        4. Provide a closing statement without referring to yourself.
+        5. STRICTLY FORBIDDEN: Do not use first-person pronouns (I, me, my, we, us, our).
+        6. Return ONLY JSON: { "message": "..." }`;
         isComplete = true;
     } else if (turnCount >= finalQuestionTurn) {
         // Final Question Phase
         systemPrompt = `You are a friendly Socratic tutor.
         Context: The goal is "${learningTarget}".
-        1. Acknowledge the student's previous answer briefly.
-        2. Asking the following exact final question: "What is the biggest or most difficult question you still have about this concept?"
-        3. Return ONLY JSON: { "message": "..." }`;
+        1. Acknowledge the student's previous answer briefly using objective language.
+        2. Ask the following exact final question: "What is the biggest or most difficult question regarding this concept?"
+        3. STRICTLY FORBIDDEN: Do not use first-person pronouns (I, me, my, we, us, our).
+        4. Return ONLY JSON: { "message": "..." }`;
     } else {
         // Normal Phase
         systemPrompt = `You are a friendly, encouraging Socratic tutor. 
@@ -62,8 +64,9 @@ async function geminiChatResponse(transcript: string, history: { role: string; c
         1. Respond to the student's current answer.
         2. ASK ONE probing question to deepen the discussion towards the goal.
         3. Keep it brief (under 50 words). 
-        4. Anchor your response to the fact that you have seen their notes/work. "I see in your notes..."
-        5. Return ONLY JSON: { "message": "..." }`;
+        4. Anchor your response to the evidence in the notes. Use phrasing like "The notes indicate..." or "According to the diagram...".
+        5. STRICTLY FORBIDDEN: Do not use first-person pronouns (I, me, my, we, us, our). Do NOT say "I see" or "I think".
+        6. Return ONLY JSON: { "message": "..." }`;
     }
 
     const contents = [];
@@ -71,7 +74,7 @@ async function geminiChatResponse(transcript: string, history: { role: string; c
     // History & Prompt Construction
     let userPromptText = `Required: Respond to this student answer: "${transcript}"`;
     if (history && history.length > 0) {
-        const historyText = history.map(m => `${m.role === 'ai' ? 'Tutor' : 'Student'}: ${m.content}`).join("\n");
+        const historyText = history.map(m => `${m.role === 'ai' ? 'PhonemeLab AI' : 'Student'}: ${m.content}`).join("\n");
         userPromptText = `Conversation History:\n${historyText}\n\n${userPromptText}`;
     }
 

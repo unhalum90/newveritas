@@ -1,5 +1,5 @@
 import { createServerClient } from "@supabase/ssr";
-import type { NextRequest } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 
 type CookieOptions = {
   domain?: string;
@@ -20,15 +20,23 @@ export function createRouteSupabaseClient(request: NextRequest) {
     throw new Error("Missing Supabase env. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.");
   }
 
-  const pendingCookies: CookieToSet[] = [];
+  const pending: CookieToSet[] = [];
   const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
     cookies: {
       getAll() {
         return request.cookies.getAll();
       },
       setAll(cookies) {
-        pendingCookies.push(...(cookies as CookieToSet[]));
+        pending.push(...(cookies as CookieToSet[]));
       },
+    },
+  });
+
+  const pendingCookies = Object.assign(pending, {
+    apply(response: NextResponse) {
+      pending.forEach((c) => {
+        response.cookies.set(c.name, c.value, c.options);
+      });
     },
   });
 

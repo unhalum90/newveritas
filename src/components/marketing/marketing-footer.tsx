@@ -82,6 +82,9 @@ export function MarketingFooter() {
             </div>
           </div>
         </div>
+        <div className="mt-8 border-t border-[var(--border)] pt-6 text-center text-xs text-[var(--muted)]">
+          © 2026 SayVeritas / Chamberlin Innovations SASU. All rights reserved.
+        </div>
       </div>
     </footer>
   );

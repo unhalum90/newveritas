@@ -7,6 +7,8 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { isAudioFollowup, isEvidenceFollowup } from "@/lib/assessments/question-types";
+import { CameraCaptureDialog } from "@/components/shared/camera-capture-dialog";
+import { Camera } from "lucide-react";
 
 type EvidenceUploadSetting = "disabled" | "optional" | "required";
 
@@ -29,6 +31,7 @@ type Question = {
   question_type: string | null;
   order_index: number;
   evidence_upload?: EvidenceUploadSetting | null;
+  max_evidence_count?: number;
 };
 
 type Assessment = {
@@ -150,7 +153,7 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
   const [consentError, setConsentError] = useState<string | null>(null);
   const [studentAccess, setStudentAccess] = useState<StudentAccess | null>(null);
   const [responses, setResponses] = useState<ResponseRow[]>([]);
-  const [evidenceByQuestion, setEvidenceByQuestion] = useState<Record<string, EvidenceRow | null>>({});
+  const [evidenceByQuestion, setEvidenceByQuestion] = useState<Record<string, EvidenceRow[]>>({});
   const [evidenceLoading, setEvidenceLoading] = useState(false);
   const [evidenceUploading, setEvidenceUploading] = useState(false);
   const [evidenceError, setEvidenceError] = useState<string | null>(null);
@@ -177,6 +180,53 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
   const questionShownSubmissionIdRef = useRef<string | null>(null);
   // Recording chunks are kept in a local buffer during capture.
   const evidenceInputRef = useRef<HTMLInputElement | null>(null);
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
+
+  // TTS State
+  const [isPlaying, setIsPlaying] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  function stopSpeaking() {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+    setIsPlaying(false);
+  }
+
+  async function speakText(text: string) {
+    if (isPlaying) {
+      stopSpeaking();
+      return;
+    }
+    try {
+      stopSpeaking();
+      setIsPlaying(true);
+      const res = await fetch("/api/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, voice: "en-US-Chirp3-HD-Kore" })
+      });
+      if (!res.ok) throw new Error("TTS Failed");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audioRef.current = audio;
+      audio.onended = () => {
+        setIsPlaying(false);
+        URL.revokeObjectURL(url);
+      };
+      audio.play();
+    } catch (e) {
+      console.error(e);
+      setIsPlaying(false);
+    }
+  }
+
+  // Stop speaking when unmounting or changing questions
+  useEffect(() => {
+    return () => stopSpeaking();
+  }, [assessment?.current_question?.id]);
 
   const activeQuestion = assessment?.current_question ?? null;
   const audioIntro = assessment?.audio_intro ?? null;
@@ -267,9 +317,9 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
     setAudioIntroCompleted(false);
   }, [audioIntro?.asset_url, audioIntro?.require_full_listen, latest?.id, requireAudioIntro]);
 
-  const activeEvidence = useMemo(() => {
-    if (!activeQuestion) return null;
-    return evidenceByQuestion[activeQuestion.id] ?? null;
+  const activeEvidenceList = useMemo(() => {
+    if (!activeQuestion) return [];
+    return evidenceByQuestion[activeQuestion.id] ?? [];
   }, [activeQuestion, evidenceByQuestion]);
 
   const isAudioFollowupQuestion = useMemo(() => isAudioFollowup(activeQuestion?.question_type), [activeQuestion?.question_type]);
@@ -349,7 +399,10 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
     return isEvidenceFollowupQuestion ? "required" : setting;
   }, [activeQuestion?.evidence_upload, isEvidenceFollowupQuestion]);
 
-  const evidenceAnalysis = useMemo(() => parseEvidenceAnalysis(activeEvidence?.ai_description ?? null), [activeEvidence?.ai_description]);
+  const evidenceAnalysisList = useMemo(() => activeEvidenceList.map(ev => ({
+    id: ev.id,
+    analysis: parseEvidenceAnalysis(ev.ai_description)
+  })), [activeEvidenceList]);
 
   const completedCount = useMemo(() => {
     if (followupNeeded) {
@@ -396,6 +449,26 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
     [],
   );
 
+  const logEngagementEvent = useCallback(
+    async (eventType: "started" | "paused" | "resumed" | "submitted") => {
+      if (previewMode || !assessment?.id) return;
+      try {
+        await fetch("/api/tracking/engagement", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            assessmentId: assessment.id,
+            submissionId: latest?.id,
+            eventType,
+          }),
+        });
+      } catch (err) {
+        // Silent failure for tracking
+      }
+    },
+    [assessment?.id, latest?.id, previewMode],
+  );
+
   async function refreshEvidence(submissionId: string, questionId: string) {
     setEvidenceLoading(true);
     setEvidenceError(null);
@@ -403,9 +476,9 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
       const res = await fetch(`/api/student/submissions/${submissionId}/evidence?question_id=${encodeURIComponent(questionId)}`, {
         cache: "no-store",
       });
-      const data = (await res.json().catch(() => null)) as { evidence?: EvidenceRow | null; error?: string } | null;
+      const data = (await res.json().catch(() => null)) as { evidence?: EvidenceRow[]; error?: string } | null;
       if (!res.ok) throw new Error(data?.error ?? "Unable to load evidence.");
-      setEvidenceByQuestion((prev) => ({ ...prev, [questionId]: data?.evidence ?? null }));
+      setEvidenceByQuestion((prev) => ({ ...prev, [questionId]: data?.evidence ?? [] }));
     } catch (e) {
       setEvidenceError(e instanceof Error ? e.message : "Unable to load evidence.");
     } finally {
@@ -552,6 +625,7 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
       if (!res.ok || !data?.submission) throw new Error(data?.error ?? "Unable to start.");
       setLatest(data.submission);
       await refreshAssessment();
+      void logEngagementEvent("started");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unable to start.");
     } finally {
@@ -578,6 +652,7 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
       const data = (await res.json().catch(() => null)) as { error?: string } | null;
       if (!res.ok) throw new Error(data?.error ?? "Unable to submit.");
       setLatest({ ...latest, status: "submitted", submitted_at: new Date().toISOString() });
+      void logEngagementEvent("submitted");
       if (isPracticeMode) {
         await refreshAssessment();
       }
@@ -634,6 +709,7 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
       if (document.hidden) {
         hiddenAtRef.current = Date.now();
         hiddenQuestionIdRef.current = activeQuestion?.id ?? null;
+        void logEngagementEvent("paused");
         return;
       }
       if (hiddenAtRef.current == null) return;
@@ -641,6 +717,7 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
       const questionId = hiddenQuestionIdRef.current;
       hiddenAtRef.current = null;
       hiddenQuestionIdRef.current = null;
+      void logEngagementEvent("resumed");
       if (durationMs <= 0) return;
       void logIntegrityEvent(latest.id, {
         event_type: "tab_switch",
@@ -651,7 +728,7 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
 
     document.addEventListener("visibilitychange", handleVisibility);
     return () => document.removeEventListener("visibilitychange", handleVisibility);
-  }, [activeQuestion?.id, assessment?.integrity?.tab_switch_monitor, latest, logIntegrityEvent]);
+  }, [activeQuestion?.id, assessment?.integrity?.tab_switch_monitor, latest, logIntegrityEvent, logEngagementEvent]);
 
   useEffect(() => {
     if (!latest || latest.status !== "started") return;
@@ -715,14 +792,15 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
     }
 
     const evidenceSetting = isEvidenceFollowup(activeQuestion.question_type) ? "required" : normalizeEvidenceSetting(activeQuestion.evidence_upload);
-    if (evidenceSetting === "required" && !activeEvidence) {
+    if (evidenceSetting === "required" && (!activeEvidenceList || activeEvidenceList.length === 0)) {
       setRecordingError("Upload the required evidence image before recording.");
       return;
     }
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
+      const mimeType = MediaRecorder.isTypeSupported("audio/mp4") ? "audio/mp4" : "audio/webm";
+      const recorder = new MediaRecorder(stream, { mimeType });
       const audioContext = new AudioContext();
       const source = audioContext.createMediaStreamSource(stream);
       const analyser = audioContext.createAnalyser();
@@ -881,12 +959,12 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
       : !activePrimaryResponse;
     if (!readyForRecording) return;
     const nextEvidenceSetting = isEvidenceFollowup(activeQuestion.question_type) ? "required" : normalizeEvidenceSetting(activeQuestion.evidence_upload);
-    if (nextEvidenceSetting === "required" && !activeEvidence) return;
+    if (nextEvidenceSetting === "required" && (!activeEvidenceList || activeEvidenceList.length === 0)) return;
 
     autoRecordQuestionId.current = activeQuestion.id;
     void beginRecording();
   }, [
-    activeEvidence?.id,
+    activeEvidenceList,
     activeQuestion?.id,
     activePrimaryResponse?.id,
     activeFollowupResponse?.id,
@@ -928,9 +1006,18 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
       form.set("file", file);
 
       const res = await fetch(`/api/student/submissions/${latest.id}/evidence`, { method: "POST", body: form });
-      const data = (await res.json().catch(() => null)) as { evidence?: EvidenceRow | null; error?: string } | null;
+      const data = (await res.json().catch(() => null)) as { evidence?: EvidenceRow; error?: string } | null;
       if (!res.ok) throw new Error(data?.error ?? "Evidence upload failed.");
-      setEvidenceByQuestion((prev) => ({ ...prev, [activeQuestion.id]: data?.evidence ?? null }));
+
+      const newEvidence = data?.evidence;
+      if (newEvidence) {
+        setEvidenceByQuestion((prev) => {
+          const list = prev[activeQuestion.id] ?? [];
+          const max = activeQuestion.max_evidence_count || 1;
+          if (max === 1) return { ...prev, [activeQuestion.id]: [newEvidence] };
+          return { ...prev, [activeQuestion.id]: [...list, newEvidence] };
+        });
+      }
     } catch (e) {
       setEvidenceError(e instanceof Error ? e.message : "Evidence upload failed.");
     } finally {
@@ -938,7 +1025,7 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
     }
   }
 
-  async function removeEvidence() {
+  async function removeEvidence(evidenceId: string) {
     if (!latest || latest.status !== "started") return;
     if (accessRestricted) {
       setEvidenceError("Your access has been restricted. Contact your teacher.");
@@ -957,12 +1044,15 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
     setEvidenceError(null);
     try {
       const res = await fetch(
-        `/api/student/submissions/${latest.id}/evidence?question_id=${encodeURIComponent(activeQuestion.id)}`,
+        `/api/student/submissions/${latest.id}/evidence?question_id=${encodeURIComponent(activeQuestion.id)}&evidence_id=${encodeURIComponent(evidenceId)}`,
         { method: "DELETE" },
       );
       const data = (await res.json().catch(() => null)) as { error?: string } | null;
       if (!res.ok) throw new Error(data?.error ?? "Unable to remove evidence.");
-      setEvidenceByQuestion((prev) => ({ ...prev, [activeQuestion.id]: null }));
+      setEvidenceByQuestion((prev) => ({
+        ...prev,
+        [activeQuestion.id]: (prev[activeQuestion.id] ?? []).filter(e => e.id !== evidenceId)
+      }));
       if (evidenceInputRef.current) evidenceInputRef.current.value = "";
     } catch (e) {
       setEvidenceError(e instanceof Error ? e.message : "Unable to remove evidence.");
@@ -1060,8 +1150,8 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
 
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-light text-[var(--text)]">{assessment?.title ?? "Assessment"}</h1>
-            <p className="mt-1 text-sm text-[var(--muted)]">
+            <h1 className="text-2xl font-light text-zinc-950 dark:text-zinc-50">{assessment?.title ?? "Assessment"}</h1>
+            <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
               {latest ? `Attempt: ${latest.status}` : "Start when you’re ready."}
               {isPracticeMode ? " • Practice mode" : ""}
             </p>
@@ -1182,7 +1272,7 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
                 <CardTitle>Instructions</CardTitle>
                 <CardDescription>This is an assessment. Questions are revealed one at a time after you start.</CardDescription>
               </CardHeader>
-              <CardContent className="text-sm text-[var(--muted)] leading-relaxed">
+              <CardContent className="text-sm text-zinc-500 dark:text-zinc-400 leading-relaxed">
                 {assessment.instructions?.trim() ? assessment.instructions : "No instructions provided."}
               </CardContent>
             </Card>
@@ -1251,7 +1341,7 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
                   <CardDescription>Listen to the full audio before your questions appear.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-[var(--text)]">
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-zinc-950 dark:text-zinc-50">
                     <span>{audioIntro.original_filename?.trim() || "Audio intro"}</span>
                     <span>{formatDuration(audioIntro.duration_seconds)}</span>
                   </div>
@@ -1261,7 +1351,7 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
                     className="w-full rounded-md shadow-sm"
                     onEnded={() => setAudioIntroCompleted(true)}
                   />
-                  <div className="text-xs text-[var(--muted)]">Once the audio finishes, your first question will appear.</div>
+                  <div className="text-xs text-zinc-500 dark:text-zinc-400">Once the audio finishes, your first question will appear.</div>
                 </CardContent>
               </Card>
             ) : activeQuestion ? (
@@ -1277,8 +1367,19 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
                     <div className="text-xs font-semibold uppercase tracking-wider text-indigo-500">
                       {followupNeeded ? "Follow-up question" : "Question"}
                     </div>
-                    <div className="mt-3 text-lg font-medium text-[var(--text)] leading-relaxed">
-                      {followupNeeded && followupPrompt ? followupPrompt : activeQuestion.question_text}
+                    <div className="mt-3 flex items-start gap-4">
+                      <div className="flex-1 text-lg font-medium text-zinc-950 dark:text-zinc-50 leading-relaxed">
+                        {followupNeeded && followupPrompt ? followupPrompt : activeQuestion.question_text}
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => speakText(followupNeeded && followupPrompt ? followupPrompt : activeQuestion.question_text)}
+                        className={`shrink-0 ${isPlaying ? "text-indigo-600 bg-indigo-50" : "text-zinc-400 hover:text-indigo-600"}`}
+                        title="Read question"
+                      >
+                        {isPlaying ? "⏹️" : "🔊"}
+                      </Button>
                     </div>
                   </div>
 
@@ -1297,8 +1398,8 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
                     <div className="rounded-xl border border-[var(--border)] bg-white/50 p-4">
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div>
-                          <div className="text-sm font-medium text-[var(--text)]">Evidence</div>
-                          <div className="mt-0.5 text-xs text-[var(--muted)]">
+                          <div className="text-sm font-medium text-zinc-950 dark:text-zinc-50">Evidence</div>
+                          <div className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
                             {evidenceSetting === "required"
                               ? isEvidenceFollowupQuestion
                                 ? "Required. Upload to generate follow-up questions."
@@ -1310,34 +1411,37 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
                           <input
                             ref={evidenceInputRef}
                             type="file"
-                            accept="image/*,.jpg,.jpeg,.png,.heic,.heif"
+                            accept="image/*,.jpg,.jpeg,.png,.heic,.heif,.pdf"
                             className="hidden"
                             onChange={(e) => {
                               const f = e.target.files?.[0];
                               if (f) void handleEvidenceSelected(f);
+                              e.target.value = ""; // Reset input
                             }}
                           />
-                          {!activeEvidence ? (
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              disabled={working || evidenceUploading}
-                              onClick={() => evidenceInputRef.current?.click()}
-                              className="bg-white border-[var(--border)]"
-                            >
-                              {evidenceUploading ? "Uploading…" : "Upload Evidence"}
-                            </Button>
-                          ) : (
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              disabled={working || evidenceUploading}
-                              onClick={removeEvidence}
-                              className="bg-white border-[var(--border)]"
-                            >
-                              {evidenceUploading ? "Removing…" : "Remove"}
-                            </Button>
-                          )}
+                          {activeEvidenceList.length < (activeQuestion?.max_evidence_count || 1) ? (
+                            <div className="flex items-center gap-2">
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                disabled={working || evidenceUploading}
+                                onClick={() => setIsCameraOpen(true)}
+                                className="bg-white border-[var(--border)] flex items-center gap-2"
+                              >
+                                <Camera className="h-4 w-4" />
+                                Take Photo
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                disabled={working || evidenceUploading}
+                                onClick={() => evidenceInputRef.current?.click()}
+                                className="bg-white border-[var(--border)]"
+                              >
+                                {evidenceUploading ? "Uploading…" : "Upload Evidence"}
+                              </Button>
+                            </div>
+                          ) : null}
                         </div>
                       </div>
 
@@ -1347,51 +1451,90 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
                           {evidenceError}
                         </div>
                       ) : null}
-                      {activeEvidence ? (
-                        <div className="mt-4">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={activeEvidence.signed_url}
-                            alt="Evidence upload preview"
-                            className="max-h-80 w-full rounded-lg border border-[var(--border)] object-contain bg-white shadow-sm"
-                          />
-                          <div className="mt-2 text-xs text-[var(--muted)] text-right">
-                            Uploaded {new Date(activeEvidence.uploaded_at).toLocaleString()}
-                          </div>
-                          {isEvidenceFollowupQuestion ? (
-                            <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50/50 p-4 text-sm text-emerald-900">
-                              <div className="text-xs font-semibold uppercase text-emerald-700 tracking-wider">AI Analysis</div>
-                              {evidenceAnalysis ? (
-                                <>
-                                  {evidenceAnalysis.summary ? (
-                                    <div className="mt-2 text-sm text-emerald-800">{evidenceAnalysis.summary}</div>
-                                  ) : null}
-                                  {evidenceAnalysis.questions.length ? (
-                                    <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-emerald-900 font-medium">
-                                      {evidenceAnalysis.questions.map((item, idx) => (
-                                        <li key={`${activeEvidence.id}-followup-${idx}`}>{item}</li>
-                                      ))}
-                                    </ul>
+
+                      {activeEvidenceList?.length > 0 ? (
+                        <div className="mt-4 grid grid-cols-1 gap-6 sm:grid-cols-2">
+                          {activeEvidenceList.map((evidence, idx) => {
+                            const analysis = evidenceAnalysisList.find((a) => a.id === evidence.id)?.analysis;
+                            return (
+                              <div
+                                key={evidence.id}
+                                className="relative flex flex-col gap-2 rounded-lg border border-[var(--border)] bg-white p-2 shadow-sm"
+                              >
+                                <div className="relative aspect-video w-full overflow-hidden rounded-md bg-zinc-100">
+                                  {evidence.mime_type === "application/pdf" ? (
+                                    <div className="flex h-full flex-col items-center justify-center gap-2 text-zinc-500">
+                                      <span className="text-2xl">📄</span>
+                                      <a
+                                        href={evidence.signed_url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-xs underline hover:text-indigo-600"
+                                      >
+                                        View PDF
+                                      </a>
+                                    </div>
                                   ) : (
-                                    <div className="mt-2 text-xs text-emerald-700 italic">No follow-up questions generated.</div>
+                                    // eslint-disable-next-line @next/next/no-img-element
+                                    <img src={evidence.signed_url} alt="Evidence" className="h-full w-full object-contain" />
                                   )}
-                                </>
-                              ) : (
-                                <div className="mt-2 text-xs text-emerald-700 italic animate-pulse">Analyzing image...</div>
-                              )}
-                            </div>
-                          ) : null}
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="secondary"
+                                    className="absolute right-2 top-2 h-8 w-8 rounded-full p-0 shadow-sm bg-white hover:bg-red-50 text-red-600 border-red-200"
+                                    onClick={() => removeEvidence(evidence.id)}
+                                    disabled={evidenceUploading}
+                                    title="Remove"
+                                  >
+                                    ✕
+                                  </Button>
+                                </div>
+                                <div className="flex items-center justify-between px-1">
+                                  <div className="text-[10px] text-[var(--muted)]">
+                                    Uploaded {new Date(evidence.uploaded_at).toLocaleTimeString()}
+                                  </div>
+                                </div>
+                                {isEvidenceFollowupQuestion && (
+                                  <div className="mt-2 rounded border border-emerald-200 bg-emerald-50 p-2 text-xs text-emerald-900">
+                                    {analysis ? (
+                                      <>
+                                        {analysis.summary && <div className="mb-1 font-medium">{analysis.summary}</div>}
+                                        {analysis.questions.length > 0 ? (
+                                          <ul className="list-disc pl-3">
+                                            {analysis.questions.map((q, i) => (
+                                              <li key={`${evidence.id}-q-${i}`}>{q}</li>
+                                            ))}
+                                          </ul>
+                                        ) : (
+                                          <div className="text-emerald-700 italic">No questions generated.</div>
+                                        )}
+                                      </>
+                                    ) : (
+                                      <div className="text-emerald-700 italic animate-pulse">Analyzing...</div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
                       ) : null}
                     </div>
                   ) : null}
 
+                  <CameraCaptureDialog
+                    open={isCameraOpen}
+                    onClose={() => setIsCameraOpen(false)}
+                    onCapture={(file) => void handleEvidenceSelected(file)}
+                  />
+
                   <div className="rounded-xl border border-[var(--border)] bg-white p-6 shadow-sm">
                     <div className="flex items-center justify-between gap-3">
-                      <div className="text-sm font-medium text-[var(--text)]">
+                      <div className="text-sm font-medium text-zinc-950 dark:text-zinc-50">
                         {followupNeeded ? "Record your follow-up response" : "Record your response"}
                       </div>
-                      <div className="text-xs font-mono text-[var(--muted)] bg-[var(--surface)] px-2 py-1 rounded">
+                      <div className="text-xs font-mono text-zinc-500 dark:text-zinc-400 bg-[var(--surface)] px-2 py-1 rounded">
                         {recording ? `${recordingSeconds}s / ${recordingLimitSeconds}s` : `Limit: ${recordingLimitSeconds}s`}
                       </div>
                     </div>

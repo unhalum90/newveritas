@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { SessionMonitoring } from "@/components/compliance/session-monitoring";
 
 export default async function DashboardPage() {
   const supabase = await createSupabaseServerClient();
@@ -105,6 +106,21 @@ export default async function DashboardPage() {
   }
 
   const pickSingle = <T,>(value?: T | T[] | null) => (Array.isArray(value) ? value[0] ?? null : value ?? null);
+
+  const { data: sessionData } = students?.length
+    ? await supabase
+      .from("session_tracking")
+      .select("student_id, duration_seconds, last_activity_at, students(first_name, last_name)")
+      .in("student_id", students.map(s => s.id))
+      .eq("date", new Date().toISOString().split("T")[0])
+    : { data: [] };
+
+  const sessions = (sessionData ?? []).map((s: any) => ({
+    student_id: s.student_id,
+    student_name: `${s.students?.first_name ?? "Student"} ${s.students?.last_name ?? ""}`.trim(),
+    duration_seconds: s.duration_seconds,
+    last_activity_at: s.last_activity_at,
+  }));
 
   const lastActivityByClass = new Map<string, string>();
   for (const submission of activitySubmissions ?? []) {
@@ -226,6 +242,8 @@ export default async function DashboardPage() {
             )}
           </CardContent>
         </Card>
+
+        <SessionMonitoring sessions={sessions} />
 
         {/* Classes Column */}
         <div className="space-y-6">

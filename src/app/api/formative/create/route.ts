@@ -21,6 +21,9 @@ interface CreateFormativeRequest {
     showSummaryToStudent?: boolean;
     showStrengthsToStudent?: boolean;
     showWeaknessesToStudent?: boolean;
+    // Artifact settings
+    requireArtifact?: boolean;
+    maxArtifactCount?: number;
 }
 
 export async function POST(request: NextRequest) {
@@ -61,6 +64,9 @@ export async function POST(request: NextRequest) {
                 show_summary_to_student: body.showSummaryToStudent ?? true,
                 show_strengths_to_student: body.showStrengthsToStudent ?? true,
                 show_weaknesses_to_student: body.showWeaknessesToStudent ?? true,
+                // Artifact settings
+                require_artifact: body.requireArtifact ?? true,
+                max_artifact_count: body.maxArtifactCount ?? 1,
             })
             .select("id")
             .single();

@@ -3,7 +3,7 @@
 import * as React from "react";
 
 type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: "primary" | "secondary" | "ghost";
+  variant?: "primary" | "secondary" | "ghost" | "outline";
   size?: "sm" | "md" | "lg";
 };
 
@@ -14,6 +14,7 @@ const variants: Record<NonNullable<ButtonProps["variant"]>, string> = {
   primary: "bg-[var(--primary-strong)] text-white hover:bg-[color-mix(in_oklab,var(--primary-strong),black_12%)]",
   secondary: "bg-[var(--surface)] text-[var(--text)] border border-[var(--border)] hover:opacity-90",
   ghost: "bg-transparent text-[var(--text)] hover:bg-[var(--border)]",
+  outline: "bg-transparent text-[var(--text)] border border-[var(--border)] hover:bg-[var(--surface)]",
 };
 
 const sizes: Record<NonNullable<ButtonProps["size"]>, string> = {

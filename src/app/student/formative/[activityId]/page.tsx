@@ -47,7 +47,7 @@ export default async function StudentFormativeActivityPage({ params }: Props) {
     // Get activity details
     const { data: activity } = await supabase
         .from("formative_activities")
-        .select("id, title, prompt_template, due_at, status")
+        .select("id, title, prompt_template, due_at, status, require_artifact, max_artifact_count, type")
         .eq("id", activityId)
         .single();
 

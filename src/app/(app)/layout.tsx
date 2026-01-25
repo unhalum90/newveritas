@@ -4,6 +4,8 @@ import { AppShell } from "@/components/app/app-shell";
 import { DisabledAccount } from "@/components/auth/disabled-account";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { SchoolLocaleWrapper } from "@/components/app/school-locale-wrapper";
+import { Jurisdiction } from "@/lib/config/uk-config";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createSupabaseServerClient();
@@ -22,7 +24,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   let { data: teacher } = await supabase
     .from("teachers")
-    .select("onboarding_stage, workspace_id, disabled, school_id")
+    .select("onboarding_stage, workspace_id, disabled, school_id, last_privacy_notice_shown, schools(locale)")
     .eq("user_id", data.user.id)
     .maybeSingle();
 
@@ -34,7 +36,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         email: data.user.email ?? "",
         onboarding_stage: "0", // New user starts at stage 0
       })
-      .select("onboarding_stage, workspace_id, disabled, school_id")
+      .select("onboarding_stage, workspace_id, disabled, school_id, last_privacy_notice_shown, schools(locale)")
       .single();
     teacher = createdTeacher ?? null;
   }
@@ -94,7 +96,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           workspace_id: workspaceId ?? teacher.workspace_id,
         })
         .eq("user_id", data.user.id)
-        .select("onboarding_stage, workspace_id, disabled, school_id")
+        .select("onboarding_stage, workspace_id, disabled, school_id, last_privacy_notice_shown, schools(locale)")
         .single();
       if (updatedTeacher) teacher = updatedTeacher;
     } catch {
@@ -121,7 +123,23 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     );
   }
 
+  // Fetch privacy notice timestamp
+  const lastPrivacyNoticeShown = teacher?.last_privacy_notice_shown ?? null;
+
+  // Get school locale for UK workspace mode
+  const schoolLocale = ((teacher as { schools?: { locale?: string } })?.schools?.locale ?? "US") as Jurisdiction;
+
   return (
-    <AppShell>{children}</AppShell>
+    <AppShell
+      privacyNotice={{
+        userId: data.user.id,
+        userType: "teacher",
+        lastShown: lastPrivacyNoticeShown,
+      }}
+    >
+      <SchoolLocaleWrapper locale={schoolLocale}>
+        {children}
+      </SchoolLocaleWrapper>
+    </AppShell>
   );
 }

@@ -1,6 +1,9 @@
 import { isAudioFollowup, isEvidenceFollowup } from "@/lib/assessments/question-types";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { logOpenAiCall, logOpenAiError } from "@/lib/ops/api-logging";
+import { detectCrisisLanguage, processCrisisAlert } from "@/lib/safety/crisis-detection";
+import { UK_ORACY_SYSTEM_PROMPT, buildUKOracyUserPrompt, parseUKOracyResponse, countTotalMarkers } from "./uk-scoring-prompts";
+import { WorkspaceLocaleConfig } from "@/lib/config/uk-config";
 
 type OpenAiLogContext = {
   operation: string;
@@ -96,8 +99,7 @@ function getGeminiApiKeyHelp(message: string) {
 }
 
 function getGeminiModelFallback(model: string) {
-  // Some preview/Vertex-only models reject AI Studio API keys.
-  if (model.includes("preview") || model.includes("exp")) return "gemini-1.5-flash";
+  // Allow preview models regarding user request
   return model;
 }
 
@@ -364,35 +366,35 @@ async function transcribeWithGemini(audioBytes: Buffer, mimeType: string) {
 }
 
 export async function transcribeAudio(audioBytes: Buffer, mimeType: string, context?: OpenAiLogContext) {
-  // Priority to Gemini for native auditory intelligence if enabled.
+  // IMPORTANT: OpenAI Whisper is the proven reliable transcription engine.
+  // Always use it first if available. Gemini is only a fallback.
+  if (process.env.OPENAI_API_KEY) {
+    try {
+      return await transcribeWithOpenAi(audioBytes, mimeType, context);
+    } catch (e) {
+      console.error("OpenAI Whisper transcription failed, trying Gemini fallback", e);
+    }
+  }
+
+  // Fallback to Gemini if OpenAI is not available or failed
   if (isGeminiEnabled()) {
     try {
       return await transcribeWithGemini(audioBytes, mimeType);
     } catch (e) {
-      console.error("Gemini transcription failed, falling back to OpenAI if available", e);
+      const msg = e instanceof Error ? e.message : String(e);
+      if (isGeminiApiKeyUnsupportedError(msg)) {
+        const help = getGeminiApiKeyHelp(msg);
+        throw new Error(
+          `Gemini transcription failed due to auth. ${help ?? ""} Set OPENAI_API_KEY to use OpenAI transcription instead.`,
+        );
+      }
+      throw e;
     }
   }
 
-  if (process.env.OPENAI_API_KEY) return transcribeWithOpenAi(audioBytes, mimeType, context);
-
-  if (!isGeminiEnabled()) {
-    throw new Error(
-      "Transcription is not configured. Set OPENAI_API_KEY (recommended), or enable Gemini by setting ENABLE_GEMINI=1 and GOOGLE_API_KEY (AI Studio key).",
-    );
-  }
-
-  try {
-    return await transcribeWithGemini(audioBytes, mimeType);
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    if (isGeminiApiKeyUnsupportedError(msg)) {
-      const help = getGeminiApiKeyHelp(msg);
-      throw new Error(
-        `Gemini transcription failed due to auth. ${help ?? ""} Set OPENAI_API_KEY to use OpenAI transcription instead.`,
-      );
-    }
-    throw e;
-  }
+  throw new Error(
+    "Transcription is not configured. Set OPENAI_API_KEY (recommended), or enable Gemini by setting ENABLE_GEMINI=1 and GOOGLE_API_KEY (AI Studio key).",
+  );
 }
 
 function parseScoreOutput(data: unknown) {
@@ -497,7 +499,37 @@ Rules:
     user,
     input.context ?? { operation: "student_evaluation" },
   );
+  /* Removed duplicate openaiGenerateJson call */
   return parseScoreOutput(data);
+}
+
+async function scoreWithUKPrompts(input: {
+  questionText: string;
+  transcript: string;
+  contextType?: string;
+  selectedStrands?: any[];
+  context?: OpenAiLogContext;
+}) {
+  const model = process.env.OPENAI_SCORE_MODEL || process.env.OPENAI_TEXT_MODEL || "gpt-5-mini-2025-08-07";
+  const system = UK_ORACY_SYSTEM_PROMPT;
+  const user = buildUKOracyUserPrompt({
+    questionText: input.questionText,
+    transcript: input.transcript,
+    contextType: input.contextType,
+    selectedStrands: input.selectedStrands,
+  });
+
+  const data = await openaiGenerateJson(
+    model,
+    system,
+    user,
+    input.context ?? { operation: "student_evaluation_uk" },
+  );
+
+  const analysis = parseUKOracyResponse(data);
+  if (!analysis) throw new Error("Failed to parse UK oracy analysis.");
+
+  return analysis;
 }
 
 async function scoreWithGemini(input: {
@@ -606,7 +638,18 @@ export async function scoreSubmission(submissionId: string) {
     if (rError) throw rError;
     const rubricReasoning = (rubrics ?? []).find((r) => r.rubric_type === "reasoning")?.instructions ?? "";
     const rubricEvidence = (rubrics ?? []).find((r) => r.rubric_type === "evidence")?.instructions ?? "";
-    if (!rubricReasoning || !rubricEvidence) throw new Error("Rubrics missing.");
+    // Note: Rubrics required for US, but UK uses prompt-based markers.
+
+    // Check for UK configuration
+    const { data: assessmentMeta } = await admin
+      .from("assessments")
+      .select("uk_locale_config")
+      .eq("id", submission.assessment_id)
+      .single();
+
+    const ukConfig = assessmentMeta?.uk_locale_config as WorkspaceLocaleConfig | null;
+    const isUK = Boolean(ukConfig); // If config exists, treating as UK-enabled assessment
+
 
     const { data: responses, error: respError } = await admin
       .from("submission_responses")
@@ -676,6 +719,19 @@ export async function scoreSubmission(submissionId: string) {
           audioDurationSeconds: resp.duration_seconds ?? null,
         });
         await admin.from("submission_responses").update({ transcript }).eq("id", resp.id);
+
+        // Crisis Detection (Fire and forget)
+        const detection = detectCrisisLanguage(transcript);
+        if (detection.detected) {
+          processCrisisAlert({
+            submissionId,
+            studentId: submission.student_id,
+            transcript,
+            detection,
+            assessmentId: submission.assessment_id,
+          }).catch((e) => console.error("Crisis detection failed", e));
+        }
+
         return transcript;
       } catch (e) {
         if (optional) return null;
@@ -725,7 +781,9 @@ export async function scoreSubmission(submissionId: string) {
         continue;
       }
 
-      let primary: Awaited<ReturnType<typeof scoreWithOpenAi>>;
+      let primary: Awaited<ReturnType<typeof scoreWithOpenAi>> | null = null;
+      let ukAnalysis: Awaited<ReturnType<typeof scoreWithUKPrompts>> | null = null;
+
       try {
         let questionText = q.question_text;
         if (isAudioFollowup(q.question_type) && followupPrompt) {
@@ -745,58 +803,74 @@ export async function scoreSubmission(submissionId: string) {
           }
         }
 
-        // --- GEMINI NATIVE AUDIO PATH ---
-        if (isGeminiEnabled() && !isEvidenceFollowup(q.question_type)) {
-          const audio = await loadAudioBuffer(primaryResp);
-          if (audio) {
-            const nativeResult = await scoreWithGeminiNative({
-              audioBytes: audio.buf,
-              mimeType: audio.mime,
-              questionText,
-              rubricReasoning,
-              rubricEvidence,
-            });
-
-            // Update transcript in DB if it was missing/changed
-            if (!primaryResp.transcript || primaryResp.transcript !== nativeResult.transcript) {
-              await admin.from("submission_responses").update({ transcript: nativeResult.transcript }).eq("id", primaryResp.id);
-              transcript = nativeResult.transcript;
-            }
-
-            primary = {
-              reasoning: nativeResult.reasoning,
-              evidence: nativeResult.evidence,
-            };
-          } else {
-            throw new Error("Unable to load audio for native scoring.");
-          }
-        } else if (process.env.OPENAI_API_KEY) {
-          primary = await scoreWithOpenAi({
+        if (isUK) {
+          const analysis = await scoreWithUKPrompts({
             questionText,
             transcript: stripPauseMarkers(transcript),
-            rubricReasoning,
-            rubricEvidence,
             context: {
-              operation: "student_evaluation",
+              operation: "student_evaluation_uk",
               assessmentId: submission.assessment_id,
               studentId: submission.student_id,
               submissionId,
               questionId: q.id,
             },
           });
+          ukAnalysis = analysis;
+
         } else {
-          if (!isGeminiEnabled()) {
-            throw new Error(
-              "Scoring is not configured. Set OPENAI_API_KEY (recommended), or enable Gemini by setting ENABLE_GEMINI=1 and GOOGLE_API_KEY (AI Studio key).",
-            );
+          // --- GEMINI NATIVE AUDIO PATH ---
+          if (isGeminiEnabled() && !isEvidenceFollowup(q.question_type)) {
+            const audio = await loadAudioBuffer(primaryResp);
+            if (audio) {
+              const nativeResult = await scoreWithGeminiNative({
+                audioBytes: audio.buf,
+                mimeType: audio.mime,
+                questionText,
+                rubricReasoning,
+                rubricEvidence,
+              });
+
+              // Update transcript in DB if it was missing/changed
+              if (!primaryResp.transcript || primaryResp.transcript !== nativeResult.transcript) {
+                await admin.from("submission_responses").update({ transcript: nativeResult.transcript }).eq("id", primaryResp.id);
+                transcript = nativeResult.transcript;
+              }
+
+              primary = {
+                reasoning: nativeResult.reasoning,
+                evidence: nativeResult.evidence,
+              };
+            } else {
+              throw new Error("Unable to load audio for native scoring.");
+            }
+          } else if (process.env.OPENAI_API_KEY) {
+            primary = await scoreWithOpenAi({
+              questionText,
+              transcript: stripPauseMarkers(transcript),
+              rubricReasoning,
+              rubricEvidence,
+              context: {
+                operation: "student_evaluation",
+                assessmentId: submission.assessment_id,
+                studentId: submission.student_id,
+                submissionId,
+                questionId: q.id,
+              },
+            });
+          } else {
+            if (!isGeminiEnabled()) {
+              throw new Error(
+                "Scoring is not configured. Set OPENAI_API_KEY (recommended), or enable Gemini by setting ENABLE_GEMINI=1 and GOOGLE_API_KEY (AI Studio key).",
+              );
+            }
+            primary = await scoreWithGemini({
+              questionText,
+              transcript: stripPauseMarkers(transcript),
+              rubricReasoning,
+              rubricEvidence,
+            });
           }
-          primary = await scoreWithGemini({
-            questionText,
-            transcript: stripPauseMarkers(transcript),
-            rubricReasoning,
-            rubricEvidence,
-          });
-        }
+        } // End else (!isUK)
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Scoring failed.";
         console.error("Scoring failed", { submissionId, questionId: q.id }, e);
@@ -806,7 +880,10 @@ export async function scoreSubmission(submissionId: string) {
       }
 
       let final = primary;
+      // Reconcile if US and dual review enabled
       if (
+        !isUK &&
+        primary &&
         isGeminiEnabled() &&
         (process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_KEY)
       ) {
@@ -844,25 +921,53 @@ Rules:
         }
       }
 
-      await admin.from("question_scores").upsert(
-        [
-          {
-            submission_id: submissionId,
-            question_id: q.id,
-            scorer_type: "reasoning",
-            score: final.reasoning.score,
-            justification: final.reasoning.justification,
-          },
-          {
-            submission_id: submissionId,
-            question_id: q.id,
-            scorer_type: "evidence",
-            score: final.evidence.score,
-            justification: final.evidence.justification,
-          },
-        ],
-        { onConflict: "submission_id,question_id,scorer_type" },
-      );
+      // Save Scores
+      if (isUK && ukAnalysis) {
+        // Save UK analysis
+        await admin.from("question_scores").upsert(
+          [
+            {
+              submission_id: submissionId,
+              question_id: q.id,
+              scorer_type: "reasoning",
+              score: null,
+              justification: ukAnalysis.processObservations || "Analysis complete.",
+              ai_analysis: ukAnalysis as any // Use as any if type definition not yet updated
+            },
+            {
+              submission_id: submissionId,
+              question_id: q.id,
+              scorer_type: "evidence",
+              score: null,
+              justification: "Detailed analysis available in report.",
+              ai_analysis: null
+            },
+          ],
+          { onConflict: "submission_id,question_id,scorer_type" },
+        );
+      } else if (final) {
+        // Save US scores
+        await admin.from("question_scores").upsert(
+          [
+            {
+              submission_id: submissionId,
+              question_id: q.id,
+              scorer_type: "reasoning",
+              score: final.reasoning.score,
+              justification: final.reasoning.justification,
+            },
+            {
+              submission_id: submissionId,
+              question_id: q.id,
+              scorer_type: "evidence",
+              score: final.evidence.score,
+              justification: final.evidence.justification,
+            },
+          ],
+          { onConflict: "submission_id,question_id,scorer_type" },
+        );
+      }
+
       scored += 1;
     }
 

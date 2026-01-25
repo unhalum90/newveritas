@@ -10,6 +10,7 @@ const patchSchema = z.object({
   blooms_level: z.enum(["remember", "understand", "apply", "analyze", "evaluate", "create"]).optional().nullable(),
   order_index: z.number().int().positive().optional(),
   evidence_upload: z.enum(["disabled", "optional", "required"]).optional(),
+  max_evidence_count: z.number().int().min(1).max(5).optional().nullable(),
 });
 
 export async function PATCH(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {

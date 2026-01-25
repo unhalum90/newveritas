@@ -92,6 +92,7 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
     .eq("assessment_id", submission.assessment_id)
     .maybeSingle();
   if (iError) return NextResponse.json({ error: iError.message }, { status: 500 });
+
   let pledgeAcceptedAt = submission.integrity_pledge_accepted_at;
   if (integrity?.pledge_enabled && !pledgeAcceptedAt) {
     const { data: priorPledge, error: pledgeError } = await admin
@@ -110,28 +111,35 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
     return NextResponse.json({ error: "Accept the academic integrity pledge before starting." }, { status: 409 });
   }
 
-  const { data: evidence, error: eError } = await admin
+  // Fetch ALL evidence for this question
+  const { data: evidenceList, error: eError } = await admin
     .from("evidence_images")
     .select(
       "id, storage_bucket, storage_path, mime_type, file_size_bytes, width_px, height_px, uploaded_at, created_at, ai_description, analyzed_at",
     )
     .eq("submission_id", submissionId)
     .eq("question_id", questionId)
-    .maybeSingle();
+    .is("deleted_at", null)
+    .order("uploaded_at", { ascending: true });
 
   if (eError) return NextResponse.json({ error: eError.message }, { status: 500 });
-  if (!evidence) {
-    const res = NextResponse.json({ evidence: null });
+
+  if (!evidenceList || evidenceList.length === 0) {
+    const res = NextResponse.json({ evidence: [] });
     pendingCookies.forEach(({ name, value, options }) => res.cookies.set(name, value, options));
     return res;
   }
 
-  const { data: signedUrl, error: signedError } = await admin.storage
-    .from(evidence.storage_bucket)
-    .createSignedUrl(evidence.storage_path, 60 * 60);
-  if (signedError) return NextResponse.json({ error: signedError.message }, { status: 500 });
+  const signedList = await Promise.all(
+    evidenceList.map(async (ev) => {
+      const { data: signed } = await admin.storage
+        .from(ev.storage_bucket)
+        .createSignedUrl(ev.storage_path, 60 * 60);
+      return { ...ev, signed_url: signed?.signedUrl ?? "" };
+    })
+  );
 
-  const res = NextResponse.json({ evidence: { ...evidence, signed_url: signedUrl.signedUrl } });
+  const res = NextResponse.json({ evidence: signedList });
   pendingCookies.forEach(({ name, value, options }) => res.cookies.set(name, value, options));
   return res;
 }
@@ -204,10 +212,9 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
     return NextResponse.json({ error: "Accept the academic integrity pledge before starting." }, { status: 409 });
   }
 
-  // Validate question belongs to the assessment and evidence upload is enabled.
   const { data: q, error: qError } = await admin
     .from("assessment_questions")
-    .select("id, evidence_upload, question_type, question_text")
+    .select("id, evidence_upload, question_type, question_text, max_evidence_count")
     .eq("id", questionId)
     .eq("assessment_id", submission.assessment_id)
     .maybeSingle();
@@ -217,7 +224,6 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
   const evidenceSetting = isEvidenceFollowup(q.question_type) ? "required" : normalizeEvidenceSetting(q.evidence_upload) ?? "optional";
   if (evidenceSetting === "disabled") return NextResponse.json({ error: "Evidence upload is disabled for this question." }, { status: 409 });
 
-  // Enforce sequential answering: only allow evidence for the next unanswered question.
   const { data: ordered, error: orderedError } = await admin
     .from("assessment_questions")
     .select("id, order_index")
@@ -260,44 +266,55 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
   const ext = isPdf ? "pdf" : "jpg";
   const path = `${submission.assessment_id}/${student.id}/${questionId}_${Date.now()}.${ext}`;
 
-  // If replacing, delete the previous object to avoid unbounded storage growth.
-  const { data: existing } = await admin
+  // Check Max Count
+  const maxCount = q.max_evidence_count || 1;
+  const { count: currentCount, error: countError } = await admin
     .from("evidence_images")
-    .select("storage_bucket, storage_path")
+    .select("id", { count: "exact", head: true })
     .eq("submission_id", submissionId)
     .eq("question_id", questionId)
-    .maybeSingle();
+    .is("deleted_at", null);
 
-  if (existing?.storage_path && existing.storage_path !== path) {
-    await admin.storage.from(existing.storage_bucket || bucket).remove([existing.storage_path]).catch(() => null);
+  if (countError) return NextResponse.json({ error: countError.message }, { status: 500 });
+  const count = currentCount ?? 0;
+
+  if (maxCount === 1) {
+    // Replace existing
+    if (count >= 1) {
+      const { data: existing } = await admin.from("evidence_images").select("id, storage_bucket, storage_path").eq("submission_id", submissionId).eq("question_id", questionId).is("deleted_at", null).limit(1).maybeSingle();
+      if (existing) {
+        await admin.storage.from(existing.storage_bucket).remove([existing.storage_path]).catch(() => null);
+        await admin.from("evidence_images").delete().eq("id", existing.id);
+      }
+    }
+  } else {
+    // Append, verify limit
+    if (count >= maxCount) return NextResponse.json({ error: `Maximum ${maxCount} files allowed.` }, { status: 409 });
   }
 
   const { error: uploadError } = await admin.storage.from(bucket).upload(path, out, {
-    contentType: "image/jpeg",
+    contentType: mimeType,
     upsert: true,
   });
   if (uploadError) return NextResponse.json({ error: uploadError.message }, { status: 500 });
 
-  const upsertPayload = {
-    submission_id: submissionId,
-    question_id: questionId,
-    submission_response_id: null,
-    original_filename: safeName || null,
-    storage_bucket: bucket,
-    storage_path: path,
-    file_size_bytes: out.byteLength,
-    mime_type: mimeType,
-    width_px: width,
-    height_px: height,
-    uploaded_at: new Date().toISOString(),
-    deleted_at: null,
-    ai_description: null,
-    analyzed_at: null,
-  };
-
   const { data: row, error: upsertError } = await admin
     .from("evidence_images")
-    .upsert(upsertPayload, { onConflict: "submission_id,question_id" })
+    .insert({
+      submission_id: submissionId,
+      question_id: questionId,
+      original_filename: safeName || null,
+      storage_bucket: bucket,
+      storage_path: path,
+      file_size_bytes: out.byteLength,
+      mime_type: mimeType,
+      width_px: width,
+      height_px: height,
+      uploaded_at: new Date().toISOString(),
+      deleted_at: null,
+      ai_description: null,
+      analyzed_at: null,
+    })
     .select(
       "id, submission_id, question_id, storage_bucket, storage_path, mime_type, file_size_bytes, width_px, height_px, uploaded_at, ai_description, analyzed_at",
     )
@@ -328,7 +345,7 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
           .update({ ai_description: analysis, analyzed_at: analyzedAt })
           .eq("id", row.id);
       } catch {
-        // Best-effort: analysis metadata is optional.
+        // Best-effort
       }
     }
   }
@@ -337,12 +354,9 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
     analysis = JSON.stringify({ summary: "AI questions unavailable. Continue with the prompt.", questions: [] });
     analyzedAt = new Date().toISOString();
     try {
-      await admin
-        .from("evidence_images")
-        .update({ ai_description: analysis, analyzed_at: analyzedAt })
-        .eq("id", row.id);
+      await admin.from("evidence_images").update({ ai_description: analysis, analyzed_at: analyzedAt }).eq("id", row.id);
     } catch {
-      // Best-effort: analysis metadata is optional.
+      // Best-effort
     }
   }
 
@@ -367,6 +381,8 @@ export async function DELETE(request: NextRequest, ctx: { params: Promise<{ id: 
   if (role !== "student") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const questionId = request.nextUrl.searchParams.get("question_id") ?? "";
+  const evidenceId = request.nextUrl.searchParams.get("evidence_id");
+
   if (!questionId) return NextResponse.json({ error: "Missing question_id." }, { status: 400 });
 
   const admin = createSupabaseAdminClient();
@@ -403,7 +419,6 @@ export async function DELETE(request: NextRequest, ctx: { params: Promise<{ id: 
     return NextResponse.json({ error: "Accept the academic integrity pledge before starting." }, { status: 409 });
   }
 
-  // Disallow changes after the audio response for this question exists.
   const { data: responseExists, error: rError } = await admin
     .from("submission_responses")
     .select("id")
@@ -413,28 +428,13 @@ export async function DELETE(request: NextRequest, ctx: { params: Promise<{ id: 
   if (rError) return NextResponse.json({ error: rError.message }, { status: 500 });
   if (responseExists) return NextResponse.json({ error: "Cannot change evidence after recording." }, { status: 409 });
 
-  const { data: evidence, error: eError } = await admin
-    .from("evidence_images")
-    .select("id, storage_bucket, storage_path")
-    .eq("submission_id", submissionId)
-    .eq("question_id", questionId)
-    .maybeSingle();
+  let query = admin.from("evidence_images").update({ deleted_at: new Date().toISOString() }).eq("submission_id", submissionId).eq("question_id", questionId).is("deleted_at", null);
 
-  if (eError) return NextResponse.json({ error: eError.message }, { status: 500 });
-  if (!evidence) {
-    const res = NextResponse.json({ ok: true });
-    pendingCookies.forEach(({ name, value, options }) => res.cookies.set(name, value, options));
-    return res;
+  if (evidenceId) {
+    query = query.eq("id", evidenceId);
   }
 
-  if (evidence.storage_path) {
-    await admin.storage.from(evidence.storage_bucket || getEvidenceBucket()).remove([evidence.storage_path]).catch(() => null);
-  }
-
-  const { error: updateError } = await admin
-    .from("evidence_images")
-    .update({ deleted_at: new Date().toISOString() })
-    .eq("id", evidence.id);
+  const { error: updateError } = await query;
   if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
 
   const res = NextResponse.json({ ok: true });

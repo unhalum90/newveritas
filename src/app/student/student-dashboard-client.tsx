@@ -32,13 +32,6 @@ type AssessmentListItem = {
   | null;
 };
 
-function formatDate(d: string | null) {
-  if (!d) return null;
-  const date = new Date(d);
-  if (Number.isNaN(date.getTime())) return null;
-  return date.toLocaleDateString();
-}
-
 export function StudentDashboardClient() {
   const [student, setStudent] = useState<Student | null>(null);
   const [assessments, setAssessments] = useState<AssessmentListItem[]>([]);
@@ -49,11 +42,6 @@ export function StudentDashboardClient() {
     if (!student) return null;
     return `${student.first_name} ${student.last_name}`.trim();
   }, [student]);
-
-  const feedbackReady = useMemo(
-    () => assessments.some((a) => a.latest_submission?.review_status === "published"),
-    [assessments],
-  );
 
   useEffect(() => {
     (async () => {
@@ -76,31 +64,52 @@ export function StudentDashboardClient() {
       }
     })();
   }, []);
-  const [activeTab, setActiveTab] = useState<"assessments" | "pulse" | "studylab">("assessments");
 
-  // ... filtered logic ...
-  const filteredAssessments = useMemo(() => {
-    return assessments.filter((a) => {
-      if (activeTab === "assessments") return a.type === "summative" || !a.type;
-      if (activeTab === "pulse") return a.type === "pulse";
-      if (activeTab === "studylab") return a.type === "studylab";
-      return true;
-    });
-  }, [assessments, activeTab]);
-
-  // Count new (unstarted) assignments per tab
-  const newCounts = useMemo(() => {
-    const isNew = (a: AssessmentListItem) => !a.latest_submission || a.latest_submission.status === "assigned";
+  // Count active (unstarted or in-progress) assignments per category
+  const activeCounts = useMemo(() => {
+    const isActive = (a: AssessmentListItem) =>
+      !a.latest_submission ||
+      a.latest_submission.status === "assigned" ||
+      a.latest_submission.status === "started" ||
+      a.latest_submission.status === "restarted";
     return {
-      assessments: assessments.filter((a) => (a.type === "summative" || !a.type) && isNew(a)).length,
-      pulse: assessments.filter((a) => a.type === "pulse" && isNew(a)).length,
-      studylab: assessments.filter((a) => a.type === "studylab" && isNew(a)).length,
+      assessments: assessments.filter((a) => (a.type === "summative" || !a.type) && isActive(a)).length,
+      pulse: assessments.filter((a) => a.type === "pulse" && isActive(a)).length,
+      studylab: assessments.filter((a) => a.type === "studylab" && isActive(a)).length,
     };
   }, [assessments]);
+
+  const categories = [
+    {
+      title: "Assessments",
+      description: "Summative assessments and graded work",
+      href: "/student/assessments",
+      count: activeCounts.assessments,
+      icon: "📝",
+      color: "bg-emerald-500",
+    },
+    {
+      title: "Pulse Checks",
+      description: "Quick check-ins on your understanding",
+      href: "/student/pulse",
+      count: activeCounts.pulse,
+      icon: "💓",
+      color: "bg-purple-500",
+    },
+    {
+      title: "Study Lab",
+      description: "Practice activities and study sessions",
+      href: "/student/studylab",
+      count: activeCounts.studylab,
+      icon: "🧪",
+      color: "bg-teal-500",
+    },
+  ];
 
   return (
     <div className="min-h-screen bg-zinc-50 px-6 py-10">
       <div className="mx-auto w-full max-w-4xl space-y-6">
+        {/* Header */}
         <div className="flex items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold text-zinc-900">Student Dashboard</h1>
@@ -110,132 +119,53 @@ export function StudentDashboardClient() {
           </div>
           <Link href="/student/login">
             <Button type="button" variant="secondary">
-              Switch account
+              Log out
             </Button>
           </Link>
         </div>
 
         {error ? <div className="text-sm text-red-600">{error}</div> : null}
         {loading ? <div className="text-sm text-zinc-600">Loading…</div> : null}
-        {!loading && feedbackReady ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>New feedback available</CardTitle>
-              <CardDescription>Your teacher released verified feedback.</CardDescription>
-            </CardHeader>
-            <CardContent className="text-sm text-[var(--muted)]">
-              Open any assessment marked “Feedback ready” to see your notes.
-            </CardContent>
-          </Card>
-        ) : null}
 
-        {/* Tab Navigation */}
-        <div className="flex space-x-2 border-b border-zinc-200">
-          <button
-            onClick={() => setActiveTab("assessments")}
-            className={`pb-2 px-4 text-sm font-medium transition-colors border-b-2 flex items-center gap-2 ${activeTab === "assessments"
-              ? "border-zinc-900 text-zinc-900"
-              : "border-transparent text-zinc-500 hover:text-zinc-700"
-              }`}
-          >
-            Assessments
-            {newCounts.assessments > 0 && (
-              <span className="px-1.5 py-0.5 text-[10px] font-bold bg-emerald-500 text-white rounded-full animate-pulse">
-                NEW
-              </span>
-            )}
-          </button>
-          <button
-            onClick={() => setActiveTab("pulse")}
-            className={`pb-2 px-4 text-sm font-medium transition-colors border-b-2 flex items-center gap-2 ${activeTab === "pulse"
-              ? "border-purple-600 text-purple-700"
-              : "border-transparent text-zinc-500 hover:text-zinc-700"
-              }`}
-          >
-            Pulse Checks
-            {newCounts.pulse > 0 && (
-              <span className="px-1.5 py-0.5 text-[10px] font-bold bg-purple-500 text-white rounded-full animate-pulse">
-                NEW
-              </span>
-            )}
-          </button>
-          <button
-            onClick={() => setActiveTab("studylab")}
-            className={`pb-2 px-4 text-sm font-medium transition-colors border-b-2 flex items-center gap-2 ${activeTab === "studylab"
-              ? "border-blue-600 text-blue-700"
-              : "border-transparent text-zinc-500 hover:text-zinc-700"
-              }`}
-          >
-            Study Lab
-            {newCounts.studylab > 0 && (
-              <span className="px-1.5 py-0.5 text-[10px] font-bold bg-teal-500 text-white rounded-full animate-pulse">
-                NEW
-              </span>
-            )}
-          </button>
-        </div>
-
-        {activeTab === "assessments" && (
-          <Card>
+        {/* Practice Space Card */}
+        {!loading && (
+          <Card className="bg-zinc-900 text-white">
             <CardHeader>
-              <CardTitle>Practice Space</CardTitle>
-              <CardDescription>Get comfortable with the flow before your first graded assessment.</CardDescription>
+              <CardTitle className="text-white">Practice Space</CardTitle>
+              <CardDescription className="text-zinc-400">
+                Get comfortable with the flow before your first graded assessment.
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <Link href="/student/practice">
-                <Button type="button">Start practice walkthrough</Button>
+                <Button type="button" className="bg-emerald-600 hover:bg-emerald-700 text-white">
+                  Start practice walkthrough
+                </Button>
               </Link>
             </CardContent>
           </Card>
         )}
 
-        {!loading && !filteredAssessments.length ? (
-          <div className="text-center py-12 text-zinc-500 bg-white rounded-lg border border-dashed border-zinc-200">
-            <span className="text-4xl block mb-2">
-              {activeTab === "assessments" ? "📝" : activeTab === "pulse" ? "💓" : "🧪"}
-            </span>
-            <p>No {activeTab} assigned yet.</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {filteredAssessments.map((a) => (
-              <Card key={a.id} className="overflow-hidden">
-                {a.asset_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={a.asset_url} alt={`${a.title} cover`} className="h-40 w-full object-cover" />
-                ) : null}
-                <CardHeader>
-                  <CardTitle>{a.title}</CardTitle>
-                  <CardDescription>
-                    {formatDate(a.published_at) ? `Published ${formatDate(a.published_at)}` : "Published"}
-                    {a.is_practice_mode ? " • Practice" : ""}
-                    {a.latest_submission
-                      ? ` • ${a.latest_submission.review_status === "published" ? "Feedback ready" : `Last: ${a.latest_submission.status}`}`
-                      : ""}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Link
-                    href={
-                      a.type === "studylab"
-                        ? `/student/studylab/${a.id}`
-                        : a.type === "pulse"
-                          ? `/student/formative/${a.id}`
-                          : a.latest_submission?.review_status === "published"
-                            ? `/student/assessments/${a.id}/feedback`
-                            : `/student/assessments/${a.id}`
-                    }
-                  >
-                    <Button type="button" className="w-full">
-                      {a.latest_submission?.review_status === "published"
-                        ? "View Feedback" // Common for both?
-                        : a.latest_submission?.status === "started"
-                          ? "Continue"
-                          : "Open"}
-                    </Button>
-                  </Link>
-                </CardContent>
-              </Card>
+        {/* Category Cards */}
+        {!loading && (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            {categories.map((cat) => (
+              <Link key={cat.title} href={cat.href}>
+                <Card className="h-full transition-all hover:shadow-lg hover:scale-[1.02] cursor-pointer">
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <span className="text-3xl">{cat.icon}</span>
+                      {cat.count > 0 && (
+                        <span className={`px-2 py-1 text-xs font-bold text-white rounded-full ${cat.color}`}>
+                          {cat.count} active
+                        </span>
+                      )}
+                    </div>
+                    <CardTitle className="mt-2">{cat.title}</CardTitle>
+                    <CardDescription>{cat.description}</CardDescription>
+                  </CardHeader>
+                </Card>
+              </Link>
             ))}
           </div>
         )}

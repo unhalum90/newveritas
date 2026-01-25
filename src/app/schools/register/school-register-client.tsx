@@ -109,8 +109,26 @@ export default function SchoolRegisterClient() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="country">Country (optional)</Label>
-                <Input id="country" value={country} onChange={(e) => setCountry(e.target.value)} placeholder="e.g., US" />
+                <Label htmlFor="country">Country</Label>
+                <select
+                  id="country"
+                  value={country}
+                  onChange={(e) => setCountry(e.target.value)}
+                  className="flex h-10 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400"
+                  required
+                >
+                  <option value="">Select country...</option>
+                  <option value="United Kingdom">🇬🇧 United Kingdom</option>
+                  <option value="US">🇺🇸 United States</option>
+                  <option value="Canada">🇨🇦 Canada</option>
+                  <option value="Australia">🇦🇺 Australia</option>
+                  <option value="Other">Other</option>
+                </select>
+                {country === "United Kingdom" && (
+                  <p className="text-xs text-emerald-600 mt-1">
+                    ✓ UK Oracy Mode will be enabled by default
+                  </p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="schoolType">School type (optional)</Label>

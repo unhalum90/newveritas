@@ -48,7 +48,8 @@ export async function analyzeEvidenceImage(input: {
   const system =
     "You are an expert educator analyzing student evidence (photos of notes, diagrams, or work). " +
     "Perform a deep visual analysis. Look for layouts, diagrams, handwriting patterns, and structural cues, not just text. " +
-    "Acknowledge specific visual elements you see. " +
+    "Identify specific visual elements present in the evidence. " +
+    "Do NOT use first-person pronouns (I, me, my, we, us, our). Use passive or functional phrasing. " +
     "Return ONLY JSON with keys: summary (string) and questions (array of 2 strings). Keep questions short and probing.";
 
   const questionText = input.questionText?.trim();

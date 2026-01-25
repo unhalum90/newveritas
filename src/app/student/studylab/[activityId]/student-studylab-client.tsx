@@ -4,6 +4,9 @@ import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import Link from "next/link";
+import { useSessionTimer } from "@/hooks/use-session-timer";
+import { CameraCaptureDialog } from "@/components/shared/camera-capture-dialog";
+import { Camera } from "lucide-react";
 
 interface Activity {
     id: string;
@@ -15,6 +18,9 @@ interface Activity {
     show_summary_to_student?: boolean;
     show_strengths_to_student?: boolean;
     show_weaknesses_to_student?: boolean;
+    // Artifact settings
+    require_artifact?: boolean;
+    max_artifact_count?: number;
 }
 
 interface Student {
@@ -44,11 +50,25 @@ interface Props {
     initialSubmission: Submission | null;
 }
 export function StudentStudylabClient({ activity, student, initialSubmission }: Props) {
+    const { isLimitReached, showBreakSuggestion, setShowBreakSuggestion } = useSessionTimer({ studentId: student.id });
     const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
     const [previews, setPreviews] = useState<string[]>([]);
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const MAX_FILES = 3;
+    // Use activity's max_artifact_count, default to 1 for single photo
+    const MAX_FILES = activity.max_artifact_count || 1;
     const [imagePaths, setImagePaths] = useState<string[]>([]);
+    const [isCameraOpen, setIsCameraOpen] = useState(false);
+    const [uploadFeedback, setUploadFeedback] = useState<{
+        type: "reupload" | "no-material";
+        message: string;
+    } | null>(null);
+
+    const handleCameraCapture = (file: File) => {
+        const newPreview = URL.createObjectURL(file);
+        setSelectedFiles(prev => [...prev, file]);
+        setPreviews(prev => [...prev, newPreview]);
+        setUploadFeedback(null);
+    };
 
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = e.target.files;
@@ -68,6 +88,7 @@ export function StudentStudylabClient({ activity, student, initialSubmission }: 
 
         setSelectedFiles(prev => [...prev, ...newFiles]);
         setPreviews(prev => [...prev, ...newPreviews]);
+        setUploadFeedback(null);
 
         // Reset input
         e.target.value = "";
@@ -76,6 +97,7 @@ export function StudentStudylabClient({ activity, student, initialSubmission }: 
     const removeFile = (index: number) => {
         setSelectedFiles(prev => prev.filter((_, i) => i !== index));
         setPreviews(prev => prev.filter((_, i) => i !== index));
+        setUploadFeedback(null);
     };
 
     const [isStarting, setIsStarting] = useState(false);
@@ -132,13 +154,24 @@ export function StudentStudylabClient({ activity, student, initialSubmission }: 
             setIsPlaying(true);
 
             // Stream from Backend
-            const res = await fetch("/api/studylab/tts", {
+            const res = await fetch("/api/tts", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ text, voice: "alloy" })
             });
 
-            if (!res.ok) throw new Error("TTS Failed");
+            // Check if server returned fallback silent audio
+            const isFallback = res.headers.get("X-TTS-Fallback");
+
+            if (!res.ok || isFallback) {
+                // Use browser TTS as fallback
+                setIsPlaying(false);
+                if ('speechSynthesis' in window) {
+                    const utterance = new SpeechSynthesisUtterance(text);
+                    window.speechSynthesis.speak(utterance);
+                }
+                return;
+            }
 
             const blob = await res.blob();
             const url = URL.createObjectURL(blob);
@@ -150,7 +183,7 @@ export function StudentStudylabClient({ activity, student, initialSubmission }: 
         } catch (error) {
             console.error("TTS Error:", error);
             setIsPlaying(false);
-            // Fallback
+            // Fallback to browser TTS
             if ('speechSynthesis' in window) {
                 const utterance = new SpeechSynthesisUtterance(text);
                 window.speechSynthesis.speak(utterance);
@@ -243,17 +276,33 @@ export function StudentStudylabClient({ activity, student, initialSubmission }: 
                 body: formData,
             });
 
-            if (!res.ok) throw new Error("Failed to start session");
+            if (!res.ok) {
+                const errorData = await res.json().catch(() => ({}));
+                throw new Error(errorData.error || `Server error (${res.status})`);
+            }
 
             const data = await res.json();
+            if (data.needsReupload) {
+                setUploadFeedback({
+                    type: "reupload",
+                    message: data.message || `Please upload notes that match "${activity.title}".`,
+                });
+                setImagePaths([]);
+                return;
+            }
+
             if (data.message) {
                 setMessages([{ role: "ai", content: data.message }]);
                 setIsSessionActive(true);
                 setImagePaths(data.imagePaths || []);
+                setUploadFeedback(null);
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error("Start Session Error:", error);
-            alert("Failed to start session. Please try again.");
+            const msg = error.message?.includes("timeout") || error.message?.includes("network")
+                ? "Connection took too long. Please check your internet and try again."
+                : "Failed to start session. Please try again.";
+            alert(msg);
         } finally {
             setIsStarting(false);
         }
@@ -436,10 +485,61 @@ export function StudentStudylabClient({ activity, student, initialSubmission }: 
         );
     }
 
+    // Daily Limit Lock Screen
+    if (isLimitReached) {
+        return (
+            <div className="min-h-screen bg-zinc-50 flex items-center justify-center p-6">
+                <Card className="max-w-md w-full border-red-200 bg-red-50 shadow-xl">
+                    <CardHeader className="text-center">
+                        <div className="mx-auto w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-4">
+                            <span className="text-3xl">⏳</span>
+                        </div>
+                        <CardTitle className="text-red-900">Daily Limit Reached</CardTitle>
+                        <CardDescription className="text-red-700">
+                            You've practiced for 60 minutes today.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="text-center space-y-4">
+                        <p className="text-sm text-red-800">
+                            Great job on your learning today! To keep your progress fresh and avoid burnout,
+                            please take a break and resume tomorrow.
+                        </p>
+                        <Link href="/student">
+                            <Button className="w-full bg-red-600 hover:bg-red-700 text-white">
+                                Return to Dashboard
+                            </Button>
+                        </Link>
+                    </CardContent>
+                </Card>
+            </div>
+        );
+    }
+
     if (isSessionActive) {
         return (
             <div className="min-h-screen bg-zinc-50 p-6">
                 <div className="mx-auto max-w-3xl space-y-6">
+                    {/* Break Suggestion Alert */}
+                    {showBreakSuggestion && (
+                        <div className="bg-blue-600 text-white p-4 rounded-xl shadow-lg flex items-center justify-between animate-in slide-in-from-top duration-500">
+                            <div className="flex items-center gap-3">
+                                <span className="text-2xl">☕</span>
+                                <div>
+                                    <p className="font-bold">Time for a break?</p>
+                                    <p className="text-sm opacity-90">Great work! Take a 5-minute break before continuing.</p>
+                                </div>
+                            </div>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-white hover:bg-blue-700"
+                                onClick={() => setShowBreakSuggestion(false)}
+                            >
+                                Dismiss
+                            </Button>
+                        </div>
+                    )}
+
                     <div className="flex items-center justify-between">
                         <Link href="/student" className="flex items-center text-sm text-zinc-500 hover:text-zinc-900">
                             <span className="mr-2">←</span>
@@ -650,7 +750,18 @@ export function StudentStudylabClient({ activity, student, initialSubmission }: 
 
                 <Card>
                     <CardHeader>
-                        <CardTitle>Instructions</CardTitle>
+                        <div className="flex items-center justify-between">
+                            <CardTitle>Instructions</CardTitle>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => speakText(activity.prompt_template || "Upload an image of your notes to begin the session.")}
+                                className="text-zinc-500 hover:text-zinc-900"
+                                title="Read instructions"
+                            >
+                                🔊
+                            </Button>
+                        </div>
                         <CardDescription>
                             {activity.prompt_template || "Upload an image of your notes to begin the session."}
                         </CardDescription>
@@ -660,7 +771,12 @@ export function StudentStudylabClient({ activity, student, initialSubmission }: 
                             <CardHeader>
                                 <CardTitle className="flex justify-between items-center text-blue-400">
                                     <span>Ready to study?</span>
-                                    <span className="text-xs font-normal text-blue-500/60">Upload photos of your notes (up to 3)</span>
+                                    <span className="text-xs font-normal text-blue-500/60">
+                                        {MAX_FILES === 1
+                                            ? "Upload a photo of your work"
+                                            : `Upload photos of your notes (up to ${MAX_FILES})`
+                                        }
+                                    </span>
                                 </CardTitle>
                             </CardHeader>
                             <CardContent className="space-y-6">
@@ -686,15 +802,28 @@ export function StudentStudylabClient({ activity, student, initialSubmission }: 
                                                 </div>
                                             ))}
                                             {previews.length < MAX_FILES && (
-                                                <button
+                                                <div
                                                     onClick={() => fileInputRef.current?.click()}
-                                                    className="w-full h-48 border-2 border-dashed border-blue-500/20 rounded-xl flex flex-col items-center justify-center gap-2 hover:border-blue-500/40 hover:bg-blue-500/5 transition-all group"
+                                                    className="w-full h-48 border-2 border-dashed border-blue-500/20 rounded-xl flex flex-col items-center justify-center gap-2 hover:border-blue-500/40 hover:bg-blue-500/5 transition-all group cursor-pointer"
                                                 >
                                                     <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center group-hover:scale-110 transition-transform">
                                                         <span className="text-blue-400">＋</span>
                                                     </div>
                                                     <span className="text-xs text-blue-500/60 font-medium">Add another page</span>
-                                                </button>
+                                                    <div className="flex gap-2 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setIsCameraOpen(true);
+                                                            }}
+                                                            className="h-8 px-2 text-[10px] bg-blue-600/20 text-blue-300 hover:bg-blue-600/40"
+                                                        >
+                                                            Take Photo
+                                                        </Button>
+                                                    </div>
+                                                </div>
                                             )}
                                         </div>
                                     ) : (
@@ -707,6 +836,30 @@ export function StudentStudylabClient({ activity, student, initialSubmission }: 
                                             </div>
                                             <p className="text-blue-400 font-medium text-lg">Snap or Upload Notes</p>
                                             <p className="text-blue-500/60 text-sm mt-1">Diagrams, handwriting, or text are all welcome</p>
+                                            <div className="mt-6 flex flex-wrap justify-center gap-4">
+                                                <Button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setIsCameraOpen(true);
+                                                    }}
+                                                    className="bg-blue-600 hover:bg-blue-500 text-white flex items-center gap-2"
+                                                >
+                                                    <Camera className="h-4 w-4" />
+                                                    Take Photo
+                                                </Button>
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        fileInputRef.current?.click();
+                                                    }}
+                                                    className="border-blue-500/30 text-blue-400 hover:bg-blue-500/10"
+                                                >
+                                                    Upload File
+                                                </Button>
+                                            </div>
                                         </div>
                                     )}
 
@@ -719,11 +872,74 @@ export function StudentStudylabClient({ activity, student, initialSubmission }: 
                                         className="hidden"
                                     />
 
+                                    <CameraCaptureDialog
+                                        open={isCameraOpen}
+                                        onClose={() => setIsCameraOpen(false)}
+                                        onCapture={handleCameraCapture}
+                                    />
+
+                                    {uploadFeedback?.type === "reupload" && (
+                                        <div className="w-full rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-100">
+                                            <p className="font-semibold text-amber-200">That upload doesn't match the assignment.</p>
+                                            <p className="mt-1 text-amber-100/90">{uploadFeedback.message}</p>
+                                            <div className="mt-3 flex flex-wrap gap-2">
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    className="border-amber-400/50 text-amber-100 hover:bg-amber-500/10"
+                                                    onClick={() => {
+                                                        setSelectedFiles([]);
+                                                        setPreviews([]);
+                                                        setUploadFeedback(null);
+                                                    }}
+                                                >
+                                                    Upload different notes
+                                                </Button>
+                                                <Button
+                                                    type="button"
+                                                    variant="ghost"
+                                                    className="text-amber-100 hover:bg-amber-500/10"
+                                                    onClick={() => {
+                                                        setUploadFeedback({
+                                                            type: "no-material",
+                                                            message:
+                                                                "No problem. Please reload this assessment when you have the required material.",
+                                                        });
+                                                    }}
+                                                >
+                                                    I don't have it
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {uploadFeedback?.type === "no-material" && (
+                                        <div className="w-full rounded-xl border border-blue-500/30 bg-blue-500/10 p-4 text-sm text-blue-100">
+                                            <p className="font-semibold text-blue-200">That's okay.</p>
+                                            <p className="mt-1 text-blue-100/90">{uploadFeedback.message}</p>
+                                            <div className="mt-3 flex flex-wrap gap-2">
+                                                <Link href="/student">
+                                                    <Button type="button" className="bg-blue-600 hover:bg-blue-500 text-white">
+                                                        Return to Dashboard
+                                                    </Button>
+                                                </Link>
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    className="border-blue-400/50 text-blue-100 hover:bg-blue-500/10"
+                                                    onClick={() => window.location.reload()}
+                                                >
+                                                    Reload assessment
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    )}
+
                                     <Button
                                         size="lg"
                                         className="w-full md:w-1/2 bg-blue-600 hover:bg-blue-500 text-white font-bold py-6 rounded-xl shadow-lg shadow-blue-500/20 border-t border-white/20 transition-all active:scale-95 disabled:opacity-50"
                                         onClick={handleStartSession}
-                                        disabled={selectedFiles.length === 0 || isStarting}
+                                        disabled={selectedFiles.length === 0 || isStarting || uploadFeedback?.type === "no-material"}
                                     >
                                         {isStarting ? (
                                             <span className="flex items-center gap-2">

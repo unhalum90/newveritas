@@ -36,6 +36,10 @@ export function StudyLabCreateForm({ teacherId, classes }: Props) {
     const [showStrengthsToStudent, setShowStrengthsToStudent] = useState(true);
     const [showWeaknessesToStudent, setShowWeaknessesToStudent] = useState(true);
 
+    // Artifact upload settings
+    const [requireArtifact, setRequireArtifact] = useState(true);
+    const [maxArtifactCount, setMaxArtifactCount] = useState(1);
+
     const handleClassToggle = (classId: string) => {
         setSelectedClassIds((prev) =>
             prev.includes(classId)
@@ -92,6 +96,9 @@ export function StudyLabCreateForm({ teacherId, classes }: Props) {
                     showSummaryToStudent,
                     showStrengthsToStudent,
                     showWeaknessesToStudent,
+                    // Artifact settings
+                    requireArtifact,
+                    maxArtifactCount,
                 }),
             });
 
@@ -213,6 +220,53 @@ export function StudyLabCreateForm({ teacherId, classes }: Props) {
                                 onChange={(e) => setDueTime(e.target.value)}
                                 className="mt-1"
                             />
+                        </div>
+                    </div>
+
+                    {/* Artifact Upload Settings */}
+                    <div className="pt-4 border-t border-[var(--border)]">
+                        <Label className="text-base font-medium">Student Evidence Upload</Label>
+                        <p className="text-xs text-[var(--muted)] mb-3">
+                            Configure how students submit visual evidence of their work.
+                        </p>
+
+                        <div className="space-y-4">
+                            <label className="flex items-center justify-between p-3 rounded-md border border-[var(--border)] hover:bg-[var(--surface)]/50 cursor-pointer">
+                                <div>
+                                    <span className="font-medium text-sm">Require Photo Upload</span>
+                                    <p className="text-xs text-[var(--muted)]">Students must upload at least one photo</p>
+                                </div>
+                                <input
+                                    type="checkbox"
+                                    checked={requireArtifact}
+                                    onChange={(e) => setRequireArtifact(e.target.checked)}
+                                    className="h-5 w-5 rounded border-gray-300 text-[var(--primary)] focus:ring-[var(--primary)]"
+                                />
+                            </label>
+
+                            {requireArtifact && (
+                                <div>
+                                    <Label htmlFor="maxArtifactCount">Maximum Photos Allowed</Label>
+                                    <p className="text-xs text-[var(--muted)] mb-2">
+                                        Allow multiple photos for multi-angle evidence (e.g., physical models, art projects)
+                                    </p>
+                                    <div className="flex items-center gap-4">
+                                        {[1, 2, 3, 4, 5].map((count) => (
+                                            <button
+                                                key={count}
+                                                type="button"
+                                                onClick={() => setMaxArtifactCount(count)}
+                                                className={`px-4 py-2 rounded-md border transition-colors ${maxArtifactCount === count
+                                                    ? "border-[var(--primary)] bg-[var(--primary)]/10 text-[var(--primary)] font-medium"
+                                                    : "border-[var(--border)] hover:border-[var(--primary)]/50"
+                                                    }`}
+                                            >
+                                                {count === 1 ? "1 photo" : `Up to ${count}`}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </CardContent>

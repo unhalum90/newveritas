@@ -57,11 +57,12 @@ async function adjustCredits(formData: FormData) {
 export default async function AdminUsersPage({
   searchParams,
 }: {
-  searchParams?: SearchParams;
+  searchParams?: Promise<SearchParams>;
 }) {
   const { admin } = await requirePlatformAdmin();
-  const query = typeof searchParams?.q === "string" ? searchParams.q.trim() : "";
-  const roleFilter = typeof searchParams?.role === "string" ? searchParams.role : "all";
+  const params = await searchParams;
+  const query = typeof params?.q === "string" ? params.q.trim() : "";
+  const roleFilter = typeof params?.role === "string" ? params.role : "all";
   const searchFilter = query ? `%${query}%` : null;
 
   const [{ count: teacherCount }, { count: studentCount }] = await Promise.all([
@@ -197,11 +198,10 @@ export default async function AdminUsersPage({
                               <td className="py-3 text-[var(--muted)]">{typeof credits === "number" ? credits : "-"}</td>
                               <td className="py-3">
                                 <span
-                                  className={`rounded-full border px-2 py-1 text-xs font-semibold ${
-                                    teacher.disabled
+                                  className={`rounded-full border px-2 py-1 text-xs font-semibold ${teacher.disabled
                                       ? "border-[rgba(248,113,113,0.4)] bg-[rgba(248,113,113,0.16)] text-[#fecaca]"
                                       : "border-[rgba(20,184,166,0.4)] bg-[rgba(20,184,166,0.16)] text-[#5eead4]"
-                                  }`}
+                                    }`}
                                 >
                                   {teacher.disabled ? "Disabled" : "Active"}
                                 </span>
@@ -269,11 +269,10 @@ export default async function AdminUsersPage({
                               </td>
                               <td className="py-3">
                                 <span
-                                  className={`rounded-full border px-2 py-1 text-xs font-semibold ${
-                                    student.auth_user_id
+                                  className={`rounded-full border px-2 py-1 text-xs font-semibold ${student.auth_user_id
                                       ? "border-[rgba(20,184,166,0.4)] bg-[rgba(20,184,166,0.16)] text-[#5eead4]"
                                       : "border-[rgba(148,163,184,0.4)] bg-[rgba(148,163,184,0.16)] text-[var(--text)]"
-                                  }`}
+                                    }`}
                                 >
                                   {student.auth_user_id ? "Linked" : "Pending"}
                                 </span>

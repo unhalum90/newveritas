@@ -64,6 +64,8 @@ const patchSchema = z.object({
   profile_modified: z.boolean().optional(),
   profile_version: z.number().int().positive().optional(),
   profile_override_keys: z.array(z.string()).optional(),
+  // UK Config
+  uk_locale_config: z.record(z.string(), z.unknown()).optional().nullable(),
 });
 
 export async function PATCH(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {

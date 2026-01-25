@@ -5,6 +5,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getSupabaseErrorMessage } from "@/lib/supabase/errors";
 import { createRouteSupabaseClient } from "@/lib/supabase/route";
 import { getUserRole } from "@/lib/auth/roles";
+import { countryToLocale } from "@/lib/config/uk-config";
 
 const schema = z.object({
   school_name: z.string().min(2),
@@ -49,14 +50,16 @@ export async function POST(request: NextRequest) {
         name: parsed.data.school_name,
         country: parsed.data.country ?? null,
         school_type: parsed.data.school_type ?? null,
+        locale: countryToLocale(parsed.data.country),
+        locale_locked: countryToLocale(parsed.data.country) === 'UK',
       })
-      .select("id")
+      .select("id, locale")
       .single();
     if (schoolError) throw schoolError;
 
     const { data: workspace, error: workspaceError } = await admin
       .from("workspaces")
-      .insert({ school_id: school.id, name: "Main Workspace" })
+      .insert({ school_id: school.id, name: "Main Workspace", locale: school.locale })
       .select("id")
       .single();
     if (workspaceError) throw workspaceError;
