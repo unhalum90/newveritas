@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Camera, X, RefreshCw, Check } from "lucide-react";
@@ -18,16 +18,17 @@ export function CameraCaptureDialog({ open, onClose, onCapture }: CameraCaptureD
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
 
-    useEffect(() => {
-        if (open) {
-            startCamera();
-        } else {
-            stopCamera();
+    const stopCamera = useCallback(() => {
+        if (stream) {
+            stream.getTracks().forEach((track) => track.stop());
+            setStream(null);
         }
-        return () => stopCamera();
-    }, [open]);
+        if (videoRef.current) {
+            videoRef.current.srcObject = null;
+        }
+    }, [stream]);
 
-    const startCamera = async () => {
+    const startCamera = useCallback(async () => {
         setError(null);
         setPreviewUrl(null);
         try {
@@ -43,17 +44,18 @@ export function CameraCaptureDialog({ open, onClose, onCapture }: CameraCaptureD
             console.error("Error accessing camera:", err);
             setError("Could not access camera. Please ensure you have granted permission.");
         }
-    };
+    }, []);
 
-    const stopCamera = () => {
-        if (stream) {
-            stream.getTracks().forEach((track) => track.stop());
-            setStream(null);
+    useEffect(() => {
+        if (open) {
+            const timer = setTimeout(() => {
+                void startCamera();
+            }, 0);
+            return () => clearTimeout(timer);
+        } else {
+            stopCamera();
         }
-        if (videoRef.current) {
-            videoRef.current.srcObject = null;
-        }
-    };
+    }, [open, startCamera, stopCamera]);
 
     const capturePhoto = () => {
         if (videoRef.current && canvasRef.current) {

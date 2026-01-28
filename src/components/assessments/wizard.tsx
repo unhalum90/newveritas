@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { validateAssessmentPhase1, type ValidationError, type ValidationResult } from "@/lib/validation/assessment-validator";
-import { PROFILE_LIST, getProfile, applyProfile, detectOverrides, type ProfileId } from "@/lib/assessments/profiles";
+import { PROFILE_LIST, UK_PROFILE_LIST, getProfile, applyProfile, detectOverrides, type ProfileId } from "@/lib/assessments/profiles";
 
 // UK Oracy imports
 import { KeyStageCardSelector } from "@/components/uk/key-stage-selector";
@@ -57,6 +57,15 @@ type Assessment = {
     recording_limit_seconds: number;
     viewing_timer_seconds: number;
   } | null;
+  key_stage?: string | null;
+  year_group?: number | null;
+  nc_subject?: { subject: string; domain: string | null } | null;
+  oracy_focus?: string | null;
+  activity_context?: string | null;
+  curriculum_region?: string | null;
+  scaffold_level?: "heavy" | "light" | "none" | null;
+  exam_board?: string | null;
+  assessment_objectives?: string[] | null;
   uk_locale_config?: {
     key_stage?: string | null;
     oracy_strands?: string[];
@@ -307,20 +316,16 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
   const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
   const [reviewOpen, setReviewOpen] = useState(false);
 
-  // UK Oracy state
+  // UK Oracy state - determined by school locale, no toggle needed
   const { isUK } = useSchoolLocale();
-  const [ukOracyEnabled, setUkOracyEnabled] = useState(isUK);
   const [ukKeyStage, setUkKeyStage] = useState<KeyStage | null>(null);
-  const [ukOracyStrands, setUkOracyStrands] = useState<OracyStrand[]>([]);
+  const [ukYearGroup, setUkYearGroup] = useState<string | null>(null);
+  const [ukNCSubject, setUkNCSubject] = useState<{ subject: string; domain: string | null } | null>(null);
+  const [ukOracyFocus, setUkOracyFocus] = useState("");
   const [ukScaffoldLevel, setUkScaffoldLevel] = useState<"heavy" | "light" | "none">("heavy");
   const [ukContextType, setUkContextType] = useState("lesson");
-
-  // Force enable for UK schools
-  useEffect(() => {
-    if (isUK && !ukOracyEnabled) {
-      setUkOracyEnabled(true);
-    }
-  }, [isUK, ukOracyEnabled]);
+  const [ukExamBoard, setUkExamBoard] = useState<string | null>(null);
+  const [ukAssessmentObjectives, setUkAssessmentObjectives] = useState<string[]>([]);
 
   // Compute completion status for stepper
   const hasTitle = Boolean(assessment?.title?.trim());
@@ -561,25 +566,24 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
     setAssignmentError(null);
 
     // Initialize UK Oracy State
-    if (data.assessment.uk_locale_config) {
-      const config = data.assessment.uk_locale_config;
-      if (config.key_stage) setUkKeyStage(config.key_stage as KeyStage);
-      if (config.oracy_strands && Array.isArray(config.oracy_strands)) {
-        // We need to map strings back to OracyStrand objects if possible, 
-        // but currently OracyStrand is a complex object. 
-        // Wait, the component expects OracyStrand objects. 
-        // Ideally we store IDs or codes. 
-        // Looking at OracyStrand type: it has id, name, etc.
-        // If we stored full objects or just IDs?
-        // Let's assume we store full objects for now or we need a lookup.
-        setUkOracyStrands(config.oracy_strands as unknown as OracyStrand[]);
-      }
-      if (config.context_type) setUkContextType(config.context_type);
-      if (config.scaffold_level) setUkScaffoldLevel(config.scaffold_level as "heavy" | "light" | "none");
+    if (data.assessment) {
+      const a = data.assessment;
+      // Primary source: Top-level columns
+      if (a.key_stage) setUkKeyStage(a.key_stage as KeyStage);
+      if (a.year_group) setUkYearGroup(`Year ${a.year_group}`);
+      if (a.nc_subject) setUkNCSubject(a.nc_subject as { subject: string; domain: string | null });
+      if (a.oracy_focus) setUkOracyFocus(a.oracy_focus);
+      if (a.activity_context) setUkContextType(a.activity_context);
+      if (a.scaffold_level) setUkScaffoldLevel(a.scaffold_level as "heavy" | "light" | "none");
+      if (a.exam_board) setUkExamBoard(a.exam_board);
+      if (a.assessment_objectives) setUkAssessmentObjectives(a.assessment_objectives);
 
-      // Auto-enable if data present
-      if (config.key_stage || config.oracy_strands?.length) {
-        setUkOracyEnabled(true);
+      // Fallback: old uk_locale_config (for existing drafts)
+      if (a.uk_locale_config && !a.key_stage) {
+        const config = a.uk_locale_config;
+        if (config.key_stage) setUkKeyStage(config.key_stage as KeyStage);
+        if (config.context_type && !a.activity_context) setUkContextType(config.context_type);
+        if (config.scaffold_level && !a.scaffold_level) setUkScaffoldLevel(config.scaffold_level as "heavy" | "light" | "none");
       }
     }
   }, [assessmentId]);
@@ -608,6 +612,15 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
           instructions?: string | null;
           authoring_mode?: AuthoringMode;
           is_practice_mode?: boolean;
+          key_stage?: string | null;
+          year_group?: number | null;
+          nc_subject?: { subject: string; domain: string | null } | null;
+          oracy_focus?: string | null;
+          activity_context?: string | null;
+          scaffold_level?: string | null;
+          curriculum_region?: string | null;
+          exam_board?: string | null;
+          assessment_objectives?: string[] | null;
           uk_locale_config?: Record<string, unknown> | null;
         } = {
           subject: assessment.subject ?? null,
@@ -615,12 +628,17 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
           instructions: assessment.instructions ?? null,
           authoring_mode: assessment.authoring_mode,
           is_practice_mode: assessment.is_practice_mode ?? false,
-          uk_locale_config: ukOracyEnabled ? {
-            key_stage: ukKeyStage,
-            oracy_strands: ukOracyStrands,
-            context_type: ukContextType,
-            scaffold_level: ukScaffoldLevel
-          } : null,
+          // UK Curriculum fields (Sprint 1)
+          key_stage: isUK ? ukKeyStage : null,
+          year_group: isUK && ukYearGroup ? parseInt(ukYearGroup.replace("Year ", "")) : null,
+          nc_subject: isUK ? ukNCSubject : null,
+          oracy_focus: isUK ? ukOracyFocus : null,
+          activity_context: isUK ? ukContextType : null,
+          scaffold_level: isUK ? ukScaffoldLevel : null,
+          curriculum_region: isUK ? "UK" : null,
+          // GCSE fields (Sprint 3 - KS4 only)
+          exam_board: isUK && ukKeyStage === "KS4" ? ukExamBoard : null,
+          assessment_objectives: isUK && ukKeyStage === "KS4" && ukAssessmentObjectives.length > 0 ? ukAssessmentObjectives : null,
         };
         if (assessment.title.trim()) payload.title = assessment.title;
         if (assessment.class_id) payload.class_id = assessment.class_id;
@@ -638,7 +656,7 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
         setSaving(false);
       }
     },
-    [assessment, assessmentId, load, readonly, ukOracyEnabled, ukKeyStage, ukOracyStrands, ukContextType, ukScaffoldLevel],
+    [assessment, assessmentId, load, readonly, isUK, ukKeyStage, ukYearGroup, ukNCSubject, ukOracyFocus, ukContextType, ukScaffoldLevel, ukExamBoard, ukAssessmentObjectives],
   );
 
   const persistAssignments = useCallback(
@@ -1478,12 +1496,12 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
                   <CardContent className="space-y-6">
                     {/* Assessment Profile Selector */}
                     <div className="space-y-3">
-                      <Label>Assessment Profile</Label>
+                      <Label>{isUK ? "Assessment Mode" : "Assessment Profile"}</Label>
                       <p className="text-xs text-[var(--muted)]">
                         Select the type of assessment you're creating. This sets recommended defaults for timing, integrity, and follow-ups.
                       </p>
                       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
-                        {PROFILE_LIST.map((profile) => {
+                        {(isUK ? UK_PROFILE_LIST : PROFILE_LIST).map((profile) => {
                           const isSelected = assessment.assessment_profile === profile.id;
                           return (
                             <button
@@ -2001,8 +2019,16 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
                     <UKOracyWizardSection
                       keyStage={ukKeyStage}
                       onKeyStageChange={setUkKeyStage}
-                      selectedStrands={ukOracyStrands}
-                      onStrandsChange={setUkOracyStrands}
+                      yearGroup={ukYearGroup}
+                      onYearGroupChange={setUkYearGroup}
+                      ncSubject={ukNCSubject}
+                      onNCSubjectChange={setUkNCSubject}
+                      oracyFocus={ukOracyFocus}
+                      onOracyFocusChange={setUkOracyFocus}
+                      examBoard={ukExamBoard as any}
+                      onExamBoardChange={setUkExamBoard as any}
+                      assessmentObjectives={ukAssessmentObjectives}
+                      onAssessmentObjectivesChange={setUkAssessmentObjectives}
                       contextType={ukContextType}
                       onContextTypeChange={setUkContextType}
                       scaffoldLevel={ukScaffoldLevel}
@@ -2157,107 +2183,6 @@ export function AssessmentWizard({ assessmentId }: { assessmentId: string }) {
                       </div>
                     </div>
 
-                    {/* UK Oracy Section */}
-                    <div className="rounded-md border border-blue-200 bg-blue-50/30 p-4 dark:border-blue-800 dark:bg-blue-900/10">
-                      <div className="flex items-start justify-between gap-4 mb-4">
-                        <div>
-                          <div className="text-sm font-medium text-[var(--text)]">🇬🇧 UK Oracy Mode</div>
-                          <div className="text-xs text-[var(--muted)]">
-                            Enable Voice 21 Framework alignment for UK schools. Uses strand-based evidence capture instead of scores.
-                          </div>
-                        </div>
-                        <Switch
-                          checked={ukOracyEnabled}
-                          onCheckedChange={(checked) => {
-                            setUkOracyEnabled(checked);
-                            setDirty(true);
-                            if (!saving) void persistDraft(true);
-                          }}
-                          disabled={readonly || saving}
-                          aria-label="UK Oracy Mode"
-                        />
-                      </div>
-
-                      {ukOracyEnabled && (
-                        <div className="space-y-4 pt-4 border-t border-blue-200 dark:border-blue-800">
-                          {/* Key Stage Selection */}
-                          <div className="space-y-2">
-                            <Label>Key Stage</Label>
-                            <KeyStageCardSelector
-                              value={ukKeyStage}
-                              onChange={(ks) => {
-                                setUkKeyStage(ks);
-                                setDirty(true);
-                              }}
-                              className={readonly ? "opacity-50 pointer-events-none" : ""}
-                            />
-                          </div>
-
-                          {/* Oracy Strand Selection */}
-                          <div className="space-y-2">
-                            <Label>
-                              Focus Strands
-                              <span className="text-xs text-[var(--muted)] ml-2">
-                                (Select 1-4 strands to assess)
-                              </span>
-                            </Label>
-                            <OracyStrandSelector
-                              value={ukOracyStrands}
-                              onChange={(strands) => {
-                                setUkOracyStrands(strands);
-                                setDirty(true);
-                              }}
-                              maxSelection={4}
-                              showSubskills={false}
-                              className={readonly ? "opacity-50 pointer-events-none" : ""}
-                            />
-                          </div>
-
-                          {/* Scaffold Level */}
-                          <div className="space-y-2">
-                            <Label>Scaffold Level</Label>
-                            <div className="flex gap-2">
-                              {(["heavy", "light", "none"] as const).map((level) => (
-                                <button
-                                  key={level}
-                                  type="button"
-                                  onClick={() => {
-                                    setUkScaffoldLevel(level);
-                                    setDirty(true);
-                                  }}
-                                  disabled={readonly}
-                                  className={`
-                                    flex-1 py-2 px-3 rounded-lg border-2 text-xs font-medium transition-all
-                                    ${ukScaffoldLevel === level
-                                      ? "border-blue-500 bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
-                                      : "border-[var(--border)] text-[var(--muted)] hover:border-blue-300"
-                                    }
-                                    ${readonly ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}
-                                  `}
-                                >
-                                  {level === "heavy" && "Heavy"}
-                                  {level === "light" && "Light"}
-                                  {level === "none" && "None"}
-                                </button>
-                              ))}
-                            </div>
-                            <p className="text-xs text-[var(--muted)]">
-                              {ukScaffoldLevel === "heavy" && "Provides sentence starters and structured prompts"}
-                              {ukScaffoldLevel === "light" && "Provides guiding questions without sentence stems"}
-                              {ukScaffoldLevel === "none" && "Student speaks independently without scaffolding"}
-                            </p>
-                          </div>
-
-                          {/* Trust Banner */}
-                          <div className="flex items-start gap-2 p-3 rounded-lg bg-blue-100 dark:bg-blue-900/30 text-xs">
-                            <span className="text-blue-600 dark:text-blue-400">ℹ️</span>
-                            <p className="text-blue-700 dark:text-blue-300">
-                              UK Oracy Mode uses evidence capture, not grading. AI will detect strand markers without assigning scores.
-                            </p>
-                          </div>
-                        </div>
-                      )}
-                    </div>
 
                     <div className="flex items-center justify-between gap-3">
                       <Button type="button" variant="secondary" disabled={saving} onClick={() => goToStep(1)}>

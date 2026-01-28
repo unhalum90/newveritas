@@ -12,7 +12,11 @@ export type ProfileId =
     | "712_formative"
     | "712_summative"
     | "higher_ed_viva"
-    | "language_proficiency";
+    | "language_proficiency"
+    | "uk_primary_portfolio"
+    | "uk_secondary_practice"
+    | "uk_secondary_checkpoint"
+    | "uk_sixth_form_viva";
 
 export type SectionVisibility = "hidden" | "visible" | "collapsed" | "expanded";
 export type FieldVisibility = "hidden" | "visible";

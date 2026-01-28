@@ -13,7 +13,7 @@ export default async function DashboardPage() {
 
   const { data: teacher } = await supabase
     .from("teachers")
-    .select("workspace_id")
+    .select("workspace_id, schools(locale)")
     .eq("user_id", data.user.id)
     .maybeSingle();
 
@@ -24,6 +24,8 @@ export default async function DashboardPage() {
       </div>
     );
   }
+
+  const isUK = (teacher.schools as { locale?: string })?.locale === "UK";
 
   const { data: classes, error: classesError } = await supabase
     .from("classes")
@@ -166,11 +168,20 @@ export default async function DashboardPage() {
           </h1>
           <p className="text-[var(--muted)]">Here's what's happening in your workspace today.</p>
         </div>
-        <Link href="/classes/new" data-tour="create-class">
-          <Button type="button" className="bg-gradient-to-r from-[var(--primary)] to-teal-600 shadow-lg shadow-teal-700/20 hover:shadow-teal-700/30 hover:-translate-y-0.5 transition-all duration-300">
-            + Create Class
-          </Button>
-        </Link>
+        <div className="flex gap-3">
+          {isUK && (
+            <Link href="/dashboard/uk-coverage">
+              <Button variant="outline" className="border-[var(--primary)] text-[var(--primary)] hover:bg-[var(--primary-subtle)]">
+                View Coverage Report
+              </Button>
+            </Link>
+          )}
+          <Link href="/classes/new" data-tour="create-class">
+            <Button type="button" className="bg-gradient-to-r from-[var(--primary)] to-teal-600 shadow-lg shadow-teal-700/20 hover:shadow-teal-700/30 hover:-translate-y-0.5 transition-all duration-300">
+              + Create Class
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {/* Stats Grid */}

@@ -1,6 +1,22 @@
 -- WARNING: This schema is for context only and is not meant to be run.
 -- Table order and constraints may not be valid for execution.
 
+CREATE TABLE public.academic_sessions (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  school_id uuid,
+  sourced_id text,
+  provider text,
+  name text NOT NULL,
+  type text NOT NULL CHECK (type = ANY (ARRAY['semester'::text, 'quarter'::text, 'year'::text, 'trimester'::text])),
+  start_date date NOT NULL,
+  end_date date NOT NULL,
+  is_current boolean NOT NULL DEFAULT false,
+  metadata jsonb,
+  data_classification text NOT NULL DEFAULT 'educational'::text,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT academic_sessions_pkey PRIMARY KEY (id),
+  CONSTRAINT academic_sessions_school_id_fkey FOREIGN KEY (school_id) REFERENCES public.schools(id)
+);
 CREATE TABLE public.admin_audit_trail (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   admin_user_id uuid NOT NULL,
@@ -86,6 +102,23 @@ CREATE TABLE public.assessment_assignments (
   CONSTRAINT assessment_assignments_assessment_id_fkey FOREIGN KEY (assessment_id) REFERENCES public.assessments(id),
   CONSTRAINT assessment_assignments_student_id_fkey FOREIGN KEY (student_id) REFERENCES public.students(id)
 );
+CREATE TABLE public.assessment_audit_log (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  submission_id uuid,
+  assessment_id uuid,
+  student_id uuid,
+  event_type text NOT NULL CHECK (event_type = ANY (ARRAY['ai_scored'::text, 'teacher_override'::text, 'teacher_comment'::text, 'review_requested'::text, 'review_resolved'::text, 'published'::text, 'audio_deleted'::text, 'submission_deleted'::text, 'score_changed'::text])),
+  actor_id uuid,
+  actor_role text NOT NULL CHECK (actor_role = ANY (ARRAY['ai'::text, 'teacher'::text, 'student'::text, 'admin'::text, 'system'::text])),
+  previous_value jsonb,
+  new_value jsonb,
+  reason text,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT assessment_audit_log_pkey PRIMARY KEY (id),
+  CONSTRAINT assessment_audit_log_submission_id_fkey FOREIGN KEY (submission_id) REFERENCES public.submissions(id),
+  CONSTRAINT assessment_audit_log_assessment_id_fkey FOREIGN KEY (assessment_id) REFERENCES public.assessments(id),
+  CONSTRAINT assessment_audit_log_student_id_fkey FOREIGN KEY (student_id) REFERENCES public.students(id)
+);
 CREATE TABLE public.assessment_integrity (
   assessment_id uuid NOT NULL,
   pause_threshold_seconds numeric,
@@ -123,6 +156,7 @@ CREATE TABLE public.assessment_questions (
   evidence_upload text NOT NULL DEFAULT 'optional'::text CHECK (evidence_upload = ANY (ARRAY['disabled'::text, 'optional'::text, 'required'::text])),
   blooms_level text CHECK (blooms_level IS NULL OR (blooms_level = ANY (ARRAY['remember'::text, 'understand'::text, 'apply'::text, 'analyze'::text, 'evaluate'::text, 'create'::text]))),
   data_classification text NOT NULL DEFAULT 'educational'::text,
+  max_evidence_count smallint NOT NULL DEFAULT 1 CHECK (max_evidence_count >= 1 AND max_evidence_count <= 4),
   CONSTRAINT assessment_questions_pkey PRIMARY KEY (id),
   CONSTRAINT assessment_questions_segment_id_fkey FOREIGN KEY (segment_id) REFERENCES public.assessment_segments(id),
   CONSTRAINT assessment_questions_assessment_id_fkey FOREIGN KEY (assessment_id) REFERENCES public.assessments(id),
@@ -222,9 +256,40 @@ CREATE TABLE public.assessments (
   has_class_report boolean NOT NULL DEFAULT false,
   latest_report_id uuid,
   scores_last_modified_at timestamp with time zone,
+  assessment_profile text CHECK (assessment_profile IS NULL OR (assessment_profile = ANY (ARRAY['k6_formative'::text, '712_formative'::text, '712_summative'::text, 'higher_ed_viva'::text, 'language_proficiency'::text]))),
+  profile_modified boolean NOT NULL DEFAULT false,
+  profile_version integer NOT NULL DEFAULT 1,
+  profile_override_keys ARRAY,
+  hide_ai_score_from_students boolean DEFAULT false,
+  require_teacher_review_before_release boolean DEFAULT false,
+  disable_ai_feedback boolean DEFAULT false,
+  uk_locale_config jsonb,
+  oracy_strands ARRAY,
+  context_type text DEFAULT 'lesson'::text,
+  scaffold_level text DEFAULT 'heavy'::text,
   CONSTRAINT assessments_pkey PRIMARY KEY (id),
   CONSTRAINT assessments_class_id_fkey FOREIGN KEY (class_id) REFERENCES public.classes(id),
   CONSTRAINT assessments_latest_report_id_fkey FOREIGN KEY (latest_report_id) REFERENCES public.assessment_analysis_reports(id)
+);
+CREATE TABLE public.class_enrollments (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  class_id uuid NOT NULL,
+  student_id uuid,
+  teacher_id uuid,
+  role text NOT NULL CHECK (role = ANY (ARRAY['student'::text, 'teacher'::text, 'ta'::text, 'observer'::text])),
+  status text NOT NULL DEFAULT 'active'::text CHECK (status = ANY (ARRAY['active'::text, 'inactive'::text, 'withdrawn'::text, 'completed'::text])),
+  is_primary boolean NOT NULL DEFAULT true,
+  sourced_id text,
+  provider text,
+  enrolled_at timestamp with time zone DEFAULT now(),
+  withdrawn_at timestamp with time zone,
+  data_classification text NOT NULL DEFAULT 'educational'::text,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT class_enrollments_pkey PRIMARY KEY (id),
+  CONSTRAINT class_enrollments_class_id_fkey FOREIGN KEY (class_id) REFERENCES public.classes(id),
+  CONSTRAINT class_enrollments_student_id_fkey FOREIGN KEY (student_id) REFERENCES public.students(id),
+  CONSTRAINT class_enrollments_teacher_id_fkey FOREIGN KEY (teacher_id) REFERENCES public.teachers(id)
 );
 CREATE TABLE public.classes (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -234,8 +299,30 @@ CREATE TABLE public.classes (
   access_mode text NOT NULL DEFAULT 'code'::text,
   created_at timestamp with time zone DEFAULT now(),
   data_classification text NOT NULL DEFAULT 'educational'::text,
+  sourced_id text,
+  provider text,
+  provider_metadata jsonb,
+  school_id uuid,
+  term_id uuid,
   CONSTRAINT classes_pkey PRIMARY KEY (id),
-  CONSTRAINT classes_workspace_id_fkey FOREIGN KEY (workspace_id) REFERENCES public.workspaces(id)
+  CONSTRAINT classes_workspace_id_fkey FOREIGN KEY (workspace_id) REFERENCES public.workspaces(id),
+  CONSTRAINT classes_school_id_fkey FOREIGN KEY (school_id) REFERENCES public.schools(id),
+  CONSTRAINT classes_term_id_fkey FOREIGN KEY (term_id) REFERENCES public.academic_sessions(id)
+);
+CREATE TABLE public.clever_credentials (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  district_id uuid NOT NULL UNIQUE,
+  clever_district_id text NOT NULL,
+  access_token text,
+  token_expires_at timestamp with time zone,
+  scopes ARRAY,
+  last_sync_at timestamp with time zone,
+  sync_schedule text DEFAULT '0 2 * * *'::text,
+  is_active boolean NOT NULL DEFAULT true,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT clever_credentials_pkey PRIMARY KEY (id),
+  CONSTRAINT clever_credentials_district_id_fkey FOREIGN KEY (district_id) REFERENCES public.districts(id)
 );
 CREATE TABLE public.credit_adjustments (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -256,6 +343,23 @@ CREATE TABLE public.cultural_data (
   price_snapshot text,
   top_song text,
   CONSTRAINT cultural_data_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.districts (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  name text NOT NULL,
+  sourced_id text UNIQUE,
+  provider text,
+  metadata jsonb,
+  retention_audio_days integer NOT NULL DEFAULT 30,
+  retention_transcript_days integer NOT NULL DEFAULT 30,
+  retention_log_days integer NOT NULL DEFAULT 90,
+  is_active boolean NOT NULL DEFAULT true,
+  timezone text DEFAULT 'America/New_York'::text,
+  locale text DEFAULT 'en-US'::text,
+  data_classification text NOT NULL DEFAULT 'anonymous'::text,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT districts_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.evidence_images (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -281,6 +385,100 @@ CREATE TABLE public.evidence_images (
   CONSTRAINT evidence_images_question_id_fkey FOREIGN KEY (question_id) REFERENCES public.assessment_questions(id),
   CONSTRAINT evidence_images_submission_response_id_fkey FOREIGN KEY (submission_response_id) REFERENCES public.submission_responses(id)
 );
+CREATE TABLE public.formative_activities (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  teacher_id uuid NOT NULL,
+  title text NOT NULL,
+  prompt_template text,
+  rubric_template text NOT NULL DEFAULT 'default'::text,
+  due_at timestamp with time zone,
+  status text NOT NULL DEFAULT 'draft'::text CHECK (status = ANY (ARRAY['draft'::text, 'live'::text, 'closed'::text])),
+  type text NOT NULL DEFAULT 'pulse'::text CHECK (type = ANY (ARRAY['pulse'::text, 'studylab'::text])),
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  data_classification text NOT NULL DEFAULT 'educational'::text,
+  learning_target text,
+  max_turns integer DEFAULT 6,
+  difficulty text DEFAULT 'standard'::text CHECK (difficulty = ANY (ARRAY['supportive'::text, 'standard'::text, 'challenge'::text])),
+  artifact_required boolean DEFAULT true,
+  show_score_to_student boolean NOT NULL DEFAULT true,
+  show_summary_to_student boolean NOT NULL DEFAULT true,
+  show_strengths_to_student boolean NOT NULL DEFAULT true,
+  show_weaknesses_to_student boolean NOT NULL DEFAULT true,
+  require_artifact boolean NOT NULL DEFAULT true,
+  max_artifact_count smallint NOT NULL DEFAULT 1 CHECK (max_artifact_count >= 1 AND max_artifact_count <= 4),
+  CONSTRAINT formative_activities_pkey PRIMARY KEY (id),
+  CONSTRAINT formative_activities_teacher_id_fkey FOREIGN KEY (teacher_id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.formative_assignments (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  activity_id uuid NOT NULL,
+  class_id uuid NOT NULL,
+  assigned_at timestamp with time zone NOT NULL DEFAULT now(),
+  teacher_id uuid,
+  CONSTRAINT formative_assignments_pkey PRIMARY KEY (id),
+  CONSTRAINT formative_assignments_activity_id_fkey FOREIGN KEY (activity_id) REFERENCES public.formative_activities(id),
+  CONSTRAINT formative_assignments_class_id_fkey FOREIGN KEY (class_id) REFERENCES public.classes(id),
+  CONSTRAINT formative_assignments_teacher_id_fkey FOREIGN KEY (teacher_id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.formative_feedback (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  submission_id uuid NOT NULL,
+  comment text NOT NULL,
+  needs_resubmission boolean DEFAULT false,
+  feedback_by uuid,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT formative_feedback_pkey PRIMARY KEY (id),
+  CONSTRAINT formative_feedback_submission_id_fkey FOREIGN KEY (submission_id) REFERENCES public.formative_submissions(id),
+  CONSTRAINT formative_feedback_feedback_by_fkey FOREIGN KEY (feedback_by) REFERENCES auth.users(id)
+);
+CREATE TABLE public.formative_scores (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  submission_id uuid NOT NULL UNIQUE,
+  rubric_scores jsonb NOT NULL DEFAULT '{}'::jsonb,
+  feedback_audio_url text,
+  feedback_text text,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  accuracy integer,
+  reasoning integer,
+  clarity integer,
+  transfer integer,
+  overall integer,
+  scored_by uuid,
+  scored_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT formative_scores_pkey PRIMARY KEY (id),
+  CONSTRAINT formative_scores_submission_id_fkey FOREIGN KEY (submission_id) REFERENCES public.formative_submissions(id),
+  CONSTRAINT formative_scores_scored_by_fkey FOREIGN KEY (scored_by) REFERENCES auth.users(id)
+);
+CREATE TABLE public.formative_submission_files (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  submission_id uuid NOT NULL,
+  file_path text NOT NULL,
+  file_type text NOT NULL CHECK (file_type = ANY (ARRAY['image'::text, 'audio'::text])),
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT formative_submission_files_pkey PRIMARY KEY (id),
+  CONSTRAINT formative_submission_files_submission_id_fkey FOREIGN KEY (submission_id) REFERENCES public.formative_submissions(id)
+);
+CREATE TABLE public.formative_submissions (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  activity_id uuid NOT NULL,
+  student_id uuid NOT NULL,
+  status text NOT NULL DEFAULT 'assigned'::text CHECK (status = ANY (ARRAY['assigned'::text, 'submitted'::text, 'reviewed'::text])),
+  input_mode text CHECK (input_mode = ANY (ARRAY['scan'::text, 'voice_memo'::text, 'digital'::text, 'skeleton'::text, 'studylab'::text])),
+  submitted_at timestamp with time zone,
+  reviewed_at timestamp with time zone,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  submission_data jsonb DEFAULT '{}'::jsonb,
+  artifact_url text,
+  audio_url text,
+  reviewed_by uuid,
+  CONSTRAINT formative_submissions_pkey PRIMARY KEY (id),
+  CONSTRAINT formative_submissions_activity_id_fkey FOREIGN KEY (activity_id) REFERENCES public.formative_activities(id),
+  CONSTRAINT formative_submissions_student_id_fkey FOREIGN KEY (student_id) REFERENCES public.students(id),
+  CONSTRAINT formative_submissions_reviewed_by_fkey FOREIGN KEY (reviewed_by) REFERENCES auth.users(id)
+);
 CREATE TABLE public.integrity_events (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   submission_id uuid NOT NULL,
@@ -293,6 +491,62 @@ CREATE TABLE public.integrity_events (
   CONSTRAINT integrity_events_pkey PRIMARY KEY (id),
   CONSTRAINT integrity_events_submission_id_fkey FOREIGN KEY (submission_id) REFERENCES public.submissions(id),
   CONSTRAINT integrity_events_question_id_fkey FOREIGN KEY (question_id) REFERENCES public.assessment_questions(id)
+);
+CREATE TABLE public.lti_launches (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  platform_id uuid,
+  user_id uuid,
+  student_id uuid,
+  teacher_id uuid,
+  class_id uuid,
+  message_type text NOT NULL,
+  target_link_uri text,
+  resource_link_id text,
+  context_id text,
+  roles ARRAY,
+  jit_action text,
+  raw_claims jsonb,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT lti_launches_pkey PRIMARY KEY (id),
+  CONSTRAINT lti_launches_platform_id_fkey FOREIGN KEY (platform_id) REFERENCES public.lti_platforms(id),
+  CONSTRAINT lti_launches_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id),
+  CONSTRAINT lti_launches_student_id_fkey FOREIGN KEY (student_id) REFERENCES public.students(id),
+  CONSTRAINT lti_launches_teacher_id_fkey FOREIGN KEY (teacher_id) REFERENCES public.teachers(id),
+  CONSTRAINT lti_launches_class_id_fkey FOREIGN KEY (class_id) REFERENCES public.classes(id)
+);
+CREATE TABLE public.lti_platforms (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  name text NOT NULL,
+  issuer text NOT NULL,
+  client_id text NOT NULL,
+  deployment_id text NOT NULL,
+  auth_endpoint text NOT NULL,
+  token_endpoint text NOT NULL,
+  jwks_uri text NOT NULL,
+  supports_deep_linking boolean NOT NULL DEFAULT true,
+  supports_grade_passback boolean NOT NULL DEFAULT true,
+  district_id uuid,
+  metadata jsonb,
+  is_active boolean NOT NULL DEFAULT true,
+  data_classification text NOT NULL DEFAULT 'educational'::text,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT lti_platforms_pkey PRIMARY KEY (id),
+  CONSTRAINT lti_platforms_district_id_fkey FOREIGN KEY (district_id) REFERENCES public.districts(id)
+);
+CREATE TABLE public.lti_sessions (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  state text NOT NULL UNIQUE,
+  nonce text NOT NULL,
+  platform_id uuid,
+  target_link_uri text,
+  login_hint text,
+  lti_message_hint text,
+  client_id text,
+  expires_at timestamp with time zone NOT NULL,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT lti_sessions_pkey PRIMARY KEY (id),
+  CONSTRAINT lti_sessions_platform_id_fkey FOREIGN KEY (platform_id) REFERENCES public.lti_platforms(id)
 );
 CREATE TABLE public.memories (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -308,6 +562,33 @@ CREATE TABLE public.memories (
   status text DEFAULT 'pending'::text,
   created_at timestamp with time zone DEFAULT now(),
   CONSTRAINT memories_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.oracy_progression (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  student_id uuid,
+  strand_type text NOT NULL,
+  subskill text NOT NULL,
+  baseline_value jsonb,
+  latest_value jsonb,
+  delta_notes text,
+  self_reflection text,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT oracy_progression_pkey PRIMARY KEY (id),
+  CONSTRAINT oracy_progression_student_id_fkey FOREIGN KEY (student_id) REFERENCES public.students(id)
+);
+CREATE TABLE public.oracy_strand_profiles (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  student_id uuid,
+  assessment_id uuid,
+  strand_type text NOT NULL CHECK (strand_type = ANY (ARRAY['physical'::text, 'linguistic'::text, 'cognitive'::text, 'social'::text])),
+  subskill_markers jsonb NOT NULL DEFAULT '{}'::jsonb,
+  baseline_comparison jsonb,
+  exploratory_patterns jsonb,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT oracy_strand_profiles_pkey PRIMARY KEY (id),
+  CONSTRAINT oracy_strand_profiles_student_id_fkey FOREIGN KEY (student_id) REFERENCES public.students(id),
+  CONSTRAINT oracy_strand_profiles_assessment_id_fkey FOREIGN KEY (assessment_id) REFERENCES public.assessments(id)
 );
 CREATE TABLE public.platform_admins (
   user_id uuid NOT NULL,
@@ -325,6 +606,7 @@ CREATE TABLE public.question_scores (
   justification text,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   data_classification text NOT NULL DEFAULT 'educational'::text,
+  ai_analysis jsonb,
   CONSTRAINT question_scores_pkey PRIMARY KEY (id),
   CONSTRAINT question_scores_submission_id_fkey FOREIGN KEY (submission_id) REFERENCES public.submissions(id),
   CONSTRAINT question_scores_question_id_fkey FOREIGN KEY (question_id) REFERENCES public.assessment_questions(id)
@@ -357,6 +639,24 @@ CREATE TABLE public.report_evidence_refs (
   CONSTRAINT report_evidence_refs_submission_id_fkey FOREIGN KEY (submission_id) REFERENCES public.submissions(id),
   CONSTRAINT report_evidence_refs_question_id_fkey FOREIGN KEY (question_id) REFERENCES public.assessment_questions(id)
 );
+CREATE TABLE public.roster_sync_jobs (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  district_id uuid,
+  provider text NOT NULL CHECK (provider = ANY (ARRAY['clever'::text, 'oneroster'::text, 'canvas'::text, 'google'::text])),
+  sync_type text NOT NULL DEFAULT 'full'::text CHECK (sync_type = ANY (ARRAY['full'::text, 'incremental'::text, 'delta'::text])),
+  status text NOT NULL DEFAULT 'pending'::text CHECK (status = ANY (ARRAY['pending'::text, 'running'::text, 'completed'::text, 'failed'::text, 'cancelled'::text])),
+  triggered_by uuid,
+  started_at timestamp with time zone,
+  completed_at timestamp with time zone,
+  stats jsonb DEFAULT '{}'::jsonb,
+  error text,
+  error_details jsonb,
+  data_classification text NOT NULL DEFAULT 'educational'::text,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT roster_sync_jobs_pkey PRIMARY KEY (id),
+  CONSTRAINT roster_sync_jobs_district_id_fkey FOREIGN KEY (district_id) REFERENCES public.districts(id),
+  CONSTRAINT roster_sync_jobs_triggered_by_fkey FOREIGN KEY (triggered_by) REFERENCES auth.users(id)
+);
 CREATE TABLE public.rubric_standards (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   rubric_id uuid,
@@ -382,6 +682,16 @@ CREATE TABLE public.rubrics (
   CONSTRAINT rubrics_segment_id_fkey FOREIGN KEY (segment_id) REFERENCES public.assessment_segments(id),
   CONSTRAINT rubrics_assessment_id_fkey FOREIGN KEY (assessment_id) REFERENCES public.assessments(id)
 );
+CREATE TABLE public.scaffold_usage (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  student_id uuid,
+  assessment_id uuid,
+  scaffold_level text NOT NULL CHECK (scaffold_level = ANY (ARRAY['heavy'::text, 'light'::text, 'none'::text])),
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT scaffold_usage_pkey PRIMARY KEY (id),
+  CONSTRAINT scaffold_usage_student_id_fkey FOREIGN KEY (student_id) REFERENCES public.students(id),
+  CONSTRAINT scaffold_usage_assessment_id_fkey FOREIGN KEY (assessment_id) REFERENCES public.assessments(id)
+);
 CREATE TABLE public.school_admins (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL UNIQUE,
@@ -391,6 +701,15 @@ CREATE TABLE public.school_admins (
   CONSTRAINT school_admins_pkey PRIMARY KEY (id),
   CONSTRAINT school_admins_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id),
   CONSTRAINT school_admins_school_id_fkey FOREIGN KEY (school_id) REFERENCES public.schools(id)
+);
+CREATE TABLE public.school_descriptors (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  school_id uuid UNIQUE,
+  descriptors jsonb NOT NULL DEFAULT '["Exceptional", "Strong Standard", "Expected Standard", "Needs Attention", "Urgent Improvement"]'::jsonb,
+  is_custom boolean DEFAULT false,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT school_descriptors_pkey PRIMARY KEY (id),
+  CONSTRAINT school_descriptors_school_id_fkey FOREIGN KEY (school_id) REFERENCES public.schools(id)
 );
 CREATE TABLE public.schools (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -402,7 +721,11 @@ CREATE TABLE public.schools (
   retention_transcript_days integer NOT NULL DEFAULT 30,
   retention_log_days integer NOT NULL DEFAULT 90,
   data_classification text NOT NULL DEFAULT 'anonymous'::text,
-  CONSTRAINT schools_pkey PRIMARY KEY (id)
+  district_id uuid,
+  locale text NOT NULL DEFAULT 'US'::text CHECK (locale = ANY (ARRAY['US'::text, 'UK'::text])),
+  locale_locked boolean NOT NULL DEFAULT false,
+  CONSTRAINT schools_pkey PRIMARY KEY (id),
+  CONSTRAINT schools_district_id_fkey FOREIGN KEY (district_id) REFERENCES public.districts(id)
 );
 CREATE TABLE public.segment_scores (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -415,6 +738,18 @@ CREATE TABLE public.segment_scores (
   CONSTRAINT segment_scores_pkey PRIMARY KEY (id),
   CONSTRAINT segment_scores_submission_id_fkey FOREIGN KEY (submission_id) REFERENCES public.submissions(id),
   CONSTRAINT segment_scores_segment_id_fkey FOREIGN KEY (segment_id) REFERENCES public.assessment_segments(id)
+);
+CREATE TABLE public.session_tracking (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  student_id uuid NOT NULL,
+  date date NOT NULL DEFAULT CURRENT_DATE,
+  duration_seconds integer NOT NULL DEFAULT 0,
+  sessions_count integer NOT NULL DEFAULT 0,
+  last_activity_at timestamp with time zone NOT NULL DEFAULT now(),
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  data_classification text NOT NULL DEFAULT 'educational'::text,
+  CONSTRAINT session_tracking_pkey PRIMARY KEY (id),
+  CONSTRAINT session_tracking_student_id_fkey FOREIGN KEY (student_id) REFERENCES public.students(id)
 );
 CREATE TABLE public.standards_nodes (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -445,6 +780,21 @@ CREATE TABLE public.standards_sets (
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   CONSTRAINT standards_sets_pkey PRIMARY KEY (id)
 );
+CREATE TABLE public.student_review_requests (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  submission_id uuid NOT NULL UNIQUE,
+  student_id uuid NOT NULL,
+  student_note text,
+  status text NOT NULL DEFAULT 'pending'::text CHECK (status = ANY (ARRAY['pending'::text, 'reviewed'::text, 'updated'::text, 'no_change'::text])),
+  teacher_response text,
+  teacher_id uuid,
+  resolved_at timestamp with time zone,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT student_review_requests_pkey PRIMARY KEY (id),
+  CONSTRAINT student_review_requests_submission_id_fkey FOREIGN KEY (submission_id) REFERENCES public.submissions(id),
+  CONSTRAINT student_review_requests_student_id_fkey FOREIGN KEY (student_id) REFERENCES public.students(id),
+  CONSTRAINT student_review_requests_teacher_id_fkey FOREIGN KEY (teacher_id) REFERENCES public.teachers(id)
+);
 CREATE TABLE public.students (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   class_id uuid,
@@ -460,6 +810,12 @@ CREATE TABLE public.students (
   consent_audio_at timestamp with time zone,
   consent_revoked_at timestamp with time zone,
   data_classification text NOT NULL DEFAULT 'educational'::text,
+  sourced_id text,
+  provider text,
+  provider_metadata jsonb,
+  last_provider_sync_at timestamp with time zone,
+  eal_status boolean DEFAULT false,
+  slcn_status boolean DEFAULT false,
   CONSTRAINT students_pkey PRIMARY KEY (id),
   CONSTRAINT students_class_id_fkey FOREIGN KEY (class_id) REFERENCES public.classes(id)
 );
@@ -477,6 +833,9 @@ CREATE TABLE public.submission_responses (
   ai_followup_question text,
   ai_followup_created_at timestamp with time zone,
   data_classification text NOT NULL DEFAULT 'audio'::text,
+  processing_status text NOT NULL DEFAULT 'complete'::text CHECK (processing_status = ANY (ARRAY['pending'::text, 'transcribing'::text, 'generating'::text, 'complete'::text, 'error'::text])),
+  processing_error text,
+  processing_started_at timestamp with time zone,
   CONSTRAINT submission_responses_pkey PRIMARY KEY (id),
   CONSTRAINT submission_responses_submission_id_fkey FOREIGN KEY (submission_id) REFERENCES public.submissions(id),
   CONSTRAINT submission_responses_question_id_fkey FOREIGN KEY (question_id) REFERENCES public.assessment_questions(id)
@@ -501,6 +860,9 @@ CREATE TABLE public.submissions (
   published_at timestamp with time zone,
   final_score_override double precision,
   data_classification text NOT NULL DEFAULT 'educational'::text,
+  override_reason text,
+  override_reason_category text CHECK (override_reason_category IS NULL OR (override_reason_category = ANY (ARRAY['accent_dialect'::text, 'audio_quality'::text, 'accommodation'::text, 'off_task'::text, 'other'::text]))),
+  override_timestamp timestamp with time zone,
   CONSTRAINT submissions_pkey PRIMARY KEY (id),
   CONSTRAINT submissions_assessment_id_fkey FOREIGN KEY (assessment_id) REFERENCES public.assessments(id),
   CONSTRAINT submissions_student_id_fkey FOREIGN KEY (student_id) REFERENCES public.students(id)
@@ -556,6 +918,12 @@ CREATE TABLE public.teachers (
   workspace_id uuid,
   disabled boolean NOT NULL DEFAULT false,
   data_classification text NOT NULL DEFAULT 'personal'::text,
+  standards_tagging_enabled boolean NOT NULL DEFAULT false,
+  sourced_id text,
+  provider text,
+  provider_metadata jsonb,
+  last_provider_sync_at timestamp with time zone,
+  last_privacy_notice_shown timestamp with time zone,
   CONSTRAINT teachers_pkey PRIMARY KEY (id),
   CONSTRAINT teachers_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
 );
@@ -565,6 +933,7 @@ CREATE TABLE public.workspaces (
   name text NOT NULL,
   created_at timestamp with time zone DEFAULT now(),
   data_classification text NOT NULL DEFAULT 'anonymous'::text,
+  locale text,
   CONSTRAINT workspaces_pkey PRIMARY KEY (id),
   CONSTRAINT workspaces_school_id_fkey FOREIGN KEY (school_id) REFERENCES public.schools(id)
 );

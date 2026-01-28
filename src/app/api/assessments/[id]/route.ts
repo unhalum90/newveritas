@@ -16,6 +16,7 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
       `
       id, class_id, title, subject, target_language, instructions, status, authoring_mode, is_practice_mode, selected_asset_id, published_at, created_at, updated_at,
       assessment_profile, profile_modified, profile_version, profile_override_keys,
+      key_stage, year_group, nc_subject, oracy_focus, activity_context, scaffold_level, curriculum_region, exam_board, assessment_objectives,
       classes(name),
       assessment_integrity(*),
       assessment_questions(id, assessment_id, question_text, question_type, blooms_level, order_index, created_at),
@@ -64,7 +65,17 @@ const patchSchema = z.object({
   profile_modified: z.boolean().optional(),
   profile_version: z.number().int().positive().optional(),
   profile_override_keys: z.array(z.string()).optional(),
-  // UK Config
+  // UK Config / NC Fields
+  key_stage: z.string().optional().nullable(),
+  year_group: z.number().int().optional().nullable(),
+  nc_subject: z.record(z.string(), z.string().nullable()).optional().nullable(),
+  oracy_focus: z.string().optional().nullable(),
+  activity_context: z.string().optional().nullable(),
+  scaffold_level: z.string().optional().nullable(),
+  curriculum_region: z.string().optional().nullable(),
+  // GCSE Fields (KS4)
+  exam_board: z.string().optional().nullable(),
+  assessment_objectives: z.array(z.string()).optional().nullable(),
   uk_locale_config: z.record(z.string(), z.unknown()).optional().nullable(),
 });
 

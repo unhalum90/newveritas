@@ -14,6 +14,7 @@ const complianceLinks = [
   { label: "AI Safety & Governance", href: "/ai-safety" },
   { label: "How AI is Used", href: "/ai-use" },
   { label: "Evidence & Outcomes", href: "/evidence-outcomes" },
+  { label: "DPIA (Data Protection Impact Assessment)", href: "/dpia" },
   { label: "Subprocessors", href: "/subprocessors" },
   { label: "Security & Privacy / DPA", href: "/security-privacy" },
   { label: "Privacy Policy", href: "/privacy" },

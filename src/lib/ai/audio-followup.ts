@@ -72,6 +72,7 @@ Generate one follow-up question that probes reasoning or evidence.`;
       }),
     });
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data = (await res.json().catch(() => null)) as any;
     if (!res.ok) throw new Error(data?.error?.message ?? "Gemini request failed.");
 

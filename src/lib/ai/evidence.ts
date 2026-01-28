@@ -60,6 +60,7 @@ export async function analyzeEvidenceImage(input: {
   const images = input.images;
   const mimeTypes = input.mimeTypes || images.map(() => "image/jpeg");
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const parts: any[] = [{ text: userPrompt }];
   images.forEach((buf, i) => {
     parts.push({
@@ -88,6 +89,7 @@ export async function analyzeEvidenceImage(input: {
       }),
     });
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data = (await res.json().catch(() => null)) as any;
     if (!res.ok) {
       throw new Error(data?.error?.message ?? "Gemini evidence analysis failed.");

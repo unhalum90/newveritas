@@ -16,7 +16,8 @@ export async function GET(request: NextRequest) {
   if (code) {
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (error) {
-      const res = NextResponse.redirect(new URL("/login", request.url));
+      console.error("Auth callback error:", error);
+      const res = NextResponse.redirect(new URL(`/login?error=${encodeURIComponent(error.message)}`, request.url));
       pendingCookies.forEach(({ name, value, options }) => res.cookies.set(name, value, options));
       return res;
     }

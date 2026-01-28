@@ -16,10 +16,10 @@ export function useSessionTimer({
     dailyLimitMs = 3600000, // 60 minutes
 }: UseSessionTimerProps) {
     const [totalSecondsToday, setTotalSecondsToday] = useState<number | null>(null);
-    const [sessionStartTime] = useState<number>(Date.now());
+    const [sessionStartTime] = useState<number>(() => Date.now());
     const [isLimitReached, setIsLimitReached] = useState(false);
     const [showBreakSuggestion, setShowBreakSuggestion] = useState(false);
-    const lastHeartbeatTime = useRef<number>(Date.now());
+    const lastHeartbeatTime = useRef<number | null>(null);
     const hasSuggestedBreak = useRef(false);
 
     // 1. Initial Fetch of today's time
@@ -47,6 +47,9 @@ export function useSessionTimer({
 
         const interval = setInterval(async () => {
             const now = Date.now();
+            if (lastHeartbeatTime.current === null) {
+                lastHeartbeatTime.current = now;
+            }
             const sessionElapsedMs = now - sessionStartTime;
             const heartbeatElapsedS = Math.floor((now - lastHeartbeatTime.current) / 1000);
 
@@ -90,6 +93,6 @@ export function useSessionTimer({
         isLimitReached,
         showBreakSuggestion,
         setShowBreakSuggestion,
-        sessionElapsedMs: Date.now() - sessionStartTime,
+
     };
 }

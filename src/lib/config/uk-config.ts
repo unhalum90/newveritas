@@ -105,6 +105,41 @@ export const ASSESSMENT_CONTEXTS: Record<AssessmentContext, string> = {
 };
 
 /**
+ * UK Year Group mappings per Key Stage
+ */
+export const YEAR_GROUPS: Record<KeyStage, string[]> = {
+    KS1: ['Year 1', 'Year 2'],
+    KS2: ['Year 3', 'Year 4', 'Year 5', 'Year 6'],
+    KS3: ['Year 7', 'Year 8', 'Year 9'],
+    KS4: ['Year 10', 'Year 11'],
+    KS5: ['Year 12', 'Year 13'],
+};
+
+/**
+ * National Curriculum Subjects & Domains
+ */
+export interface NCSubject {
+    subject: string;
+    domains?: string[];
+}
+
+export const NC_SUBJECTS: NCSubject[] = [
+    { subject: 'English', domains: ['Reading', 'Writing', 'Speaking & Listening'] },
+    { subject: 'Maths', domains: ['Number & Place Value', 'Measurement', 'Geometry', 'Statistics'] },
+    { subject: 'Science', domains: ['Living Things', 'Materials', 'Physical Processes'] },
+    { subject: 'History' },
+    { subject: 'Geography' },
+    { subject: 'Computing' },
+    { subject: 'Art & Design' },
+    { subject: 'Design & Technology' },
+    { subject: 'Music' },
+    { subject: 'PE' },
+    { subject: 'PSHE' },
+    { subject: 'RE' },
+    { subject: 'MFL' },
+];
+
+/**
  * UK locale configuration for assessments
  */
 export interface UKLocaleConfig {
@@ -279,3 +314,108 @@ export function countryToLocale(country: string | null | undefined): Jurisdictio
     return ukCountries.includes(normalized) ? 'UK' : 'US';
 }
 
+// ============================================
+// GCSE EXAM BOARDS & ASSESSMENT OBJECTIVES (KS4)
+// ============================================
+
+/**
+ * UK Exam Boards
+ */
+export type ExamBoard = 'AQA' | 'Edexcel' | 'OCR' | 'Eduqas' | 'WJEC' | 'Other';
+
+export const EXAM_BOARDS: { id: ExamBoard; label: string }[] = [
+    { id: 'AQA', label: 'AQA' },
+    { id: 'Edexcel', label: 'Edexcel (Pearson)' },
+    { id: 'OCR', label: 'OCR' },
+    { id: 'Eduqas', label: 'Eduqas' },
+    { id: 'WJEC', label: 'WJEC' },
+    { id: 'Other', label: 'Other' },
+];
+
+/**
+ * GCSE Assessment Objectives
+ * Organized by subject for KS4 assessments
+ */
+export interface AssessmentObjective {
+    id: string;
+    code: string;
+    description: string;
+    shortDescription: string;
+}
+
+export interface GCSESubjectAOs {
+    subject: string;
+    assessmentObjectives: AssessmentObjective[];
+}
+
+export const GCSE_ASSESSMENT_OBJECTIVES: GCSESubjectAOs[] = [
+    {
+        subject: 'English Language',
+        assessmentObjectives: [
+            { id: 'eng-lang-ao1', code: 'AO1', description: 'Identify and interpret explicit and implicit information and ideas. Select and synthesise evidence from different texts.', shortDescription: 'Identify/Interpret' },
+            { id: 'eng-lang-ao2', code: 'AO2', description: 'Explain, comment on and analyse how writers use language and structure to achieve effects and influence readers, using relevant subject terminology.', shortDescription: 'Language/Structure' },
+            { id: 'eng-lang-ao3', code: 'AO3', description: 'Compare writers\' ideas and perspectives, as well as how these are conveyed, across two or more texts.', shortDescription: 'Compare' },
+            { id: 'eng-lang-ao4', code: 'AO4', description: 'Evaluate texts critically and support this with appropriate textual references.', shortDescription: 'Evaluate' },
+            { id: 'eng-lang-ao5', code: 'AO5', description: 'Communicate clearly, effectively and imaginatively, selecting and adapting tone, style and register for different forms, purposes and audiences.', shortDescription: 'Content/Organization' },
+            { id: 'eng-lang-ao6', code: 'AO6', description: 'Candidates must use a range of vocabulary and sentence structures for clarity, purpose and effect, with accurate spelling and punctuation.', shortDescription: 'Vocabulary/Technical Accuracy' },
+        ],
+    },
+    {
+        subject: 'English Literature',
+        assessmentObjectives: [
+            { id: 'eng-lit-ao1', code: 'AO1', description: 'Read, understand and respond to texts. Students should be able to maintain a critical style and develop an informed personal response.', shortDescription: 'Respond' },
+            { id: 'eng-lit-ao2', code: 'AO2', description: 'Analyse the language, form and structure used by a writer to create meanings and effects, using relevant subject terminology where appropriate.', shortDescription: 'Language/Structure/Form' },
+            { id: 'eng-lit-ao3', code: 'AO3', description: 'Show understanding of the relationships between texts and the contexts in which they were written.', shortDescription: 'Context' },
+            { id: 'eng-lit-ao4', code: 'AO4', description: 'Use a range of vocabulary and sentence structures for clarity, purpose and effect, with accurate spelling and punctuation.', shortDescription: 'Spelling/Punctuation/Grammar' },
+        ],
+    },
+    {
+        subject: 'Maths',
+        assessmentObjectives: [
+            { id: 'maths-ao1', code: 'AO1', description: 'Use and apply standard techniques. Students should be able to accurately recall facts, terminology and definitions.', shortDescription: 'Recall/Apply' },
+            { id: 'maths-ao2', code: 'AO2', description: 'Reason, interpret and communicate mathematically. Make deductions, inferences and draw conclusions from mathematical information.', shortDescription: 'Reason/Communicate' },
+            { id: 'maths-ao3', code: 'AO3', description: 'Solve problems within mathematics and in other contexts. Translate problems in mathematical or non-mathematical contexts into a process.', shortDescription: 'Problem Solve' },
+        ],
+    },
+    {
+        subject: 'Science',
+        assessmentObjectives: [
+            { id: 'science-ao1', code: 'AO1', description: 'Demonstrate knowledge and understanding of scientific ideas, techniques and procedures.', shortDescription: 'Knowledge' },
+            { id: 'science-ao2', code: 'AO2', description: 'Apply knowledge and understanding of scientific ideas, techniques and procedures.', shortDescription: 'Application' },
+            { id: 'science-ao3', code: 'AO3', description: 'Analyse information and ideas to interpret and evaluate, make judgements and draw conclusions, develop and improve experimental procedures.', shortDescription: 'Analysis/Evaluation' },
+        ],
+    },
+    {
+        subject: 'History',
+        assessmentObjectives: [
+            { id: 'history-ao1', code: 'AO1', description: 'Demonstrate knowledge and understanding of the key features and characteristics of the periods studied.', shortDescription: 'Knowledge' },
+            { id: 'history-ao2', code: 'AO2', description: 'Explain and analyse historical events and periods studied using second-order historical concepts.', shortDescription: 'Explain/Analyse' },
+            { id: 'history-ao3', code: 'AO3', description: 'Analyse, evaluate and use sources to make substantiated judgements in the context of historical events studied.', shortDescription: 'Source Analysis' },
+            { id: 'history-ao4', code: 'AO4', description: 'Analyse, evaluate and make substantiated judgements about interpretations in the context of historical events studied.', shortDescription: 'Interpretations' },
+        ],
+    },
+    {
+        subject: 'Geography',
+        assessmentObjectives: [
+            { id: 'geography-ao1', code: 'AO1', description: 'Demonstrate knowledge of locations, places, processes, environments and different scales.', shortDescription: 'Knowledge' },
+            { id: 'geography-ao2', code: 'AO2', description: 'Demonstrate geographical understanding of concepts; the interrelationships between places, environments and processes.', shortDescription: 'Understanding' },
+            { id: 'geography-ao3', code: 'AO3', description: 'Apply knowledge and understanding to interpret, analyse and evaluate geographical information and issues.', shortDescription: 'Apply/Evaluate' },
+            { id: 'geography-ao4', code: 'AO4', description: 'Select, adapt and use a variety of skills and techniques to investigate questions and issues and communicate findings.', shortDescription: 'Skills/Communicate' },
+        ],
+    },
+];
+
+/**
+ * Get Assessment Objectives for a subject
+ */
+export function getAOsForSubject(subject: string): AssessmentObjective[] {
+    const found = GCSE_ASSESSMENT_OBJECTIVES.find(s => s.subject === subject);
+    return found?.assessmentObjectives ?? [];
+}
+
+/**
+ * Check if a Key Stage supports GCSE AO tagging
+ */
+export function supportsGCSEAOs(keyStage: KeyStage | string | null | undefined): boolean {
+    return keyStage === 'KS4';
+}

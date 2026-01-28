@@ -215,7 +215,7 @@ export default function AISafetyPage() {
                             </p>
                             <ul className="mt-3 space-y-1 text-[var(--muted)]">
                                 <li>• Data Processing Agreement (DPA)</li>
-                                <li>• Data Protection Impact Assessment (DPIA) summary</li>
+                                <li>• <Link href="/dpia" className="underline hover:text-teal-600">Data Protection Impact Assessment (DPIA)</Link></li>
                                 <li>• SOC 2 roadmap and security questionnaire responses</li>
                                 <li>• Subprocessor list with transfer safeguards</li>
                             </ul>
@@ -241,6 +241,9 @@ export default function AISafetyPage() {
                         </Link>
                         <Link href="/privacy" className="rounded-full border border-[var(--border)] px-4 py-2 text-sm hover:bg-[var(--surface)]">
                             Privacy Policy →
+                        </Link>
+                        <Link href="/dpia" className="rounded-full border border-[var(--border)] px-4 py-2 text-sm hover:bg-[var(--surface)]">
+                            DPIA →
                         </Link>
                         <Link href="/security-privacy" className="rounded-full border border-[var(--border)] px-4 py-2 text-sm hover:bg-[var(--surface)]">
                             Security & DPA →

@@ -20,7 +20,7 @@ export type {
 } from "./schema";
 
 // Profiles
-export { PROFILES, PROFILE_LIST, getProfile, isValidProfileId } from "./profiles";
+export { PROFILES, PROFILE_LIST, UK_PROFILE_LIST, getProfile, isValidProfileId } from "./profiles";
 
 // Application logic
 export {

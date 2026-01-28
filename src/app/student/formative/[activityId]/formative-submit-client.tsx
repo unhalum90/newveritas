@@ -134,6 +134,18 @@ export function FormativeSubmitClient({
         }
     }, []);
 
+    const isPulse = activity.type === "pulse";
+    const availableModes: InputMode[] = isPulse
+        ? ["digital", "voice_memo"]
+        : ["scan", "voice_memo", "digital", "skeleton"];
+
+    // Default to 'digital' for Pulse if current mode is not available
+    useEffect(() => {
+        if (isPulse && !availableModes.includes(inputMode)) {
+            setInputMode("digital");
+        }
+    }, [isPulse, availableModes, inputMode]);
+
     // Save accessibility preferences
     const saveAccessibilityPrefs = () => {
         localStorage.setItem(
@@ -145,6 +157,8 @@ export function FormativeSubmitClient({
     useEffect(() => {
         saveAccessibilityPrefs();
     }, [cameraAnxietyMode, highContrastMode, useDyslexicFont]);
+
+
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = e.target.files;
@@ -321,10 +335,7 @@ export function FormativeSubmitClient({
         return activity.prompt_template || "Explain what you learned in 30 seconds.";
     };
 
-    const isPulse = activity.type === "pulse";
-    const availableModes: InputMode[] = isPulse
-        ? ["digital", "voice_memo"]
-        : ["scan", "voice_memo", "digital", "skeleton"];
+
 
     // Update labels for Pulse vs StudyLab
     const getModeLabel = (mode: InputMode) => {
@@ -462,12 +473,7 @@ export function FormativeSubmitClient({
         );
     }
 
-    // Default to 'digital' for Pulse if current mode is not available
-    useEffect(() => {
-        if (isPulse && !availableModes.includes(inputMode)) {
-            setInputMode("digital");
-        }
-    }, [isPulse, availableModes, inputMode]);
+
 
     // Daily Limit Lock Screen
     if (isLimitReached) {

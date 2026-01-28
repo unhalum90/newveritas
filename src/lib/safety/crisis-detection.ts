@@ -83,10 +83,10 @@ export async function processCrisisAlert(input: {
         return;
     }
 
-    // @ts-ignore - Supabase types might be deeply nested, safe navigation here
-    const school = submission.assessment?.class?.workspace?.school;
-    // @ts-ignore - student is an array from the join
-    const studentArr = submission.student;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const school = (submission as any).assessment?.class?.workspace?.school;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const studentArr = (submission as any).student;
     const student = Array.isArray(studentArr) ? studentArr[0] : studentArr;
     const dslEmail = school?.dsl_email;
 
@@ -111,7 +111,7 @@ export async function processCrisisAlert(input: {
     // 3. Mark Submission as Flagged
     await admin
         .from("submissions")
-        .update({ crisis_flagged: true } as any) // Cast if type not yet generated
+        .update({ crisis_flagged: true })
         .eq("id", input.submissionId);
 
     // 4. Send Email

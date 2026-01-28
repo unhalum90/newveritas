@@ -1105,7 +1105,7 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
             <div className="w-full max-w-xl rounded-xl border border-zinc-800 bg-zinc-950/90 p-6 text-zinc-100 shadow-2xl backdrop-blur-md">
               <div className="text-lg font-semibold">Academic Integrity Pledge</div>
               <div className="mt-1 text-sm text-zinc-300">
-                Please read and accept before starting. You won’t see questions until you agree.
+                Please read and accept before starting. You won&apos;t see questions until you agree.
               </div>
               <ul className="mt-4 list-disc space-y-2 pl-5 text-sm text-zinc-200">
                 {assessment.pledge.text.split("\n").map((line, idx) => (
@@ -1579,7 +1579,7 @@ export function StudentAssessmentClient({ assessmentId, preview = false }: { ass
               <Card className="border-indigo-100 bg-indigo-50/50 backdrop-blur-sm shadow-md text-center py-8">
                 <CardHeader>
                   <CardTitle className="text-indigo-900 text-2xl">All questions answered!</CardTitle>
-                  <CardDescription className="text-indigo-700 text-lg">You're ready to submit.</CardDescription>
+                  <CardDescription className="text-indigo-700 text-lg">You&apos;re ready to submit.</CardDescription>
                 </CardHeader>
                 <CardContent className="flex flex-col items-center gap-6">
                   <div className="text-sm text-indigo-600/80 max-w-md">You cannot change responses after submitting. Make sure you are happy with your answers.</div>

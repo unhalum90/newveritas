@@ -189,7 +189,7 @@ export default function Home() {
                 <h3 className="text-xl font-bold mb-2 text-center md:text-left">Daily</h3>
                 <div className="text-[var(--pulse-accent)] font-semibold text-sm uppercase tracking-wide mb-3 text-center md:text-left">Pulse</div>
                 <p className="text-[var(--muted)] text-sm mb-4">
-                  A 60-second voice checkout. "Explain the main conflict in Chapter 4." Teachers get an audio highlights reel instantly.
+                  A 60-second voice checkout. &quot;Explain the main conflict in Chapter 4.&quot; Teachers get an audio highlights reel instantly.
                 </p>
                 <ul className="text-sm space-y-2 text-[var(--text)]">
                   <li>• Replaces exit tickets</li>
@@ -540,7 +540,7 @@ export default function Home() {
               {/* Testimonial 3 */}
               <div className="rounded-2xl border border-[#E2E8F0] bg-gradient-to-br from-[#F8FAFC] to-white p-6 shadow-sm">
                 <p className="text-lg leading-relaxed text-[#0F172A] italic">
-                  &quot;My students are actually speaking the language now. They can't hide behind Google Translate when they have to respond with their voice.&quot;
+                  &quot;My students are actually speaking the language now. They can&apos;t hide behind Google Translate when they have to respond with their voice.&quot;
                 </p>
                 <div className="mt-6 flex items-center gap-3">
                   <div className="h-10 w-10 flex items-center justify-center rounded-full bg-purple-100 text-purple-700 font-bold">MG</div>
@@ -661,6 +661,12 @@ export default function Home() {
                 >
                   Privacy Policy →
                 </Link>
+                <Link
+                  href="/dpia"
+                  className="rounded-full border border-[var(--border)] px-4 py-2 text-sm font-medium text-[var(--muted)] hover:bg-[var(--surface)]"
+                >
+                  DPIA →
+                </Link>
               </div>
             </div>
           </div>
@@ -771,7 +777,7 @@ export default function Home() {
                 See SayVeritas in action.
               </h2>
               <p className="mt-4 text-lg text-[var(--muted)]">
-                Join our product team for a live walkthrough. We'll show you how to set up your first class,
+                Join our product team for a live walkthrough. We&apos;ll show you how to set up your first class,
                 run a Pulse check-in, and use StudyLab for deeper practice.
               </p>
             </div>

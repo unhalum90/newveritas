@@ -507,6 +507,7 @@ async function scoreWithUKPrompts(input: {
   questionText: string;
   transcript: string;
   contextType?: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   selectedStrands?: any[];
   context?: OpenAiLogContext;
 }) {
@@ -932,6 +933,7 @@ Rules:
               scorer_type: "reasoning",
               score: null,
               justification: ukAnalysis.processObservations || "Analysis complete.",
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
               ai_analysis: ukAnalysis as any // Use as any if type definition not yet updated
             },
             {

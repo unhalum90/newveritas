@@ -37,6 +37,22 @@ function isAuthPath(pathname: string) {
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // Domain routing & Geo-detection (Sprint 1)
+  const host = request.headers.get("host") || "";
+  const country = (request as any).geo?.country || "US";
+  const isUKDomain = host.includes("sayveritas.co.uk");
+  const preferredRegion = request.cookies.get("preferred_region")?.value;
+
+  // Auto-redirect UK users on landing if they haven't explicitly set a preference
+  if (!isUKDomain && host.includes("sayveritas.com") && country === "GB" && !preferredRegion) {
+    const url = request.nextUrl.clone();
+    url.host = "sayveritas.co.uk";
+    const response = NextResponse.redirect(url);
+    // Note: Cookies set on redirect may not be sticky across domains, 
+    // but .co.uk will detect its domain and set its own context.
+    return response;
+  }
+
   // Always allow public marketing pages to render, even if the user is signed in.
   if (isMarketingPath(pathname)) {
     return NextResponse.next();

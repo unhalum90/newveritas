@@ -58,6 +58,7 @@ export async function incrementSessionTime(studentId: string, seconds: number) {
                 .update({
                     duration_seconds: existing.duration_seconds + seconds,
                     last_activity_at: new Date().toISOString(),
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 } as any)
                 .eq("id", existing.id);
             if (updateError) {

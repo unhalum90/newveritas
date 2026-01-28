@@ -63,7 +63,7 @@ export function SalesContactModal() {
                                     ✓
                                 </div>
                                 <h3 className="text-lg font-medium">Message Sent!</h3>
-                                <p className="mt-2 text-[var(--muted)]">We'll get back to you shortly.</p>
+                                <p className="mt-2 text-[var(--muted)]">We&apos;ll get back to you shortly.</p>
                             </div>
                         ) : (
                             <form onSubmit={handleSubmit} className="space-y-4">

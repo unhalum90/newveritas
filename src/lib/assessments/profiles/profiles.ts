@@ -275,12 +275,109 @@ const languageProficiencyProfile: ProfileConfig = {
 /**
  * All available profiles, keyed by ID
  */
+
+
+/**
+ * UK ASSESSMENT PROFILES
+ * Explicitly mapped to UK Key Stages and terminology.
+ */
+
+/**
+ * Primary (KS1-KS2) Portfolio
+ * Maps to K-6 Formative.
+ */
+const ukPrimaryProfile: ProfileConfig = {
+    id: "uk_primary_portfolio",
+    label: "Primary (KS1-KS2) Portfolio",
+    description: "Low-stakes portfolio capture for primary pupils. Minimal integrity controls.",
+    gradeRange: "KS1-KS2",
+    defaults: {
+        ...k6FormativeProfile.defaults,
+        default_rubric_scale_min: 1,
+        default_rubric_scale_max: 4, // Developing, Expected, Strong, Exceptional
+    },
+    visibility: k6FormativeProfile.visibility,
+    constraints: k6FormativeProfile.constraints,
+};
+
+/**
+ * Secondary (KS3-KS4) Practice
+ * Maps to 7-12 Formative.
+ */
+const ukSecondaryFormativeProfile: ProfileConfig = {
+    id: "uk_secondary_practice",
+    label: "Secondary (KS3-KS4) Practice",
+    description: "Formative oracy practice with optional follow-ups. Light monitoring.",
+    gradeRange: "KS3-KS4",
+    defaults: {
+        ...formative712Profile.defaults,
+        default_rubric_scale_min: 1,
+        default_rubric_scale_max: 5,
+    },
+    visibility: formative712Profile.visibility,
+    constraints: formative712Profile.constraints,
+};
+
+/**
+ * Secondary (KS4) Oral Checkpoint
+ * Maps to 7-12 Summative.
+ */
+const ukSecondarySummativeProfile: ProfileConfig = {
+    id: "uk_secondary_checkpoint",
+    label: "Secondary (KS4) Oral Checkpoint",
+    description: "Summative checkpoint (e.g., GCSE Spoken Language) with integrity controls.",
+    gradeRange: "KS4",
+    defaults: {
+        ...summative712Profile.defaults,
+        default_rubric_scale_min: 1,
+        default_rubric_scale_max: 5, // Pass, Merit, Distinction etc mapped later
+    },
+    visibility: summative712Profile.visibility,
+    constraints: summative712Profile.constraints,
+};
+
+/**
+ * Sixth Form (KS5) Viva
+ * Maps to Higher Ed Viva.
+ */
+const ukSixthFormProfile: ProfileConfig = {
+    id: "uk_sixth_form_viva",
+    label: "Sixth Form (KS5) Viva",
+    description: "One-shot oral exam with strict integrity and academic pledge.",
+    gradeRange: "KS5",
+    defaults: {
+        ...higherEdVivaProfile.defaults,
+        default_rubric_scale_min: 1,
+        default_rubric_scale_max: 5,
+    },
+    visibility: higherEdVivaProfile.visibility,
+    constraints: higherEdVivaProfile.constraints,
+};
+
+/**
+ * UK Profile List
+ */
+export const UK_PROFILE_LIST: ProfileConfig[] = [
+    ukPrimaryProfile,
+    ukSecondaryFormativeProfile,
+    ukSecondarySummativeProfile,
+    ukSixthFormProfile,
+    languageProficiencyProfile, // Shared global profile
+];
+
+/**
+ * All available profiles, keyed by ID
+ */
 export const PROFILES: Record<ProfileId, ProfileConfig> = {
     k6_formative: k6FormativeProfile,
     "712_formative": formative712Profile,
     "712_summative": summative712Profile,
     higher_ed_viva: higherEdVivaProfile,
     language_proficiency: languageProficiencyProfile,
+    uk_primary_portfolio: ukPrimaryProfile,
+    uk_secondary_practice: ukSecondaryFormativeProfile,
+    uk_secondary_checkpoint: ukSecondarySummativeProfile,
+    uk_sixth_form_viva: ukSixthFormProfile,
 };
 
 /**
