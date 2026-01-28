@@ -4,7 +4,10 @@ const MAILERLITE_ENDPOINT = "https://connect.mailerlite.com/api/subscribers";
 
 export async function POST(request: Request) {
     try {
-        const { name, email, note } = await request.json();
+        const body = await request.json();
+        const { name, email, note, message } = body;
+        // Accept either 'note' or 'message' field (different modals use different names)
+        const noteContent = note || message || "";
 
         if (!name || !email) {
             return NextResponse.json(
@@ -23,7 +26,7 @@ export async function POST(request: Request) {
             console.log(`To: hello@sayveritas.com`);
             console.log(`Subject: New Sales Inquiry from ${name}`);
             console.log(`From: ${email}`);
-            console.log(`Note: ${note}`);
+            console.log(`Note: ${noteContent}`);
             console.log("--------------------------");
             return NextResponse.json({ success: true });
         }
@@ -40,7 +43,7 @@ export async function POST(request: Request) {
                 groups: [groupId],
                 fields: {
                     name: name,
-                    notes: note || "" // 'notes' field custom field or standard? Assuming notes/marketing permissions
+                    notes: noteContent // 'notes' field custom field or standard? Assuming notes/marketing permissions
                     // MailerLite standard fields are usually 'name'. 'notes' might need a custom field ID. 
                     // For simplicity/safety with standard setup, we map 'name'. 
                     // If 'note' is important it should go to a custom field, but for now just adding to group is the primary goal requested.

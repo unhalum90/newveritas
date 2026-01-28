@@ -22,7 +22,7 @@ export const UK_HOMEPAGE = {
         headline: "Voice-based learning for UK schools",
 
         subheadline:
-            "Students learn through speaking—daily AI tutoring, weekly formative checks, and secure oral assessments. Track National Curriculum coverage automatically. Generate evidence for Ofsted in minutes.",
+            "Students learn through speaking—daily snapshot, weekly formative checks, and secure oral assessments. Track National Curriculum coverage automatically. Generate evidence for Ofsted in minutes.",
 
         cta_primary: {
             text: "Book a Demo",
@@ -59,16 +59,16 @@ export const UK_HOMEPAGE = {
 
         daily: {
             icon: "🧠",
-            frequency: "Daily (5-10 min)",
-            name: "StudyLab",
-            tagline: "AI Socratic Tutor",
+            frequency: "2-3x week",
+            name: "Study Lab",
+            tagline: "Socratic check for understanding",
 
-            studentPrompt: '"Help me revise for tomorrow\'s maths test"',
+            studentPrompt: '"Explain why you ...."',
 
             whatHappens: [
                 "AI asks probing questions about key concepts",
                 "Student explains their thinking verbally",
-                "Gaps identified before the lesson even starts",
+                "Gaps identified before the next lesson even starts",
             ],
 
             teacherBenefit:
@@ -86,15 +86,15 @@ export const UK_HOMEPAGE = {
 
         weekly: {
             icon: "🎤",
-            frequency: "2–3× per week (60 sec)",
-            name: "Formative Check-ins",
+            frequency: "end of each class",
+            name: "Pulse",
             tagline: "Quick Understanding Capture",
 
             studentPrompt: '"Summarise today\'s learning in one sentence"',
 
             whatHappens: [
-                "Student records 60-second voice response",
-                "AI transcribes and scores for accuracy + reasoning",
+                "Student records 15-60-second voice response",
+                "AI transcribes and aggregates student responses",
                 "Teacher reviews entire class patterns in 5 minutes",
             ],
 
@@ -113,7 +113,7 @@ export const UK_HOMEPAGE = {
 
         unit: {
             icon: "🛡️",
-            frequency: "1–2× per unit (2-5 min)",
+            frequency: "1–2× per unit (4-10 min)",
             name: "Oral Assessment",
             tagline: "AI-Resistant Evaluation",
 
@@ -121,8 +121,8 @@ export const UK_HOMEPAGE = {
                 '"Explain the causes of WWI using evidence from the sources"',
 
             whatHappens: [
-                "Student records 2–3 minute oral defence",
-                "AI transcribes + scores against your rubric",
+                "Student records 4-10 minute oral defence",
+                "AI transcribes + evaluates against your rubric",
                 "Teacher validates in 30 minutes (not 6 hours)",
             ],
 
@@ -235,7 +235,7 @@ export const UK_HOMEPAGE = {
 
         stats: [
             {
-                metric: "6 hours → 30 min",
+                metric: "6 hours → 60 min",
                 label: "Weekly marking time",
                 explanation:
                     "Review 90 students' oral responses vs. marking essays all weekend",

@@ -52,16 +52,16 @@ export const US_HOMEPAGE = {
 
         daily: {
             icon: "🧠",
-            frequency: "Daily (5-10 min)",
-            name: "StudyLab",
-            tagline: "AI Socratic Tutor",
+            frequency: "2-3x week",
+            name: "Study Lab",
+            tagline: "Socratic check for understanding",
 
-            studentPrompt: '"Help me study for tomorrow\'s quiz on mitosis"',
+            studentPrompt: '"Explain why you ...."',
 
             whatHappens: [
-                "AI asks probing questions about concepts",
-                "Student explains thinking verbally",
-                "Gaps identified before class",
+                "AI asks probing questions about key concepts",
+                "Student explains their thinking verbally",
+                "Gaps identified before the next class even starts",
             ],
 
             teacherBenefit: "Dashboard shows who studied + common misconceptions",
@@ -73,16 +73,16 @@ export const US_HOMEPAGE = {
 
         weekly: {
             icon: "🎤",
-            frequency: "2-3× per week (60 sec)",
-            name: "Formative Check-ins",
+            frequency: "end of each class",
+            name: "Pulse",
             tagline: "Quick Understanding Capture",
 
-            studentPrompt: '"Summarize today\'s notes in one sentence"',
+            studentPrompt: '"Summarize today\'s learning in one sentence"',
 
             whatHappens: [
-                "Student records 60-second response",
-                "AI scores for accuracy + reasoning",
-                "Teacher reviews class in 5 min",
+                "Student records 15-60-second voice response",
+                "AI transcribes and aggregates student responses",
+                "Teacher reviews entire class patterns in 5 minutes",
             ],
 
             teacherBenefit: "Know who's stuck—adjust teaching same day",
@@ -94,16 +94,16 @@ export const US_HOMEPAGE = {
 
         unit: {
             icon: "🛡️",
-            frequency: "1-2× per unit (2-5 min)",
+            frequency: "1-2× per unit (4-10 min)",
             name: "Oral Assessment",
             tagline: "AI-Resistant Evaluation",
 
             studentPrompt: '"Defend your thesis using evidence"',
 
             whatHappens: [
-                "Student records 2-3 min defense",
-                "AI transcribes + scores vs rubric",
-                "Teacher validates in 30 min (not 6 hours)",
+                "Student records 4-10 minute oral defense",
+                "AI transcribes + evaluates against your rubric",
+                "Teacher validates in 30 minutes (not 6 hours)",
             ],
 
             teacherBenefit: "Students can't fake spontaneous reasoning",
@@ -205,7 +205,7 @@ export const US_HOMEPAGE = {
             {
                 metric: "20+ hours/month",
                 label: "Time saved",
-                explanation: "Review entire class in 30 min vs 6 hours grading",
+                explanation: "Review entire class in 60 min vs 6 hours grading",
                 icon: "⏱️",
             },
             {

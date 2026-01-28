@@ -5,6 +5,7 @@ import { LocaleSwitcher } from "@/components/marketing/locale-switcher";
 import { UK_HOMEPAGE } from "@/lib/config/uk-homepage-content";
 import { US_HOMEPAGE } from "@/lib/config/us-homepage-content";
 import { MarketingFooter } from "@/components/marketing/marketing-footer";
+import { HeroImage } from "@/components/home/hero-image";
 import Link from "next/link";
 
 export default function HomePage() {
@@ -97,43 +98,56 @@ export default function HomePage() {
         {/* ================================================================= */}
         {/* HERO SECTION */}
         {/* ================================================================= */}
-        <section className="border-b border-[var(--border)] bg-gradient-to-b from-[var(--background)] to-[var(--surface)]">
-          <div className="mx-auto max-w-6xl px-6 py-20 md:py-28">
-            <div className="mx-auto max-w-4xl text-center">
-              {/* Badge */}
-              <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-indigo-500/30 bg-indigo-500/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-wider text-indigo-400">
-                {content.hero.badge}
+        <section className="border-b border-[var(--border)]">
+          <div className="mx-auto max-w-6xl px-6 py-16 md:py-24">
+            <div className="grid gap-12 md:grid-cols-2 md:items-center">
+              {/* Left Column - Content */}
+              <div>
+                {/* Badge */}
+                <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-indigo-500/30 bg-indigo-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-indigo-400">
+                  {content.hero.badge}
+                </div>
+
+                {/* Headline */}
+                <h1 className="text-5xl font-bold leading-tight tracking-tight md:text-6xl">
+                  {content.hero.headline}
+                </h1>
+
+                {/* Subheadline */}
+                <p className="mt-6 text-lg leading-relaxed text-[var(--muted)] md:text-xl">
+                  {content.hero.subheadline}
+                </p>
+
+                {/* CTAs */}
+                <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+                  <Link
+                    href={content.hero.cta_primary.href}
+                    className="inline-flex h-12 items-center justify-center rounded-md bg-[var(--primary-strong)] px-6 text-base font-medium text-white hover:bg-[color-mix(in_oklab,var(--primary-strong),black_12%)] whitespace-nowrap"
+                  >
+                    {content.hero.cta_primary.text}
+                  </Link>
+
+                  <a
+                    href={content.hero.cta_secondary.href}
+                    className="inline-flex h-12 items-center justify-center rounded-md border-2 border-[var(--border)] bg-transparent px-6 text-base hover:bg-[var(--surface)] whitespace-nowrap"
+                  >
+                    {content.hero.cta_secondary.text}
+                  </a>
+                </div>
+
+                {/* Social Proof */}
+                <p className="mt-6 text-sm text-[var(--muted)]">
+                  {content.hero.proof}
+                </p>
               </div>
 
-              {/* Headline */}
-              <h1 className="mb-6 text-5xl font-bold leading-tight tracking-tight md:text-6xl">
-                {content.hero.headline}
-              </h1>
-
-              {/* Subheadline */}
-              <p className="mb-10 text-lg leading-relaxed text-[var(--muted)] md:text-xl">
-                {content.hero.subheadline}
-              </p>
-
-              {/* CTAs */}
-              <div className="mb-8 flex flex-col justify-center gap-3 sm:flex-row">
-                <Link
-                  href={content.hero.cta_primary.href}
-                  className="inline-flex h-12 items-center justify-center rounded-md bg-[var(--primary-strong)] px-8 text-base font-medium text-white hover:bg-[color-mix(in_oklab,var(--primary-strong),black_12%)]"
-                >
-                  {content.hero.cta_primary.text}
-                </Link>
-
-                <a
-                  href={content.hero.cta_secondary.href}
-                  className="inline-flex h-12 items-center justify-center rounded-md border-2 border-[var(--border)] bg-transparent px-8 text-base hover:bg-[var(--surface)]"
-                >
-                  {content.hero.cta_secondary.text}
-                </a>
+              {/* Right Column - Hero Image */}
+              <div className="relative">
+                <HeroImage
+                  src="/hero_image.png"
+                  alt="Teacher dashboard showing AI-assisted oral assessment results"
+                />
               </div>
-
-              {/* Social Proof */}
-              <p className="text-sm text-[var(--muted)]">{content.hero.proof}</p>
             </div>
           </div>
         </section>
@@ -179,9 +193,10 @@ export default function HomePage() {
             </div>
 
             {/* 3 Product Cards */}
+            {/* Order: Pulse (weekly) → Study Lab (daily) → Oral (unit) */}
             <div className="grid gap-8 md:grid-cols-3">
-              <ProductCard product={content.threeProducts.daily} isUK={isUK} />
               <ProductCard product={content.threeProducts.weekly} isUK={isUK} />
+              <ProductCard product={content.threeProducts.daily} isUK={isUK} />
               <ProductCard product={content.threeProducts.unit} isUK={isUK} />
             </div>
           </div>
@@ -341,48 +356,7 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* ================================================================= */}
-        {/* TESTIMONIALS */}
-        {/* ================================================================= */}
-        <section className="border-b border-[var(--border)] bg-white py-20">
-          <div className="mx-auto max-w-6xl px-6">
-            <h2 className="mb-4 text-center text-3xl font-bold tracking-tight text-[#0F172A]">
-              {content.testimonials.heading}
-            </h2>
-            <p className="mx-auto mb-12 max-w-2xl text-center text-lg text-[#64748B]">
-              {content.testimonials.subheading}
-            </p>
 
-            <div className="grid gap-8 md:grid-cols-3">
-              {content.testimonials.cards.map((testimonial, idx) => (
-                <div
-                  key={idx}
-                  className="rounded-2xl border border-[#E2E8F0] bg-gradient-to-br from-[#F8FAFC] to-white p-6 shadow-sm"
-                >
-                  <p className="text-lg italic leading-relaxed text-[#0F172A]">
-                    &quot;{testimonial.quote}&quot;
-                  </p>
-                  <div className="mt-6 flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-teal-100 font-bold text-teal-700">
-                      {testimonial.name
-                        .split(" ")
-                        .map((n) => n[0])
-                        .join("")}
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold text-[#0F172A]">
-                        {testimonial.name}
-                      </p>
-                      <p className="text-xs text-[#64748B]">
-                        {testimonial.role}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
 
         {/* ================================================================= */}
         {/* PRICING */}
@@ -408,8 +382,8 @@ export default function HomePage() {
                 <div
                   key={idx}
                   className={`relative flex h-full flex-col rounded-3xl border p-8 shadow-[0_30px_80px_-60px_rgba(20,184,166,0.35)] ${tier.popular
-                      ? "border-[color-mix(in_oklab,#34d399,white_30%)] bg-[linear-gradient(160deg,rgba(16,55,48,0.96),rgba(10,22,24,0.96))]"
-                      : "border-[var(--border)] bg-[linear-gradient(160deg,rgba(18,24,34,0.96),rgba(11,15,20,0.96))]"
+                    ? "border-[color-mix(in_oklab,#34d399,white_30%)] bg-[linear-gradient(160deg,rgba(16,55,48,0.96),rgba(10,22,24,0.96))]"
+                    : "border-[var(--border)] bg-[linear-gradient(160deg,rgba(18,24,34,0.96),rgba(11,15,20,0.96))]"
                     }`}
                 >
                   {tier.badge && (
@@ -456,8 +430,8 @@ export default function HomePage() {
                   <Link
                     href={tier.cta.href}
                     className={`mt-8 inline-flex h-11 items-center justify-center rounded-full px-6 text-sm font-semibold transition ${tier.popular
-                        ? "bg-[color-mix(in_oklab,#34d399,black_25%)] text-[#0b0f14] hover:bg-[color-mix(in_oklab,#34d399,black_35%)]"
-                        : "border border-[color-mix(in_oklab,#f59e0b,white_20%)] text-[#f59e0b] hover:bg-[color-mix(in_oklab,#f59e0b,black_85%)]"
+                      ? "bg-[color-mix(in_oklab,#34d399,black_25%)] text-[#0b0f14] hover:bg-[color-mix(in_oklab,#34d399,black_35%)]"
+                      : "border border-[color-mix(in_oklab,#f59e0b,white_20%)] text-[#f59e0b] hover:bg-[color-mix(in_oklab,#f59e0b,black_85%)]"
                       }`}
                   >
                     {tier.cta.text}
@@ -692,20 +666,12 @@ function SegmentCard({ segment, isUK }: SegmentCardProps) {
 
       {/* UK-Specific (only show if there's content) */}
       {isUK && segment.ukSpecific && (
-        <div className="mb-6 rounded-lg bg-[#F0F9FF] p-3">
+        <div className="rounded-lg bg-[#F0F9FF] p-3">
           <p className="text-sm font-medium text-[#0369A1]">
             {segment.ukSpecific}
           </p>
         </div>
       )}
-
-      {/* CTA */}
-      <Link
-        href={segment.cta.href}
-        className="block w-full rounded-md bg-[var(--primary-strong)] py-3 text-center font-medium text-white hover:bg-[color-mix(in_oklab,var(--primary-strong),black_12%)]"
-      >
-        {segment.cta.text}
-      </Link>
     </div>
   );
 }
