@@ -54,8 +54,23 @@ export async function middleware(request: NextRequest) {
   }
 
   // Always allow public marketing pages to render, even if the user is signed in.
+  // Set marketing_locale cookie based on domain for client-side locale detection
   if (isMarketingPath(pathname)) {
-    return NextResponse.next();
+    const response = NextResponse.next();
+
+    // Set marketing_locale cookie if user is on UK domain
+    const existingMarketingLocale = request.cookies.get("marketing_locale")?.value;
+    if (!existingMarketingLocale) {
+      // Set based on domain
+      const marketingLocale = isUKDomain ? "UK" : "US";
+      response.cookies.set("marketing_locale", marketingLocale, {
+        path: "/",
+        maxAge: 60 * 60 * 24 * 365, // 1 year
+        sameSite: "lax",
+      });
+    }
+
+    return response;
   }
 
   const response = NextResponse.next({ request });
