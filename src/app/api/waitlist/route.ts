@@ -42,5 +42,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true });
   }
 
-  return NextResponse.json({ error: "Unable to join the waitlist right now." }, { status: 502 });
+  const errorText = await response.text();
+  console.error(`MailerLite Error (${response.status}):`, errorText);
+
+  return NextResponse.json({
+    error: "Unable to join the waitlist right now.",
+    details: errorText,
+    upstreamStatus: response.status
+  }, { status: 502 });
 }
