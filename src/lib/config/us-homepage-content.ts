@@ -15,7 +15,7 @@ export const US_HOMEPAGE = {
         headline: "Voice-based learning platform for grades 6-16",
 
         subheadline:
-            "Students develop reasoning through speaking—daily practice, weekly checks, and AI-resistant assessments. Save 20+ hours per month. Defeat ChatGPT cheating.",
+            "Students develop reasoning through speaking—daily practice, weekly checks, and AI-resistant assessments. Save 20+ hours per month. Restore Integrity to the process.",
 
         cta_primary: {
             text: "Start Free Trial",
