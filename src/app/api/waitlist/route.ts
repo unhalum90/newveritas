@@ -21,14 +21,6 @@ export async function POST(request: Request) {
   const apiKey = process.env.MAILERLITE_API_KEY?.trim();
   const groupId = process.env.MAILERLITE_NEWUSERS_GROUP_ID?.trim();
 
-  // Debug logging
-  console.log("MailerLite Debug:", {
-    hasApiKey: !!apiKey,
-    apiKeyPreview: apiKey ? `${apiKey.substring(0, 5)}...${apiKey.substring(apiKey.length - 4)}` : null,
-    groupId: groupId,
-    groupIdLength: groupId?.length
-  });
-
   if (!apiKey || !groupId) {
     return NextResponse.json({ error: "Waitlist not configured." }, { status: 500 });
   }
