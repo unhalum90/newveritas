@@ -18,8 +18,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Please enter a valid email address." }, { status: 400 });
   }
 
-  const apiKey = process.env.MAILERLITE_API_KEY;
-  const groupId = process.env.MAILERLITE_NEWUSERS_GROUP_ID;
+  const apiKey = process.env.MAILERLITE_API_KEY?.trim();
+  const groupId = process.env.MAILERLITE_NEWUSERS_GROUP_ID?.trim();
 
   if (!apiKey || !groupId) {
     return NextResponse.json({ error: "Waitlist not configured." }, { status: 500 });
